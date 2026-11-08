@@ -171,6 +171,44 @@ public class MapFileTests
         Assert.Throws<FormatException>(() => MapFile.Parse(Full.Replace(find, replace)));
     }
 
+    /// <summary>A small v2 map with a raised platform (decks), a ladder and a support post.</summary>
+    private const string WithPlatform =
+        "bhmap 2\n" +
+        "size 4 2\n" +
+        "heights\n" +
+        "0 0 0 0\n" +
+        "0 0 0 0\n" +
+        "cover\n" +
+        ".|..\n" +
+        "..x.\n" +
+        "decks\n" +
+        ".cc.\n" +
+        "....\n" +
+        "ladders\n" +
+        "2 0\n" +
+        "markers\n" +
+        "player 0 1\n" +
+        "end\n";
+
+    [Fact]
+    public void V2_DecksAndLadders_RoundTrip()
+    {
+        var data = MapFile.Parse(WithPlatform);
+
+        Assert.Equal(60, data.Map.Structures.DeckDm(new TilePos(1, 0)));
+        Assert.Equal(60, data.Map.DeckTop(new TilePos(2, 0)));
+        Assert.True(data.Map.Structures.HasLadder(new TilePos(2, 0)));
+        Assert.Equal(CoverType.Support, data.Map.Cover[new TilePos(1, 0)]);
+        Assert.Equal(CoverType.Rubble, data.Map.Cover[new TilePos(2, 1)]);
+        Assert.Equal(WithPlatform, MapFile.Serialize(data));
+    }
+
+    [Fact]
+    public void Ladder_NeedsADeckAboveIt()
+    {
+        Assert.Throws<FormatException>(() => MapFile.Parse(WithPlatform.Replace("ladders\n2 0\n", "ladders\n3 0\n")));
+    }
+
     [Fact]
     public void StructureSections_NeedVersion2()
     {

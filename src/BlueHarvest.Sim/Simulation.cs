@@ -46,20 +46,25 @@ public sealed class Simulation
     public const int BiteCoverLoudness = 35;
     public const int ShoveLoudness = 40;
     public const int BreachLoudness = 45;
+    public const int ClimbLoudness = 12;
+    public const int CollapseLoudness = 55;
 
     private readonly List<Actor> _actors = new();
     private readonly List<LightSource> _lights = new();
     private readonly List<NoiseEvent> _noises = new();
     private readonly List<Vehicle> _vehicles = new();
+    private readonly List<Platform> _platforms = new();
     private readonly Scheduler _scheduler = new();
     private readonly int[] _occupant; // actor id + 1 for each core tile, 0 if empty
     private readonly int[] _vehicleAt; // vehicle id + 1 for each vehicle tile, 0 if none
+    private readonly int[] _deckOccupant; // actor id + 1 standing on each tile's deck, 0 if empty
+    private readonly int[] _platformAt; // platform id + 1 for each deck tile, 0 if none
     private LightGrid? _lightGrid;
     private int _ambientLight = 100;
 
     /// <summary>
-    /// Starts a simulation on a map. Every connected patch of vehicle cover becomes a Vehicle,
-    /// so set vehicle tiles before creating the simulation.
+    /// Starts a simulation on a map. Every connected patch of vehicle cover becomes a Vehicle and
+    /// every connected patch of deck a Platform, so set those tiles before creating the simulation.
     /// </summary>
     public Simulation(WorldMap map, ulong seed)
     {
@@ -67,7 +72,10 @@ public sealed class Simulation
         Rng = new Rng(seed);
         _occupant = new int[map.Width * map.Height];
         _vehicleAt = new int[map.Width * map.Height];
+        _deckOccupant = new int[map.Width * map.Height];
+        _platformAt = new int[map.Width * map.Height];
         FindVehicles();
+        FindPlatforms();
     }
 
     /// <summary>A map with heights only; every tile is grass.</summary>
@@ -94,6 +102,12 @@ public sealed class Simulation
     /// <summary>Raised when a vehicle is shoved a tile: (vehicle, by whom).</summary>
     public event Action<Vehicle, Actor>? VehicleShoved;
 
+    /// <summary>Raised when a platform comes down: (platform, who smashed its last support, who was on it).</summary>
+    public event Action<Platform, Actor?, IReadOnlyList<Actor>>? PlatformCollapsed;
+
+    /// <summary>Raised when an actor falls: (actor, height fallen in decimeters).</summary>
+    public event Action<Actor, int>? ActorFell;
+
     public WorldMap Map { get; }
 
     public HeightMap Terrain => Map.Heights;
@@ -119,6 +133,8 @@ public sealed class Simulation
 
     public IReadOnlyList<Vehicle> Vehicles => _vehicles;
 
+    public IReadOnlyList<Platform> Platforms => _platforms;
+
     /// <summary>Noises from the last <see cref="NoiseMemoryTicks"/> ticks, oldest first.</summary>
     public IReadOnlyList<NoiseEvent> RecentNoises => _noises;
 
@@ -136,18 +152,22 @@ public sealed class Simulation
     /// <summary>Light level per tile; recomputed when lights, ambient light, cover or doors change.</summary>
     public LightGrid Light => _lightGrid ??= LightGrid.Compute(Map, _lights, _ambientLight);
 
+    /// <param name="onDeck">Start on the deck over <paramref name="position"/> (single-tile actors only).</param>
     public Actor AddActor(string name, char glyph, TilePos position, Species species, IActorController controller,
-        Direction facing = Direction.South)
+        Direction facing = Direction.South, bool onDeck = false)
     {
         var actor = new Actor(_actors.Count, name, glyph, position, species, facing, controller)
         {
             NextActTick = CurrentTick,
+            OnDeck = onDeck,
         };
+        if (onDeck && (actor.IsLarge || !Map.InBounds(position) || !Map.Structures.HasDeck(position)))
+            throw new ArgumentException($"{name} can't start on a deck at {position}.", nameof(onDeck));
         foreach (var tile in CoreTiles(actor.Body))
         {
             if (!Map.InBounds(tile))
                 throw new ArgumentOutOfRangeException(nameof(position), $"{name} at {position} would stick out of the map at {tile}.");
-            if (ActorAt(tile) is { } other)
+            if (ActorAt(tile, onDeck) is { } other)
                 throw new InvalidOperationException($"{name} at {position} would overlap {other.Name} at {tile}.");
         }
 
@@ -175,14 +195,42 @@ public sealed class Simulation
         _noises.RemoveAll(n => n.Tick < CurrentTick - NoiseMemoryTicks);
     }
 
-    /// <summary>The actor whose core covers this tile, if any. Heads and tails don't occupy tiles.</summary>
-    public Actor? ActorAt(TilePos position)
+    /// <summary>
+    /// The actor on the ground at this tile, if any: a single-tile actor, or a large body whose core
+    /// covers it. Heads and tails don't occupy tiles. Actors on a deck above are found with ActorOnDeck.
+    /// </summary>
+    public Actor? ActorAt(TilePos position) => ActorAt(position, onDeck: false);
+
+    /// <summary>The actor standing on the deck over this tile, if any.</summary>
+    public Actor? ActorOnDeck(TilePos position) => ActorAt(position, onDeck: true);
+
+    public Actor? ActorAt(TilePos position, bool onDeck)
     {
         if (!Map.InBounds(position))
             return null;
-        int id = _occupant[position.Y * Map.Width + position.X] - 1;
+        int id = (onDeck ? _deckOccupant : _occupant)[position.Y * Map.Width + position.X] - 1;
         return id >= 0 ? _actors[id] : null;
     }
+
+    /// <summary>The platform whose deck covers this tile, if any (collapsed ones included).</summary>
+    public Platform? PlatformAt(TilePos position)
+    {
+        if (!Map.InBounds(position))
+            return null;
+        int id = _platformAt[position.Y * Map.Width + position.X] - 1;
+        return id >= 0 ? _platforms[id] : null;
+    }
+
+    /// <summary>The support posts still standing under a platform.</summary>
+    public IEnumerable<TilePos> SupportsOf(Platform platform) =>
+        platform.Tiles.Where(t => Cover[t] == CoverType.Support);
+
+    /// <summary>Absolute height an actor stands at: its deck, or the ground under its anchor.</summary>
+    public int StandHeight(Actor actor) => Map.SurfaceHeight(actor.Position, actor.OnDeck);
+
+    /// <summary>Absolute height of an actor's eyes (and ears).</summary>
+    public int EyeZ(Actor actor) =>
+        (actor.IsLarge ? Terrain[EyeTile(actor)] : StandHeight(actor)) + actor.Species.Senses.EyeHeightDm;
 
     /// <summary>The vehicle covering this tile, if any.</summary>
     public Vehicle? VehicleAt(TilePos position)
@@ -219,21 +267,26 @@ public sealed class Simulation
     }
 
     /// <summary>
-    /// Whether an actor standing at <paramref name="from"/> can reach a tile's ground with its jaws
-    /// (or hands): within its reach up and down, and not across a roof line (a head outdoors can't
-    /// reach under a roof, and the reverse).
+    /// Whether an actor can reach a surface at absolute height <paramref name="surfaceDm"/> on a tile
+    /// with its jaws (or hands): within its reach up and down from where it stands, and not across a
+    /// roof line (a head outdoors can't reach under a roof, and the reverse).
     /// </summary>
-    public bool CanReach(Actor actor, TilePos from, TilePos tile)
+    public bool CanReach(Actor actor, TilePos tile, int surfaceDm)
     {
-        int rise = Terrain[tile] - Terrain[from];
+        int rise = surfaceDm - StandHeight(actor);
         return rise <= actor.Species.ReachUpDm
             && -rise <= actor.Species.ReachDownDm
             && Map.IsIndoor(tile) == Map.IsIndoor(actor.IsLarge ? EyeTile(actor) : actor.Position);
     }
 
+    /// <summary>Whether an actor can reach a tile's ground or, if it has one, its deck.</summary>
+    public bool CanReachAnySurface(Actor actor, TilePos tile) =>
+        CanReach(actor, tile, Terrain[tile])
+        || (Map.Structures.HasDeck(tile) && CanReach(actor, tile, Map.DeckTop(tile)));
+
     /// <summary>
     /// Tiles an actor's jaws reach: every tile next to (or on) its head and neck, except its own core,
-    /// that is within its reach height. Small actors reach the eight tiles around them.
+    /// where its ground or deck is within its reach height. Small actors reach the eight tiles around them.
     /// </summary>
     public IReadOnlyList<TilePos> BiteZone(Actor actor)
     {
@@ -244,7 +297,7 @@ public sealed class Simulation
             foreach (var direction in Directions.All)
             {
                 var p = actor.Position.Offset(direction);
-                if (Map.InBounds(p) && CanReach(actor, actor.Position, p))
+                if (Map.InBounds(p) && CanReachAnySurface(actor, p))
                     zone.Add(p);
             }
             return zone;
@@ -263,7 +316,7 @@ public sealed class Simulation
                     var p = new TilePos(tile.Position.X + dx, tile.Position.Y + dy);
                     if (!Map.InBounds(p) || core.Contains(p) || !seen.Add(p))
                         continue;
-                    if (CanReach(actor, actor.Position, p))
+                    if (CanReachAnySurface(actor, p))
                         zone.Add(p);
                 }
             }
@@ -279,37 +332,78 @@ public sealed class Simulation
     public string? MoveBlockReason(Actor actor, Direction direction, bool shove = false)
     {
         if (!actor.IsLarge)
-            return StepBlockReason(actor, actor.Position, direction, ignoreSmallActors: false);
+            return SmallStep(actor, actor.Position, actor.OnDeck, direction, ignoreSmallActors: false).Blocked;
         return PlanLargeMove(actor, direction, shove).Blocked;
     }
 
     public bool CanMove(Actor actor, Direction direction, bool shove = false) => MoveBlockReason(actor, direction, shove) is null;
 
     /// <summary>
-    /// Rules for a single-tile actor stepping from <paramref name="from"/>. A closed (not locked) door
-    /// doesn't block actors that open doors: walking into it opens it.
+    /// Rules for a single-tile actor stepping from <paramref name="from"/> (on its deck if that's where
+    /// the actor stands now, else on the ground).
     /// </summary>
-    public string? StepBlockReason(Actor actor, TilePos from, Direction direction, bool ignoreSmallActors)
+    public string? StepBlockReason(Actor actor, TilePos from, Direction direction, bool ignoreSmallActors) =>
+        SmallStep(actor, from, from == actor.Position && actor.OnDeck, direction, ignoreSmallActors).Blocked;
+
+    /// <summary>
+    /// Where a single-tile actor's step lands and whether it can make it. The next tile may offer two
+    /// surfaces: its ground and its deck. Each must be within the actor's step up and safe drop from
+    /// where it stands; the ground also has to be passable and have headroom under any deck. When both
+    /// work it takes the one nearer its current height (so stairs lead up, and walking under a high
+    /// catwalk stays on the ground). A closed (not locked) door doesn't block actors that open doors:
+    /// walking into it opens it.
+    /// </summary>
+    public (string? Blocked, bool ToDeck) SmallStep(Actor actor, TilePos from, bool fromDeck, Direction direction,
+        bool ignoreSmallActors)
     {
         var to = from.Offset(direction);
         if (!Map.InBounds(to))
-            return "the edge of the map";
+            return ("the edge of the map", false);
 
+        int fromZ = Map.SurfaceHeight(from, fromDeck);
+        string? groundReason = GroundStepReason(actor, fromZ, to, ignoreSmallActors);
+        if (!Map.Structures.HasDeck(to))
+            return (groundReason, false);
+
+        int deckZ = Map.DeckTop(to);
+        string? deckReason = HeightStepReason(actor, deckZ - fromZ)
+            ?? OccupiedReason(actor, ActorOnDeck(to), ignoreSmallActors);
+
+        if (deckReason is null && groundReason is null)
+            return (null, Math.Abs(deckZ - fromZ) <= Math.Abs(Terrain[to] - fromZ));
+        if (deckReason is null)
+            return (null, true);
+        if (groundReason is null)
+            return (null, false);
+        return Math.Abs(deckZ - fromZ) <= Math.Abs(Terrain[to] - fromZ) ? (deckReason, true) : (groundReason, false);
+    }
+
+    private string? GroundStepReason(Actor actor, int fromZ, TilePos to, bool ignoreSmallActors)
+    {
         var cover = Map.CoverAt(to);
         if (cover.BlocksMovement && !(IsClosedDoor(to) && actor.Species.OpensDoors))
             return $"{cover.Name} is in the way";
 
-        int step = Terrain[to] - Terrain[from];
+        if (Map.Structures.HasDeck(to) && Map.Structures.DeckDm(to) < actor.Species.BodyHeightDm)
+            return "a platform is in the way";
+
+        return HeightStepReason(actor, Terrain[to] - fromZ)
+            ?? OccupiedReason(actor, ActorAt(to), ignoreSmallActors);
+    }
+
+    private static string? HeightStepReason(Actor actor, int step)
+    {
         if (step > actor.Movement.MaxStepUpDm)
             return $"too steep to climb ({Units.FormatMeters(step)})";
         if (-step > actor.Movement.MaxDropDm)
             return $"too far to drop ({Units.FormatMeters(-step)})";
-
-        if (ActorAt(to) is { } other && other != actor && !(ignoreSmallActors && !other.IsLarge))
-            return $"{other.Name} is in the way";
-
         return null;
     }
+
+    private static string? OccupiedReason(Actor actor, Actor? other, bool ignoreSmallActors) =>
+        other is not null && other != actor && !(ignoreSmallActors && !other.IsLarge)
+            ? $"{other.Name} is in the way"
+            : null;
 
     /// <summary>A doorway whose door is shut but not locked.</summary>
     public bool IsClosedDoor(TilePos p) =>
@@ -333,6 +427,9 @@ public sealed class Simulation
             var cover = Map.CoverAt(tile);
             if (!movingAway && cover.StopsLargeBody(actor.Species.Force))
                 return $"{cover.Name} is in the way";
+
+            if (Map.Structures.HasDeck(tile) && Map.Structures.DeckDm(tile) < actor.Species.BodyHeightDm)
+                return "a platform is in the way";
 
             int step = Terrain[tile] - fromHeightDm;
             if (step > actor.Movement.MaxStepUpDm)
@@ -463,6 +560,7 @@ public sealed class Simulation
             hasher.Add(actor.Id)
                 .Add(actor.Position.X)
                 .Add(actor.Position.Y)
+                .Add(actor.OnDeck ? 1 : 0)
                 .Add((int)actor.Facing)
                 .Add(actor.LastMovedTick)
                 .Add(actor.NextActTick);
@@ -473,6 +571,8 @@ public sealed class Simulation
                 .Add(vehicle.Anchor.Y)
                 .Add(vehicle.Integrity);
         }
+        foreach (var platform in _platforms)
+            hasher.Add(platform.Collapsed ? 1 : 0);
         return hasher.Value;
     }
 
@@ -491,18 +591,22 @@ public sealed class Simulation
 
     private void SetOccupancy(Actor actor, int value)
     {
+        var grid = actor.OnDeck ? _deckOccupant : _occupant;
         foreach (var tile in CoreTiles(actor.Body))
         {
             if (Map.InBounds(tile))
-                _occupant[tile.Y * Map.Width + tile.X] = value;
+                grid[tile.Y * Map.Width + tile.X] = value;
         }
     }
 
-    private void Place(Actor actor, TilePos anchor, Direction facing)
+    private void Place(Actor actor, TilePos anchor, Direction facing) => Place(actor, anchor, facing, actor.OnDeck);
+
+    private void Place(Actor actor, TilePos anchor, Direction facing, bool onDeck)
     {
         Vacate(actor);
         actor.Position = anchor;
         actor.Facing = facing;
+        actor.OnDeck = onDeck;
         actor.Body = actor.Species.Body.Footprint(anchor, Compass16.Of(facing));
         Occupy(actor);
     }
@@ -513,6 +617,7 @@ public sealed class Simulation
         MoveAction move => actor.IsLarge ? TryMoveLarge(actor, move.Direction, move.Shove) : TryMove(actor, move.Direction),
         BiteAction bite => ResolveBite(actor, bite.Investigative),
         UseDoorAction door => UseDoor(actor, door.Direction),
+        ClimbAction => Climb(actor),
         _ => throw new ArgumentOutOfRangeException(nameof(action), $"Unknown action {action}."),
     };
 
@@ -527,22 +632,43 @@ public sealed class Simulation
     {
         actor.Facing = direction;
 
-        string? blocked = StepBlockReason(actor, actor.Position, direction, ignoreSmallActors: false);
+        var (blocked, toDeck) = SmallStep(actor, actor.Position, actor.OnDeck, direction, ignoreSmallActors: false);
         if (blocked is not null)
             return Bump(actor, blocked);
 
         var to = actor.Position.Offset(direction);
-        if (IsClosedDoor(to))
+        if (!toDeck && IsClosedDoor(to))
             return SwingDoor(actor, to, DoorState.Open);
 
-        int step = Terrain.StepDm(actor.Position, to);
-        var cover = Map.CoverAt(to);
-        Place(actor, to, direction);
+        int step = Map.SurfaceHeight(to, toDeck) - StandHeight(actor);
+        var cover = toDeck ? Covers.Deck : Map.CoverAt(to);
+        Place(actor, to, direction, toDeck);
         actor.LastMovedTick = CurrentTick;
         EmitNoise(to, actor.Species.FootstepLoudness + cover.NoiseModifier, NoiseKinds.Footsteps, actor.Id);
 
         int baseCost = actor.Movement.CostTicks(step, direction.IsDiagonal());
         return baseCost * cover.MoveCostPercent / 100;
+    }
+
+    /// <summary>Climbs the ladder on the actor's tile, up to the deck or down to the ground.</summary>
+    private int Climb(Actor actor)
+    {
+        var p = actor.Position;
+        if (!actor.Species.ClimbsLadders || actor.IsLarge)
+            return Bump(actor, "it can't climb");
+        if (!Map.Structures.HasLadder(p) || !Map.Structures.HasDeck(p))
+            return Bump(actor, "there's no ladder here");
+
+        bool up = !actor.OnDeck;
+        if (ActorAt(p, onDeck: up) is { } inTheWay)
+            return Bump(actor, $"{inTheWay.Name} is in the way {(up ? "at the top" : "at the bottom")}");
+        if (!up && Map.CoverAt(p).BlocksMovement)
+            return Bump(actor, $"{Map.CoverAt(p).Name} is at the bottom");
+
+        Place(actor, p, actor.Facing, up);
+        actor.LastMovedTick = CurrentTick;
+        EmitNoise(p, ClimbLoudness, NoiseKinds.Climbing, actor.Id);
+        return Math.Max(1, Map.Structures.DeckDm(p) * actor.Movement.ClimbTicksPerDm);
     }
 
     private int UseDoor(Actor actor, Direction direction)
@@ -638,7 +764,7 @@ public sealed class Simulation
         {
             if (Map.CoverAt(tile).IsSmashedBy(actor.Species.Force))
                 smashed++;
-            TryBreak(tile, actor.Species.Force);
+            TryBreak(tile, actor.Species.Force, actor);
         }
 
         // Head and tail flatten light growth and strike anyone in their way, including the
@@ -666,7 +792,7 @@ public sealed class Simulation
                 continue;
             var cover = Map.CoverAt(tile);
             if (!cover.BlocksMovement && cover.BrokenInto is not null && cover.BreakStrength <= actor.Species.Force / 2)
-                TryBreak(tile, actor.Species.Force);
+                TryBreak(tile, actor.Species.Force, actor);
 
             if (ActorAt(tile) is { } victim && victim != actor && struck.Add(victim.Id))
             {
@@ -695,7 +821,7 @@ public sealed class Simulation
     {
         var oldTiles = vehicle.Tiles.ToList();
         var oldSet = new HashSet<TilePos>(oldTiles);
-        var occupants = _actors.Where(a => !a.IsLarge && oldSet.Contains(a.Position)).ToList();
+        var occupants = _actors.Where(a => !a.IsLarge && !a.OnDeck && oldSet.Contains(a.Position)).ToList();
         foreach (var occupant in occupants)
             Vacate(occupant);
 
@@ -767,9 +893,13 @@ public sealed class Simulation
             if (vehicle is not null && !vehiclesBitten.Contains(vehicle))
                 vehiclesBitten.Add(vehicle);
 
+            // On the ground: anyone not shut inside an unbreached vehicle. On a deck: anyone in reach.
             if (ActorAt(tile) is { } victim && victim != actor && hitIds.Add(victim.Id)
-                && vehicle is not { Breached: false })
+                && vehicle is not { Breached: false } && CanReach(actor, tile, Terrain[tile]))
                 hits.Add(new BiteHit(victim, tile));
+            if (ActorOnDeck(tile) is { } high && high != actor && CanReach(actor, tile, Map.DeckTop(tile))
+                && hitIds.Add(high.Id))
+                hits.Add(new BiteHit(high, tile));
 
             if (Map.CoverAt(tile).BiteSound is { } sound)
             {
@@ -802,14 +932,94 @@ public sealed class Simulation
             EmitNoise(victim.Position, victim.Species.ScreamLoudness, NoiseKinds.Scream, victim.Id);
     }
 
-    private void TryBreak(TilePos tile, int force)
+    private void TryBreak(TilePos tile, int force, Actor? by)
     {
-        var cover = Covers.Get(Cover[tile]);
+        var type = Cover[tile];
+        var cover = Covers.Get(type);
         if (cover.BrokenInto is not { } into || cover.BreakStrength > force)
             return;
         Cover[tile] = into;
         CoverChanges++;
         _lightGrid = null;
+        if (type == CoverType.Support && PlatformAt(tile) is { Collapsed: false } platform)
+            CheckCollapse(platform, by);
+    }
+
+    /// <summary>A platform with fewer than half its support posts left standing comes down.</summary>
+    private void CheckCollapse(Platform platform, Actor? by)
+    {
+        if (platform.InitialSupports == 0)
+            return;
+        int standing = SupportsOf(platform).Count();
+        if (standing * 2 < platform.InitialSupports)
+            Collapse(platform, by);
+    }
+
+    /// <summary>
+    /// Brings a platform down: its deck and ladders are gone, the ground under it is strewn with
+    /// rubble (walls and the like stay), and everyone on it falls to the nearest open ground and cries out.
+    /// </summary>
+    private void Collapse(Platform platform, Actor? by)
+    {
+        platform.Collapsed = true;
+        var riders = new List<(Actor Actor, int FromDm)>();
+        foreach (var tile in platform.Tiles)
+        {
+            if (ActorOnDeck(tile) is { } rider)
+                riders.Add((rider, Map.DeckTop(tile)));
+        }
+
+        foreach (var (rider, _) in riders)
+            Vacate(rider);
+        foreach (var tile in platform.Tiles)
+        {
+            Map.Structures.SetDeck(tile, 0);
+            Map.Structures.SetLadder(tile, false);
+            var cover = Covers.Get(Cover[tile]);
+            if (!cover.BlocksMovement && !cover.BlocksLargeBodies && Cover[tile] != CoverType.Rubble)
+            {
+                Cover[tile] = CoverType.Rubble;
+                CoverChanges++;
+            }
+        }
+
+        var fell = new List<Actor>();
+        foreach (var (rider, fromDm) in riders)
+        {
+            rider.OnDeck = false;
+            rider.Position = LandingSpot(rider.Position);
+            rider.Body = rider.Species.Body.Footprint(rider.Position, Compass16.Of(rider.Facing));
+            Occupy(rider);
+            fell.Add(rider);
+            ActorFell?.Invoke(rider, Math.Max(0, fromDm - Terrain[rider.Position]));
+            CryOut(rider);
+        }
+
+        StructureChanges++;
+        _lightGrid = null;
+        EmitNoise(platform.Tiles[platform.Tiles.Count / 2], CollapseLoudness, NoiseKinds.Collapse, by?.Id);
+        PlatformCollapsed?.Invoke(platform, by, fell);
+    }
+
+    /// <summary>The nearest tile (ring by ring, in reading order) whose ground is passable and free.</summary>
+    private TilePos LandingSpot(TilePos from)
+    {
+        int maxRadius = Math.Max(Map.Width, Map.Height);
+        for (int r = 0; r <= maxRadius; r++)
+        {
+            for (int y = from.Y - r; y <= from.Y + r; y++)
+            {
+                for (int x = from.X - r; x <= from.X + r; x++)
+                {
+                    if (Math.Max(Math.Abs(x - from.X), Math.Abs(y - from.Y)) != r)
+                        continue;
+                    var p = new TilePos(x, y);
+                    if (Map.InBounds(p) && !Map.CoverAt(p).BlocksMovement && ActorAt(p) is null)
+                        return p;
+                }
+            }
+        }
+        return from;
     }
 
     /// <summary>
@@ -853,6 +1063,47 @@ public sealed class Simulation
                 _vehicles.Add(vehicle);
                 foreach (var t in tiles)
                     _vehicleAt[t.Y * width + t.X] = vehicle.Id + 1;
+            }
+        }
+    }
+
+    /// <summary>Turns each 4-connected patch of deck into a Platform, counting the support posts under it.</summary>
+    private void FindPlatforms()
+    {
+        int width = Map.Width, height = Map.Height;
+        var seen = new bool[width * height];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                var start = new TilePos(x, y);
+                if (seen[y * width + x] || !Map.Structures.HasDeck(start))
+                    continue;
+
+                var tiles = new List<TilePos>();
+                var queue = new Queue<TilePos>();
+                queue.Enqueue(start);
+                seen[y * width + x] = true;
+                while (queue.Count > 0)
+                {
+                    var p = queue.Dequeue();
+                    tiles.Add(p);
+                    foreach (var d in Directions.Cardinal)
+                    {
+                        var n = p.Offset(d);
+                        if (Map.InBounds(n) && !seen[n.Y * width + n.X] && Map.Structures.HasDeck(n))
+                        {
+                            seen[n.Y * width + n.X] = true;
+                            queue.Enqueue(n);
+                        }
+                    }
+                }
+
+                int supports = tiles.Count(t => Cover[t] == CoverType.Support);
+                var platform = new Platform(_platforms.Count, tiles, supports);
+                _platforms.Add(platform);
+                foreach (var t in tiles)
+                    _platformAt[t.Y * width + t.X] = platform.Id + 1;
             }
         }
     }

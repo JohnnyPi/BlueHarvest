@@ -6,8 +6,9 @@ namespace BlueHarvest.Sim.Actors;
 /// </summary>
 /// <param name="TurnTicks">Time to turn 45°. Only multi-tile bodies pay it; single tiles turn freely.</param>
 /// <param name="BiteTicks">Time a bite takes, hit or miss.</param>
+/// <param name="ClimbTicksPerDm">Time to climb a ladder, per decimeter, up or down.</param>
 public sealed record MovementProfile(int StepTicks, int MaxStepUpDm, int MaxDropDm, int UphillTicksPerDm, int TurnTicks = 0,
-    int BiteTicks = 100)
+    int BiteTicks = 100, int ClimbTicksPerDm = 3)
 {
     /// <summary>Walks up 0.5 m, drops 2 m safely.</summary>
     public static readonly MovementProfile Human = new(StepTicks: 70, MaxStepUpDm: 5, MaxDropDm: 20, UphillTicksPerDm: 6);

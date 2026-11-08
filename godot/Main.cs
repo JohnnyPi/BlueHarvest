@@ -26,7 +26,7 @@ public partial class Main : Node2D
     private const ulong Seed = 12345;
     private const string MapPath = "res://Maps/testbed.bhmap";
     private const string Controls =
-        "Move: arrows / numpad / hjkl yubn   Wait: . or numpad 5   Close a door: c   Zoom: + -\n" +
+        "Move: arrows / numpad / hjkl yubn   Wait: . or numpad 5   Close a door: c   Ladder: < >   Zoom: + -\n" +
         "Overlays: [1] lighting  [2] your view  [3] rex view  [4] noise  [5] rex path  [6] rex memory   [G] omniscient rex (debug)";
 
     private Simulation _sim = null!;
@@ -60,6 +60,8 @@ public partial class Main : Node2D
         _sim.ActorBitten += OnActorBitten;
         _sim.VehicleDamaged += OnVehicleDamaged;
         _sim.VehicleShoved += OnVehicleShoved;
+        _sim.PlatformCollapsed += OnPlatformCollapsed;
+        _sim.ActorFell += OnActorFell;
 
         _map = new AsciiMapView();
         _map.Bind(_sim, font, MovementProfile.Human.MaxStepUpDm);
@@ -96,7 +98,9 @@ public partial class Main : Node2D
             return;
         }
 
-        var action = key.Keycode == Key.C ? CloseDoorAction() : ActionFor(key.Keycode);
+        var action = key.Keycode == Key.C ? CloseDoorAction()
+            : key.Unicode is '<' or '>' ? LadderAction(up: key.Unicode == '<')
+            : ActionFor(key.Keycode);
         if (action is null)
             return;
 
@@ -151,6 +155,20 @@ public partial class Main : Node2D
         Key.Kp5 or Key.Period or Key.Space => new WaitAction(_playerActor.Movement.StepTicks),
         _ => null,
     };
+
+    /// <summary>'&lt;' climbs up the ladder you're standing at, '&gt;' climbs down.</summary>
+    private ActorAction? LadderAction(bool up)
+    {
+        var here = _playerActor.Position;
+        if (!_sim.Map.Structures.HasLadder(here))
+            _message = "There's no ladder here.";
+        else if (up == _playerActor.OnDeck)
+            _message = up ? "You're already at the top." : "You're already at the bottom.";
+        else
+            return new ClimbAction();
+        Refresh(snapCamera: false);
+        return null;
+    }
 
     /// <summary>Closes the first open door next to you (north first, clockwise), or says there isn't one.</summary>
     private ActorAction? CloseDoorAction()
@@ -251,6 +269,20 @@ public partial class Main : Node2D
     {
         bool inside = _sim.VehicleAt(_playerActor.Position) == vehicle;
         _message = inside ? $"The {by.Name} shoves your vehicle along with you in it!" : $"The {by.Name} shoves {vehicle.Name}.";
+    }
+
+    private void OnPlatformCollapsed(Platform platform, Actor? by, IReadOnlyList<Actor> fell)
+    {
+        string who = by is null ? "It" : $"The {by.Name}";
+        _message = fell.Contains(_playerActor)
+            ? $"{who} brings the platform down - you fall!"
+            : $"{who} brings a platform crashing down" + (fell.Count > 0 ? $"; {string.Join(", ", fell.Select(a => a.Name))} fall." : ".");
+    }
+
+    private void OnActorFell(Actor actor, int dropDm)
+    {
+        if (actor == _playerActor)
+            _message += $" You drop {Units.FormatMeters(dropDm)}. (Injuries arrive in build step 8.)";
     }
 
     private void OnMoveBlocked(Actor actor, string reason)
@@ -357,6 +389,14 @@ public partial class Main : Node2D
 
     private string Shelter(TilePos here)
     {
+        if (_playerActor.OnDeck)
+        {
+            int up = _sim.StandHeight(_playerActor) - _sim.Terrain[here];
+            string ladder = _sim.Map.Structures.HasLadder(here) ? ", at a ladder" : "";
+            return $"   on a platform {Units.FormatMeters(up)} up{ladder}";
+        }
+        if (_sim.Map.Structures.HasLadder(here))
+            return "   at the foot of a ladder";
         if (_sim.VehicleAt(here) is { } vehicle)
             return vehicle.Breached ? $"   in {vehicle.Name} (BREACHED)" : $"   in {vehicle.Name} ({vehicle.Integrity}%)";
         return _sim.Map.IsIndoor(here) ? "   indoors" : "";

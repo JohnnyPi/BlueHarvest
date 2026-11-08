@@ -71,6 +71,10 @@ public partial class AsciiMapView : Node2D
     private static readonly Color RexSoft = new(0.30f, 0.05f, 0.05f, 0.55f);
     private static readonly Color LockedInk = new(1f, 0.35f, 0.3f);
     private static readonly Color DamagedInk = new(1f, 0.3f, 0.25f);
+    private static readonly Color DeckFill = new(0.45f, 0.62f, 0.85f, 0.35f);
+    private static readonly Color DeckRim = new(0.05f, 0.08f, 0.15f, 0.9f);
+    private static readonly Color LadderInk = new(0.95f, 0.80f, 0.45f);
+    private static readonly Color DeckActorBacking = new(0.10f, 0.20f, 0.40f, 0.8f);
 
     /// <summary>Background, glyph and glyph color per cover type, indexed by CoverType.</summary>
     private static readonly (Color Background, char Glyph, Color Ink)[] CoverLook =
@@ -87,6 +91,8 @@ public partial class AsciiMapView : Node2D
         (new Color(0.38f, 0.36f, 0.33f), '^', new Color(0.80f, 0.78f, 0.72f)),        // Rock
         (new Color(0.20f, 0.28f, 0.40f), '#', new Color(0.65f, 0.80f, 1f)),           // Vehicle
         (new Color(0.18f, 0.22f, 0.12f), '%', new Color(0.70f, 0.60f, 0.20f)),        // Broken fence
+        (new Color(0.30f, 0.22f, 0.14f), '|', new Color(0.85f, 0.65f, 0.40f)),        // Support post
+        (new Color(0.26f, 0.24f, 0.22f), ':', new Color(0.65f, 0.60f, 0.55f, 0.7f)),  // Rubble
     };
 
     private Simulation? _sim;
@@ -237,20 +243,53 @@ public partial class AsciiMapView : Node2D
             }
         }
 
-        // Actors on top.
-        foreach (var actor in _sim.Actors)
+        // Decks: translucent planks over whatever is beneath, a dark rim on their edges, 'H' for ladders.
+        var structures = _sim.Map.Structures;
+        for (int y = 0; y < terrain.Height; y++)
         {
-            if (o.PlayerView && actor.Id != o.PlayerId && !o.PlayerSpottedActors.Contains(actor.Id))
-                continue;
-            if (actor.IsLarge)
+            for (int x = 0; x < width; x++)
             {
-                DrawLargeBody(actor, baseline);
-                continue;
+                var p = new TilePos(x, y);
+                if (!structures.HasDeck(p))
+                    continue;
+                float lit = o.Lighting ? 0.25f + 0.75f * _sim.Light.LevelAt(p) / 100f : 1f;
+                var cell = new Rect2(x * CellSize, y * CellSize, CellSize, CellSize);
+                DrawRect(cell, ScaleColor(DeckFill, lit));
+                foreach (var d in Directions.Cardinal)
+                {
+                    var n = p.Offset(d);
+                    if (_sim.Map.InBounds(n) && structures.HasDeck(n))
+                        continue;
+                    var (dx, dy) = d.Delta();
+                    var a = TileCenter(p) + new Vector2(dx, dy) * (CellSize / 2f) + new Vector2(-dy, dx) * (CellSize / 2f);
+                    var b = TileCenter(p) + new Vector2(dx, dy) * (CellSize / 2f) - new Vector2(-dy, dx) * (CellSize / 2f);
+                    DrawLine(a, b, DeckRim, 2f);
+                }
+                if (structures.HasLadder(p))
+                    DrawGlyph('H', x, y, ScaleColor(LadderInk, lit), baseline);
             }
-            var p = actor.Position;
-            DrawRect(new Rect2(p.X * CellSize + 2, p.Y * CellSize + 2, CellSize - 4, CellSize - 4), ActorBacking);
-            DrawGlyph(actor.Glyph, p.X, p.Y, ColorFor(actor.Glyph), baseline);
-            DrawFacing(actor.Position, actor.Facing);
+        }
+
+        // Actors on top: those on the ground first, then anyone up on a deck.
+        foreach (bool onDeck in new[] { false, true })
+        {
+            foreach (var actor in _sim.Actors)
+            {
+                if (actor.OnDeck != onDeck)
+                    continue;
+                if (o.PlayerView && actor.Id != o.PlayerId && !o.PlayerSpottedActors.Contains(actor.Id))
+                    continue;
+                if (actor.IsLarge)
+                {
+                    DrawLargeBody(actor, baseline);
+                    continue;
+                }
+                var p = actor.Position;
+                DrawRect(new Rect2(p.X * CellSize + 2, p.Y * CellSize + 2, CellSize - 4, CellSize - 4),
+                    onDeck ? DeckActorBacking : ActorBacking);
+                DrawGlyph(actor.Glyph, p.X, p.Y, ColorFor(actor.Glyph), baseline);
+                DrawFacing(actor.Position, actor.Facing);
+            }
         }
     }
 

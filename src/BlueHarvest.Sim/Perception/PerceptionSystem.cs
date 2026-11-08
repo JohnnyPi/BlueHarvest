@@ -59,7 +59,7 @@ public static class PerceptionSystem
             if (target == observer)
                 continue;
             bool moving = target.MovedRecently(sim.CurrentTick, MotionWindowTicks);
-            int score = SightScore(sim, observer, target.Position, target.Species.BodyHeightDm, moving);
+            int score = SightScore(sim, observer, target.Position, sim.StandHeight(target), target.Species.BodyHeightDm, moving);
             if (score > 0)
                 seen.Add(new SightContact(target, score, moving, score >= senses.DetectThreshold));
         }
@@ -91,7 +91,14 @@ public static class PerceptionSystem
     /// It multiplies four factors: how much of the sight line gets through (visibility),
     /// how lit the target is (night vision sets a floor), how close it is, and whether it's moving.
     /// </summary>
-    public static int SightScore(Simulation sim, Actor observer, TilePos target, int targetHeightDm, bool moving)
+    public static int SightScore(Simulation sim, Actor observer, TilePos target, int targetHeightDm, bool moving) =>
+        SightScore(sim, observer, target, sim.Terrain[target], targetHeightDm, moving);
+
+    /// <summary>
+    /// As above, for a target standing at absolute height <paramref name="targetBaseDm"/> (on a deck,
+    /// say) rather than on the ground.
+    /// </summary>
+    public static int SightScore(Simulation sim, Actor observer, TilePos target, int targetBaseDm, int targetHeightDm, bool moving)
     {
         var senses = observer.Species.Senses;
         var from = sim.EyeTile(observer);
@@ -108,8 +115,8 @@ public static class PerceptionSystem
         var map = sim.Map;
         int visibility = d2 == 0
             ? 100
-            : SightLine.Trace(map, from, map.Heights[from] + senses.EyeHeightDm,
-                target, map.Heights[target] + targetHeightDm, includeTargetCover: true).Visibility;
+            : SightLine.Trace(map, from, sim.EyeZ(observer),
+                target, targetBaseDm + targetHeightDm, includeTargetCover: true).Visibility;
         if (visibility == 0)
             return 0;
 
@@ -131,7 +138,7 @@ public static class PerceptionSystem
 
         var trace = d2 == 0
             ? LineTrace.Clear
-            : SightLine.Trace(map, at, map.Heights[at] + listener.Species.Senses.EyeHeightDm,
+            : SightLine.Trace(map, at, sim.EyeZ(listener),
                 source, map.Heights[source] + 10, includeTargetCover: false);
 
         return loudness - distance
@@ -156,7 +163,7 @@ public static class PerceptionSystem
         var map = sim.Map;
         int visibility = d2 == 0
             ? 100
-            : SightLine.Trace(map, from, map.Heights[from] + senses.EyeHeightDm,
+            : SightLine.Trace(map, from, sim.EyeZ(observer),
                 light.Position, map.Heights[light.Position] + light.HeightDm, includeTargetCover: false).Visibility;
 
         return visibility * light.IntensityPercent / 100 * DistanceFactor(d2, range) / 100;

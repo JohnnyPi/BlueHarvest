@@ -25,3 +25,6 @@ public sealed record BiteAction(bool Investigative = false) : ActorAction;
 /// closed door opens it too; this is how doors get shut again.
 /// </summary>
 public sealed record UseDoorAction(Direction Direction) : ActorAction;
+
+/// <summary>Climb the ladder on this tile: up to its deck from the ground, or down from the deck.</summary>
+public sealed record ClimbAction : ActorAction;

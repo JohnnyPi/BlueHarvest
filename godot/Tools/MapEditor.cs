@@ -11,7 +11,7 @@ namespace BlueHarvest.Game.Tools;
 
 /// <summary>
 /// Editor-only map tool. Put it on the root of a scene, click "Import from file" in the Inspector,
-/// paint the Heights, Cover, Roofs, Doors and Markers layers with Godot's TileMap tools, then
+/// paint the Heights, Cover, Roofs, Decks, Ladders, Doors and Markers layers with Godot's TileMap tools, then
 /// "Export to file". The .bhmap file is the source of truth; this scene is just a way to edit it.
 /// Export always writes map format v2; Import reads v1 and v2.
 /// </summary>
@@ -21,6 +21,8 @@ public partial class MapEditor : Node2D
     private const string HeightsLayer = "Heights";
     private const string CoverLayer = "Cover";
     private const string RoofsLayer = "Roofs";
+    private const string DecksLayer = "Decks";
+    private const string LaddersLayer = "Ladders";
     private const string DoorsLayer = "Doors";
     private const string MarkersLayer = "Markers";
 
@@ -98,12 +100,16 @@ public partial class MapEditor : Node2D
         var heights = EnsureLayer(HeightsLayer, MapTileSets.Heights());
         var cover = EnsureLayer(CoverLayer, MapTileSets.Cover());
         var roofs = EnsureLayer(RoofsLayer, MapTileSets.Roofs());
+        var decks = EnsureLayer(DecksLayer, MapTileSets.Decks());
+        var ladders = EnsureLayer(LaddersLayer, MapTileSets.Ladders());
         var doors = EnsureLayer(DoorsLayer, MapTileSets.Doors());
         var markers = EnsureLayer(MarkersLayer, MapTileSets.Markers());
         OrderLayers();
         heights.Clear();
         cover.Clear();
         roofs.Clear();
+        decks.Clear();
+        ladders.Clear();
         doors.Clear();
         markers.Clear();
         MarkerNames.Clear();
@@ -135,6 +141,15 @@ public partial class MapEditor : Node2D
                     int roofLevel = Math.Clamp((roofDm + HeightMap.DecimetersPerLevel / 2) / HeightMap.DecimetersPerLevel, 1, HeightMap.MaxLevel);
                     roofs.SetCell(cell, 0, new Vector2I(roofLevel, 0));
                 }
+
+                int deckDm = map.Structures.DeckDm(p);
+                if (deckDm > 0)
+                {
+                    int deckLevel = Math.Clamp((deckDm + HeightMap.DecimetersPerLevel / 2) / HeightMap.DecimetersPerLevel, 1, HeightMap.MaxLevel);
+                    decks.SetCell(cell, 0, new Vector2I(deckLevel, 0));
+                }
+                if (map.Structures.HasLadder(p))
+                    ladders.SetCell(cell, 0, Vector2I.Zero);
 
                 if (type == CoverType.Door)
                     doors.SetCell(cell, 0, new Vector2I((int)map.Structures.DoorAt(p), 0));
@@ -177,6 +192,8 @@ public partial class MapEditor : Node2D
         // Maps imported before v2 have no Roofs or Doors layer yet; create them empty.
         var roofs = GetNodeOrNull<TileMapLayer>(RoofsLayer) ?? EnsureLayer(RoofsLayer, MapTileSets.Roofs());
         var doors = GetNodeOrNull<TileMapLayer>(DoorsLayer) ?? EnsureLayer(DoorsLayer, MapTileSets.Doors());
+        var decks = GetNodeOrNull<TileMapLayer>(DecksLayer) ?? EnsureLayer(DecksLayer, MapTileSets.Decks());
+        var ladders = GetNodeOrNull<TileMapLayer>(LaddersLayer) ?? EnsureLayer(LaddersLayer, MapTileSets.Ladders());
         OrderLayers();
 
         var map = new WorldMap(MapSize.X, MapSize.Y);
@@ -205,7 +222,24 @@ public partial class MapEditor : Node2D
                     int level = Math.Clamp(roofs.GetCellAtlasCoords(cell).X, 0, HeightMap.MaxLevel);
                     map.Structures.SetRoof(p, level * HeightMap.DecimetersPerLevel);
                 }
+
+                if (decks.GetCellSourceId(cell) != -1)
+                {
+                    int level = Math.Clamp(decks.GetCellAtlasCoords(cell).X, 0, HeightMap.MaxLevel);
+                    map.Structures.SetDeck(p, level * HeightMap.DecimetersPerLevel);
+                }
             }
+        }
+
+        foreach (var cell in ladders.GetUsedCells())
+        {
+            var p = new TilePos(cell.X, cell.Y);
+            if (!map.InBounds(p) || !map.Structures.HasDeck(p))
+            {
+                GD.PushWarning($"Skipping ladder at {p}: there's no deck above it.");
+                continue;
+            }
+            map.Structures.SetLadder(p, true);
         }
 
         foreach (var cell in doors.GetUsedCells())
@@ -277,11 +311,11 @@ public partial class MapEditor : Node2D
         return specs.OrderBy(s => s.Key).Select(s => s.Value).ToList();
     }
 
-    /// <summary>Keeps the layers stacked heights, cover, roofs, doors, markers (markers on top).</summary>
+    /// <summary>Keeps the layers stacked heights, cover, roofs, decks, ladders, doors, markers (markers on top).</summary>
     private void OrderLayers()
     {
         int index = 0;
-        foreach (string name in new[] { HeightsLayer, CoverLayer, RoofsLayer, DoorsLayer, MarkersLayer })
+        foreach (string name in new[] { HeightsLayer, CoverLayer, RoofsLayer, DecksLayer, LaddersLayer, DoorsLayer, MarkersLayer })
         {
             if (GetNodeOrNull<TileMapLayer>(name) is { } layer)
                 MoveChild(layer, index++);

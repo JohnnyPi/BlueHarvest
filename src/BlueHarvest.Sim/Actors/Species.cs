@@ -12,6 +12,7 @@ namespace BlueHarvest.Sim.Actors;
 /// <param name="ReachDownDm">How far below the ground it stands on it can reach.</param>
 /// <param name="BiteDamage">Integrity a bite takes off a vehicle.</param>
 /// <param name="OpensDoors">Can open and close doors.</param>
+/// <param name="ClimbsLadders">Can climb ladders.</param>
 public sealed record Species(
     string Name,
     MovementProfile Movement,
@@ -24,11 +25,12 @@ public sealed record Species(
     int ReachUpDm = 20,
     int ReachDownDm = 10,
     int BiteDamage = 0,
-    bool OpensDoors = false)
+    bool OpensDoors = false,
+    bool ClimbsLadders = false)
 {
     public static readonly Species Human = new("human", MovementProfile.Human, SenseProfile.Human,
         BodyHeightDm: 17, FootstepLoudness: 18, Body: BodyPlan.SingleTile, Force: 0, ScreamLoudness: 35,
-        ReachUpDm: 20, ReachDownDm: 10, OpensDoors: true);
+        ReachUpDm: 20, ReachDownDm: 10, OpensDoors: true, ClimbsLadders: true);
 
     /// <summary>Single tile for now; a 1×3 body with free turning comes with its AI.</summary>
     public static readonly Species Raptor = new("raptor", MovementProfile.Raptor, SenseProfile.Raptor,

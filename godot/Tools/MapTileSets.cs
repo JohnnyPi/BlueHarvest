@@ -7,7 +7,7 @@ namespace BlueHarvest.Game.Tools;
 /// <summary>
 /// Builds the editor's tile palettes in code, so there are no tileset files to maintain.
 /// Each palette is one row of tiles; a tile's column is the value it stands for
-/// (height level, CoverType, MarkerKind, DoorState or roof level).
+/// (height level, CoverType, MarkerKind, DoorState, roof or deck level).
 /// </summary>
 public static class MapTileSets
 {
@@ -51,6 +51,8 @@ public static class MapTileSets
             new Color(0.50f, 0.48f, 0.44f),     // Rock
             new Color(0.30f, 0.45f, 0.70f),     // Vehicle
             new Color(0.60f, 0.52f, 0.20f),     // Broken fence
+            new Color(0.62f, 0.45f, 0.28f),     // Support post
+            new Color(0.48f, 0.44f, 0.40f),     // Rubble
         };
 
         int count = Covers.All.Count;
@@ -104,6 +106,32 @@ public static class MapTileSets
             PixelFont.Draw(image, looks[i].Label, i * TilePx, TilePx, Colors.Black);
         }
         return Build(image, looks.Length);
+    }
+
+    /// <summary>
+    /// One tile per deck height (0.5 m levels above the ground, labelled like heights): catwalks, tower
+    /// tops, upper floors, stairs. Drawn translucent blue. Level 0 means no deck.
+    /// </summary>
+    public static TileSet Decks()
+    {
+        int count = HeightMap.MaxLevel + 1;
+        var image = NewImage(count);
+        var deck = new Color(0.30f, 0.55f, 0.85f, 0.5f);
+        for (int level = 1; level < count; level++)
+        {
+            Tile(image, level, deck);
+            PixelFont.Draw(image, HeightMap.LevelChar(level), level * TilePx, TilePx, new Color(1f, 1f, 1f, 0.9f));
+        }
+        return Build(image, count);
+    }
+
+    /// <summary>A single ladder tile ('h'). Paint it on a deck tile to join that deck to the ground beneath.</summary>
+    public static TileSet Ladders()
+    {
+        var image = NewImage(1);
+        Tile(image, 0, new Color(0.95f, 0.75f, 0.35f));
+        PixelFont.Draw(image, 'h', 0, TilePx, Colors.Black);
+        return Build(image, 1);
     }
 
     /// <summary>

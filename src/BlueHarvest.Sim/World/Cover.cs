@@ -15,6 +15,8 @@ public enum CoverType : byte
     Rock,
     Vehicle,
     BrokenFence,
+    Support,
+    Rubble,
 }
 
 /// <summary>
@@ -73,6 +75,9 @@ public static class Covers
         new CoverInfo(CoverType.Vehicle, 'V', "a vehicle", 150, false, SightHeightDm: 18, SightOpacityPercent: 60, NoiseModifier: 5,
             BlocksLargeBodies: true, BiteSound: Perception.NoiseKinds.MetalCrunch),
         new CoverInfo(CoverType.BrokenFence, 'f', "a broken fence", 120, false, SightHeightDm: 10, SightOpacityPercent: 5, NoiseModifier: 3),
+        new CoverInfo(CoverType.Support, '|', "a support post", 100, true, SightHeightDm: 60, SightOpacityPercent: 30,
+            BlocksLargeBodies: true, BreakStrength: 60, BrokenInto: CoverType.Rubble),
+        new CoverInfo(CoverType.Rubble, 'x', "rubble", 150, false, SightHeightDm: 5, SightOpacityPercent: 10, NoiseModifier: 4),
     };
 
     public static CoverInfo Get(CoverType type) => All[(int)type];
@@ -80,6 +85,9 @@ public static class Covers
     /// <summary>A doorway whose door is shut: like a wall, but humans can open it (WorldMap.CoverAt).</summary>
     public static readonly CoverInfo ClosedDoor = new(CoverType.Door, '+', "a closed door", 100, true,
         SightHeightDm: 30, SightOpacityPercent: 100, NoiseModifier: 2, BlocksLargeBodies: true);
+
+    /// <summary>What walking on a deck is like (the cover beneath doesn't matter up there): footsteps ring out.</summary>
+    public static readonly CoverInfo Deck = new(CoverType.Floor, '=', "a platform", 100, false, NoiseModifier: 5);
 
     /// <summary>A doorway whose door is locked: a wall until someone unlocks it.</summary>
     public static readonly CoverInfo LockedDoor = ClosedDoor with { Name = "a locked door" };

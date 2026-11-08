@@ -40,6 +40,11 @@ public sealed record MapData(
 /// roofs            (optional; '.' for open sky, else roof height above the ground in 0.5 m levels, '6' = 3 m)
 /// ...6
 /// ...6
+/// decks            (optional; '.' for none, else deck height above the ground in 0.5 m levels: catwalks, stairs, upper floors)
+/// .c..
+/// ....
+/// ladders          (optional; 'x y' for a ladder from the ground up to the deck on that tile)
+/// 1 0
 /// doors            (optional; 'x y open|closed|locked' for doorway tiles; unlisted doors are open)
 /// 2 0 closed
 /// vehicles         (optional; 'x y integrity [name]' for the vehicle covering x y)
@@ -56,7 +61,7 @@ public static class MapFile
 {
     public const int FormatVersion = 2;
 
-    private static readonly string[] Sections = { "roofs", "doors", "vehicles", "markers" };
+    private static readonly string[] Sections = { "roofs", "decks", "ladders", "doors", "vehicles", "markers" };
 
     public static MapData Parse(string text)
     {
@@ -167,6 +172,35 @@ public static class MapFile
                     section = Next("'markers'");
                     break;
 
+                case "decks":
+                    for (int y = 0; y < height; y++)
+                    {
+                        string row = ReadRow(lines, ref i, width, "deck", y);
+                        for (int x = 0; x < width; x++)
+                        {
+                            if (row[x] == '.')
+                                continue;
+                            int level = HeightMap.ParseLevel(row[x]);
+                            if (level <= 0)
+                                throw new FormatException($"Line {i}: '{row[x]}' at column {x} is not a deck height ('.', 1-9, a-z).");
+                            map.Structures.SetDeck(new TilePos(x, y), level * HeightMap.DecimetersPerLevel);
+                        }
+                    }
+                    section = Next("'markers'");
+                    break;
+
+                case "ladders":
+                    section = ReadEntries(Next, () => i, (parts, line) =>
+                    {
+                        var p = ParsePosition(parts, map, line, "ladder");
+                        if (parts.Length != 2)
+                            throw new FormatException($"Line {line}: expected 'x y'.");
+                        if (!map.Structures.HasDeck(p))
+                            throw new FormatException($"Line {line}: ladder at {p} has no deck above it.");
+                        map.Structures.SetLadder(p, true);
+                    });
+                    break;
+
                 case "doors":
                     section = ReadEntries(Next, () => i, (parts, line) =>
                     {
@@ -221,7 +255,7 @@ public static class MapFile
         return new MapData(map, markers, ambient, vehicles);
     }
 
-    /// <summary>Writes the current format (v2). Roofs, doors and vehicles sections appear only when there is something in them.</summary>
+    /// <summary>Writes the current format (v2). Roofs, decks, ladders, doors and vehicles sections appear only when there is something in them.</summary>
     public static string Serialize(MapData data)
     {
         var map = data.Map;
@@ -264,6 +298,30 @@ public static class MapFile
                 }
                 sb.Append('\n');
             }
+        }
+
+        if (map.Structures.AnyDecks)
+        {
+            sb.Append("decks\n");
+            for (int y = 0; y < map.Height; y++)
+            {
+                for (int x = 0; x < map.Width; x++)
+                {
+                    int dm = map.Structures.DeckDm(new TilePos(x, y));
+                    int level = Math.Clamp((dm + HeightMap.DecimetersPerLevel / 2) / HeightMap.DecimetersPerLevel, 0, HeightMap.MaxLevel);
+                    sb.Append(dm <= 0 ? '.' : HeightMap.LevelChar(Math.Max(1, level)));
+                }
+                sb.Append('\n');
+            }
+        }
+
+        if (map.Structures.AnyLadders)
+        {
+            sb.Append("ladders\n");
+            for (int y = 0; y < map.Height; y++)
+                for (int x = 0; x < map.Width; x++)
+                    if (map.Structures.HasLadder(new TilePos(x, y)))
+                        sb.Append(x).Append(' ').Append(y).Append('\n');
         }
 
         var doors = new StringBuilder();

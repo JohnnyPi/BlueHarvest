@@ -7,9 +7,10 @@ namespace BlueHarvest.Sim.Navigation;
 public readonly record struct PathPose(TilePos Anchor, Direction Facing);
 
 /// <summary>
-/// A* pathfinding in ticks of travel time. Small actors search tiles in 8 directions. Large bodies
-/// search (tile, facing) poses with moves "step forward" and "turn 45°", checking their whole core
-/// at every pose, so paths respect width, turning room and what they can smash.
+/// A* pathfinding in ticks of travel time. Small actors search (tile, ground or deck) in 8 directions,
+/// so stairs and ramps onto platforms work (ladders aren't planned yet: climbing is a separate action).
+/// Large bodies search (tile, facing) poses with moves "step forward" and "turn 45°", checking their
+/// whole core at every pose, so paths respect width, turning room and what they can smash.
 /// Other small actors are ignored (they move); other large bodies are obstacles.
 /// </summary>
 public static class Pathfinder
@@ -31,8 +32,8 @@ public static class Pathfinder
         int slack, int maxNodes = 60_000)
     {
         return actor.IsLarge
-            ? Search(sim, actor, isGoal, near, slack, maxNodes, facings: 8, LargeNeighbors)
-            : Search(sim, actor, isGoal, near, slack, maxNodes, facings: 1, SmallNeighbors);
+            ? Search(sim, actor, isGoal, near, slack, maxNodes, layers: 8, startLayer: (int)actor.Facing, LargeNeighbors)
+            : Search(sim, actor, isGoal, near, slack, maxNodes, layers: 2, startLayer: actor.OnDeck ? 1 : 0, SmallNeighbors);
     }
 
     /// <summary>The poses an actor passes through following <paramref name="moves"/> from where it stands.</summary>
@@ -52,15 +53,16 @@ public static class Pathfinder
         return poses;
     }
 
-    private readonly record struct Neighbor(TilePos Anchor, Direction Facing, Direction Move, int Cost);
+    /// <summary>A state to move to. Layer is the facing for large bodies, and 0 ground / 1 deck for small ones.</summary>
+    private readonly record struct Neighbor(TilePos Anchor, int Layer, Direction Move, int Cost);
 
-    private delegate void NeighborSource(Simulation sim, Actor actor, TilePos anchor, Direction facing, List<Neighbor> into);
+    private delegate void NeighborSource(Simulation sim, Actor actor, TilePos anchor, int layer, List<Neighbor> into);
 
     private static IReadOnlyList<Direction>? Search(Simulation sim, Actor actor, Func<TilePos, bool> isGoal, TilePos near,
-        int slack, int maxNodes, int facings, NeighborSource neighbors)
+        int slack, int maxNodes, int layers, int startLayer, NeighborSource neighbors)
     {
         int width = sim.Map.Width, height = sim.Map.Height;
-        int states = width * height * facings;
+        int states = width * height * layers;
         var g = new int[states];
         Array.Fill(g, int.MaxValue);
         var cameFrom = new int[states];
@@ -71,9 +73,9 @@ public static class Pathfinder
 
         int minStep = Math.Max(1, actor.Movement.StepTicks * 90 / 100); // fastest cover is the track at 90%
         int Heuristic(TilePos p) => Math.Max(0, Chebyshev(p, near) - slack) * minStep;
-        int Index(TilePos p, Direction f) => (p.Y * width + p.X) * facings + (facings == 1 ? 0 : (int)f);
+        int Index(TilePos p, int layer) => (p.Y * width + p.X) * layers + layer;
 
-        int start = Index(actor.Position, actor.Facing);
+        int start = Index(actor.Position, startLayer);
         g[start] = 0;
         cameFrom[start] = -1;
         open.Enqueue(start, (Heuristic(actor.Position), order++));
@@ -86,9 +88,9 @@ public static class Pathfinder
                 continue;
             closed[current] = true;
 
-            int cell = current / facings;
+            int cell = current / layers;
             var anchor = new TilePos(cell % width, cell / width);
-            var facing = facings == 1 ? actor.Facing : (Direction)(current % facings);
+            int layer = current % layers;
 
             if (isGoal(anchor))
                 return Reconstruct(current, cameFrom, moveTaken);
@@ -96,10 +98,10 @@ public static class Pathfinder
                 return null;
 
             buffer.Clear();
-            neighbors(sim, actor, anchor, facing, buffer);
-            foreach (var (nextAnchor, nextFacing, move, cost) in buffer)
+            neighbors(sim, actor, anchor, layer, buffer);
+            foreach (var (nextAnchor, nextLayer, move, cost) in buffer)
             {
-                int next = Index(nextAnchor, nextFacing);
+                int next = Index(nextAnchor, nextLayer);
                 if (closed[next])
                     continue;
                 int tentative = g[current] + cost;
@@ -114,24 +116,27 @@ public static class Pathfinder
         return null;
     }
 
-    private static void SmallNeighbors(Simulation sim, Actor actor, TilePos anchor, Direction facing,
-        List<Neighbor> into)
+    private static void SmallNeighbors(Simulation sim, Actor actor, TilePos anchor, int layer, List<Neighbor> into)
     {
+        bool onDeck = layer == 1;
+        int fromZ = sim.Map.SurfaceHeight(anchor, onDeck);
         foreach (var direction in Directions.All)
         {
-            if (sim.StepBlockReason(actor, anchor, direction, ignoreSmallActors: true) is not null)
+            var (blocked, toDeck) = sim.SmallStep(actor, anchor, onDeck, direction, ignoreSmallActors: true);
+            if (blocked is not null)
                 continue;
             var to = anchor.Offset(direction);
-            int cost = actor.Movement.CostTicks(sim.Terrain[to] - sim.Terrain[anchor], direction.IsDiagonal())
-                * sim.Map.CoverAt(to).MoveCostPercent / 100
-                + (sim.IsClosedDoor(to) ? Simulation.DoorTicks : 0);
-            into.Add(new Neighbor(to, direction, direction, Math.Max(1, cost)));
+            var cover = toDeck ? Covers.Deck : sim.Map.CoverAt(to);
+            int cost = actor.Movement.CostTicks(sim.Map.SurfaceHeight(to, toDeck) - fromZ, direction.IsDiagonal())
+                * cover.MoveCostPercent / 100
+                + (!toDeck && sim.IsClosedDoor(to) ? Simulation.DoorTicks : 0);
+            into.Add(new Neighbor(to, toDeck ? 1 : 0, direction, Math.Max(1, cost)));
         }
     }
 
-    private static void LargeNeighbors(Simulation sim, Actor actor, TilePos anchor, Direction facing,
-        List<Neighbor> into)
+    private static void LargeNeighbors(Simulation sim, Actor actor, TilePos anchor, int layer, List<Neighbor> into)
     {
+        var facing = (Direction)layer;
         int fromHeight = sim.Terrain[anchor];
 
         // Step forward.
@@ -141,7 +146,7 @@ public static class Pathfinder
             int cost = actor.Movement.CostTicks(sim.Terrain[ahead] - fromHeight, facing.IsDiagonal())
                 * sim.Map.CoverAt(ahead).MoveCostPercent / 100
                 + sim.SmashCount(actor, ahead, facing) * Simulation.SmashTicks;
-            into.Add(new Neighbor(ahead, facing, facing, Math.Max(1, cost)));
+            into.Add(new Neighbor(ahead, (int)facing, facing, Math.Max(1, cost)));
         }
 
         // Turn 45° either way.
@@ -151,7 +156,7 @@ public static class Pathfinder
             if (sim.BodyBlockReason(actor, anchor, turned, fromHeight, ignoreSmallActors: true) is not null)
                 continue;
             int cost = actor.Movement.TurnTicks + sim.SmashCount(actor, anchor, turned) * Simulation.SmashTicks;
-            into.Add(new Neighbor(anchor, turned, turned, Math.Max(1, cost)));
+            into.Add(new Neighbor(anchor, (int)turned, turned, Math.Max(1, cost)));
         }
     }
 

@@ -28,6 +28,12 @@ public sealed class WorldMap
 
     public bool InBounds(TilePos p) => Heights.InBounds(p);
 
+    /// <summary>Absolute height of the deck surface on a tile (ground plus deck), in decimeters.</summary>
+    public int DeckTop(TilePos p) => Heights[p] + Structures.DeckDm(p);
+
+    /// <summary>Absolute height of a tile's ground or, with <paramref name="onDeck"/>, its deck.</summary>
+    public int SurfaceHeight(TilePos p, bool onDeck) => onDeck ? DeckTop(p) : Heights[p];
+
     /// <summary>Under a roof.</summary>
     public bool IsIndoor(TilePos p) => Structures.IsRoofed(p);
 

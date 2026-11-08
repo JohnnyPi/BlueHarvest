@@ -12,7 +12,8 @@ public static class ScenarioBuilder
     /// Spawns the player, NPCs and the Rex from markers and adds the lights. Pass a controller to
     /// drive the player; otherwise the player wanders randomly. The Rex gets its AI (a CreatureBrain);
     /// NPCs hold still until their own AI arrives in build step 9. Vehicles get their names and
-    /// integrity from the map; headlights on them are mounted and move with them.
+    /// integrity from the map; headlights on them are mounted and move with them. People whose marker
+    /// is on a deck tile start on the deck.
     /// </summary>
     public static Simulation Build(MapData data, ulong seed, IActorController? player = null)
     {
@@ -39,13 +40,13 @@ public static class ScenarioBuilder
                         throw new FormatException($"The map has more than one player marker (second at {marker.Position}).");
                     hasPlayer = true;
                     sim.AddActor(marker.Name ?? "Survivor", '@', marker.Position, Species.Human,
-                        player ?? new RandomWalker(ai));
+                        player ?? new RandomWalker(ai), onDeck: OnDeck(data.Map, marker.Position));
                     break;
 
                 case MarkerKind.Npc:
                     npcCount++;
                     sim.AddActor(marker.Name ?? $"Survivor {npcCount}", 'h', marker.Position, Species.Human,
-                        new HoldStillController());
+                        new HoldStillController(), onDeck: OnDeck(data.Map, marker.Position));
                     break;
 
                 case MarkerKind.Rex:
@@ -69,6 +70,9 @@ public static class ScenarioBuilder
             throw new FormatException("The map has no player marker.");
         return sim;
     }
+
+    /// <summary>People placed on a deck tile start up on the deck.</summary>
+    private static bool OnDeck(WorldMap map, TilePos p) => map.Structures.HasDeck(p);
 
     /// <summary>
     /// Which way a headlight on a vehicle's front tile points: away from the vehicle, along its length.

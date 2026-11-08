@@ -46,6 +46,9 @@ public sealed class Actor
     /// <summary>The tick at which this actor next gets a turn.</summary>
     public long NextActTick { get; internal set; }
 
+    /// <summary>Standing on the deck over its tile rather than the ground. Always false for large bodies.</summary>
+    public bool OnDeck { get; internal set; }
+
     /// <summary>Its most recent bite, or null if it has never bitten.</summary>
     public BiteResult? LastBite { get; internal set; }
 
