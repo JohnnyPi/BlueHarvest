@@ -27,7 +27,8 @@ public partial class Main : Node2D
     private const ulong Seed = 12345;
     private const string MapPath = "res://Maps/testbed.bhmap";
     private const string Controls =
-        "Move: arrows / numpad / hjkl yubn   Wait: . or numpad 5   Close a door: c   Ladder: < >   First aid: t   Zoom: + -\n" +
+        "Move: arrows / numpad / hjkl yubn   Wait: . or numpad 5   Close a door: c   Ladder: < >   Zoom: + -\n" +
+        "First aid: t   Flare: f (aim, Enter)   Flashlight: x   Rope: r + direction   Sprint: s\n" +
         "Overlays: [1] lighting  [2] your view  [3] rex view  [4] noise  [5] rex path  [6] rex memory   [G] omniscient rex (debug)";
 
     private Simulation _sim = null!;
@@ -43,6 +44,17 @@ public partial class Main : Node2D
     private string _message = "";
     private long _lastTurnTick;
     private GoToController? _rexHunt;
+    private InputMode _mode = InputMode.Normal;
+    private TilePos _cursor;
+    private bool _sprint;
+
+    /// <summary>What the next keys mean: normal play, aiming a throw, or choosing which way to rappel.</summary>
+    private enum InputMode
+    {
+        Normal,
+        Aim,
+        Rappel,
+    }
     private CreatureBrain? _rexBrain;
     private Director _director = new();
 
@@ -70,6 +82,8 @@ public partial class Main : Node2D
         _sim.ActorDied += OnActorDied;
         _sim.ActorBlackedOut += OnActorBlackedOut;
         _sim.ActorTreated += OnActorTreated;
+        _sim.ItemThrown += OnItemThrown;
+        _sim.Rappelled += OnRappelled;
 
         _map = new AsciiMapView();
         _map.Bind(_sim, font, MovementProfile.Human.MaxStepUpDm);
@@ -124,6 +138,20 @@ public partial class Main : Node2D
             return;
         }
 
+        if (_mode != InputMode.Normal)
+        {
+            GetViewport().SetInputAsHandled();
+            HandleModeKey(key);
+            return;
+        }
+
+        if (!key.Echo && TryStartMode(key.Keycode))
+        {
+            GetViewport().SetInputAsHandled();
+            Refresh(snapCamera: false);
+            return;
+        }
+
         var action = key.Keycode == Key.C ? CloseDoorAction()
             : key.Unicode is '<' or '>' ? LadderAction(up: key.Unicode == '<')
             : ActionFor(key.Keycode);
@@ -131,6 +159,12 @@ public partial class Main : Node2D
             return;
 
         GetViewport().SetInputAsHandled();
+        Submit(action);
+    }
+
+    /// <summary>Takes the player's turn with this action and runs everyone else until it's the player's turn again.</summary>
+    private void Submit(ActorAction action)
+    {
         _message = "";
         _lastTurnTick = _sim.CurrentTick;
         _player.Pending = action;
@@ -139,6 +173,97 @@ public partial class Main : Node2D
         Refresh(snapCamera: false);
         ShowDeathIfDead();
     }
+
+    /// <summary>
+    /// Keys that change what the next keys mean, or toggle a setting without taking a turn:
+    /// f aims a flare, r readies the rope, s toggles sprinting, x switches the flashlight (that one takes a turn).
+    /// </summary>
+    private bool TryStartMode(Key key)
+    {
+        var inventory = _playerActor.Inventory;
+        switch (key)
+        {
+            case Key.F:
+                if (!inventory.Has(ItemKind.Flare))
+                {
+                    _message = "You have no flares left.";
+                    return true;
+                }
+                _mode = InputMode.Aim;
+                var (fx, fy) = _playerActor.Facing.Delta();
+                _cursor = Clamp(new TilePos(_playerActor.Position.X + fx * 5, _playerActor.Position.Y + fy * 5));
+                _message = "Aim the flare: move the cursor, Enter or f to throw, Esc to cancel.";
+                return true;
+            case Key.R:
+                if (!inventory.Has(ItemKind.Rope))
+                {
+                    _message = "You have no rope.";
+                    return true;
+                }
+                _mode = InputMode.Rappel;
+                _message = "Rappel which way? (a direction; Esc to cancel)";
+                return true;
+            case Key.S:
+                _sprint = !_sprint;
+                _message = _sprint ? "Sprinting: faster, but much louder." : "Walking.";
+                return true;
+            case Key.X:
+                Submit(new ToggleLightAction());
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void HandleModeKey(InputEventKey key)
+    {
+        if (key.Keycode == Key.Escape)
+        {
+            _mode = InputMode.Normal;
+            _message = "Never mind.";
+            Refresh(snapCamera: false);
+            return;
+        }
+
+        var direction = DirectionFor(key.Keycode);
+        if (_mode == InputMode.Rappel)
+        {
+            if (direction is not { } d)
+                return;
+            _mode = InputMode.Normal;
+            Submit(new RappelAction(d));
+            return;
+        }
+
+        // Aiming.
+        if (direction is { } move)
+        {
+            var (dx, dy) = move.Delta();
+            _cursor = Clamp(new TilePos(_cursor.X + dx, _cursor.Y + dy));
+            Refresh(snapCamera: false);
+        }
+        else if (!key.Echo && key.Keycode is Key.Enter or Key.KpEnter or Key.F)
+        {
+            _mode = InputMode.Normal;
+            Submit(new ThrowAction(ItemKind.Flare, _cursor));
+        }
+    }
+
+    private TilePos Clamp(TilePos p) =>
+        new(Math.Clamp(p.X, 0, _sim.Map.Width - 1), Math.Clamp(p.Y, 0, _sim.Map.Height - 1));
+
+    private static Direction? DirectionFor(Key key) => key switch
+    {
+        Key.Up or Key.Kp8 or Key.K => Direction.North,
+        Key.Down or Key.Kp2 or Key.J => Direction.South,
+        Key.Left or Key.Kp4 or Key.H => Direction.West,
+        Key.Right or Key.Kp6 or Key.L => Direction.East,
+        Key.Kp7 or Key.Y => Direction.NorthWest,
+        Key.Kp9 or Key.U => Direction.NorthEast,
+        Key.Kp1 or Key.B => Direction.SouthWest,
+        Key.Kp3 or Key.N => Direction.SouthEast,
+        _ => null,
+    };
 
     /// <summary>Builds the simulation from the testbed file, or the demo map if that fails.</summary>
     private void LoadSimulation()
@@ -169,20 +294,17 @@ public partial class Main : Node2D
         _message = message;
     }
 
-    private ActorAction? ActionFor(Key key) => key switch
+    private ActorAction? ActionFor(Key key)
     {
-        Key.Up or Key.Kp8 or Key.K => new MoveAction(Direction.North),
-        Key.Down or Key.Kp2 or Key.J => new MoveAction(Direction.South),
-        Key.Left or Key.Kp4 or Key.H => new MoveAction(Direction.West),
-        Key.Right or Key.Kp6 or Key.L => new MoveAction(Direction.East),
-        Key.Kp7 or Key.Y => new MoveAction(Direction.NorthWest),
-        Key.Kp9 or Key.U => new MoveAction(Direction.NorthEast),
-        Key.Kp1 or Key.B => new MoveAction(Direction.SouthWest),
-        Key.Kp3 or Key.N => new MoveAction(Direction.SouthEast),
-        Key.Kp5 or Key.Period or Key.Space => new WaitAction(_playerActor.Movement.StepTicks),
-        Key.T => new TreatAction(),
-        _ => null,
-    };
+        if (DirectionFor(key) is { } direction)
+            return new MoveAction(direction, Sprint: _sprint);
+        return key switch
+        {
+            Key.Kp5 or Key.Period or Key.Space => new WaitAction(_playerActor.Movement.StepTicks),
+            Key.T => new TreatAction(),
+            _ => null,
+        };
+    }
 
     /// <summary>'&lt;' climbs up the ladder you're standing at, '&gt;' climbs down.</summary>
     private ActorAction? LadderAction(bool up)
@@ -342,6 +464,20 @@ public partial class Main : Node2D
                 : $"Your hands shake; the dressing on your {InjuryRules.Name(section)} won't hold.";
     }
 
+    private void OnItemThrown(Actor actor, ItemKind item, TilePos landed)
+    {
+        if (actor == _playerActor)
+            _message = $"The flare lands at {landed}, hissing and spitting red light.";
+    }
+
+    private void OnRappelled(Actor actor, bool slipped)
+    {
+        if (actor == _playerActor)
+            _message = slipped
+                ? "Your grip goes and you drop the rest of the way!" + _message
+                : "You lower yourself down the rope. It stays tied up there.";
+    }
+
     private void OnMoveBlocked(Actor actor, string reason)
     {
         if (actor == _playerActor)
@@ -432,7 +568,13 @@ public partial class Main : Node2D
             $" {Part(BodySection.LeftLeg, "/")} {Part(BodySection.RightLeg, "\\")}\n";
         if (h.BleedTicksLeft(_sim.CurrentTick) is { } left)
             text += $"[color=#ff5040]bleeding: {left / Ticks.PerSecond} s left[/color]\n";
-        text += $"first-aid kits: {_playerActor.Inventory.Count(ItemKind.FirstAidKit)}";
+        var inventory = _playerActor.Inventory;
+        bool lightOn = _playerActor.CarriedLight is { } light && _sim.Lights[light].On;
+        text += $"first-aid kits: {inventory.Count(ItemKind.FirstAidKit)}\n" +
+                $"flares: {inventory.Count(ItemKind.Flare)}\n" +
+                (inventory.Has(ItemKind.Flashlight) ? $"flashlight: {(lightOn ? "ON" : "off")}\n" : "") +
+                (inventory.Has(ItemKind.Rope) ? "rope: 20 m\n" : "") +
+                (_sprint ? "[color=#f0c840]sprinting[/color]" : "walking");
         return text;
     }
 
@@ -489,6 +631,9 @@ public partial class Main : Node2D
         {
             o.Contacts = Array.Empty<ContactMark>();
         }
+        o.Cursor = _mode == InputMode.Aim ? _cursor : null;
+        o.CursorRange = GearRules.ThrowRange(_playerActor.Skills.Throwing, _playerActor.Health);
+        o.CursorFrom = _playerActor.Position;
         o.PlayerSpottedActors = playerPercepts.Seen.Where(c => c.Detected).Select(c => c.Target.Id).ToHashSet();
 
         if (o.PlayerView)

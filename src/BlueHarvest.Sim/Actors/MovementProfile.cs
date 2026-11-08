@@ -7,11 +7,13 @@ namespace BlueHarvest.Sim.Actors;
 /// <param name="TurnTicks">Time to turn 45°. Only multi-tile bodies pay it; single tiles turn freely.</param>
 /// <param name="BiteTicks">Time a bite takes, hit or miss.</param>
 /// <param name="ClimbTicksPerDm">Time to climb a ladder, per decimeter, up or down.</param>
+/// <param name="ClimbUpDm">Highest rise it can climb (hands and feet) rather than walk; 0 if it can't climb.</param>
 public sealed record MovementProfile(int StepTicks, int MaxStepUpDm, int MaxDropDm, int UphillTicksPerDm, int TurnTicks = 0,
-    int BiteTicks = 100, int ClimbTicksPerDm = 3)
+    int BiteTicks = 100, int ClimbTicksPerDm = 3, int ClimbUpDm = 0)
 {
-    /// <summary>Walks up 0.5 m, drops 2 m safely.</summary>
-    public static readonly MovementProfile Human = new(StepTicks: 70, MaxStepUpDm: 5, MaxDropDm: 20, UphillTicksPerDm: 6);
+    /// <summary>Walks up 0.5 m, climbs up 2 m, drops 2 m safely.</summary>
+    public static readonly MovementProfile Human = new(StepTicks: 70, MaxStepUpDm: 5, MaxDropDm: 20, UphillTicksPerDm: 6,
+        ClimbUpDm: 20);
 
     /// <summary>Walks up 1 m, drops 4 m. Leaping comes later.</summary>
     public static readonly MovementProfile Raptor = new(StepTicks: 30, MaxStepUpDm: 10, MaxDropDm: 40, UphillTicksPerDm: 3, BiteTicks: 40);

@@ -77,6 +77,8 @@ public static class PerceptionSystem
         var lights = new List<SeenLight>();
         foreach (var light in sim.Lights)
         {
+            if (!light.On)
+                continue;
             int score = LightScore(sim, observer, light);
             if (score > 0)
                 lights.Add(new SeenLight(light, score));

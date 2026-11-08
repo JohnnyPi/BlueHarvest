@@ -45,7 +45,7 @@ public class PlayerTurnTests
     public void BlockedClimb_RaisesEventWithReason()
     {
         var player = new PlayerController();
-        var sim = new Simulation(HeightMap.FromRows("04"), seed: 1);
+        var sim = new Simulation(HeightMap.FromRows("05"), seed: 1); // 2.5 m: past the 2 m people can climb
         var you = sim.AddActor("You", '@', new TilePos(0, 0), Species.Human, player);
         string? reason = null;
         sim.MoveBlocked += (_, r) => reason = r;
@@ -53,7 +53,7 @@ public class PlayerTurnTests
         player.Pending = new MoveAction(Direction.East);
         sim.RunUntilInputNeeded();
 
-        Assert.Equal("too steep to climb (2.0 m)", reason);
+        Assert.Equal("too steep to climb (2.5 m)", reason);
         Assert.Equal(new TilePos(0, 0), you.Position);
     }
 

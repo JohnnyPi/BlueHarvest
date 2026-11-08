@@ -38,7 +38,7 @@ public sealed class LightGrid
 
         foreach (var light in lights)
         {
-            if (!map.InBounds(light.Position))
+            if (!light.On || !map.InBounds(light.Position))
                 continue;
 
             int r = light.RadiusTiles;

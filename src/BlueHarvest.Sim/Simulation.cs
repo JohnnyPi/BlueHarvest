@@ -57,6 +57,9 @@ public sealed class Simulation
     private readonly List<Platform> _platforms = new();
     private readonly List<BloodSpot> _blood = new();
     private readonly Rng _injuryRng;
+    private readonly Rng _gearRng;
+    private readonly List<(int Light, long OffTick)> _lightExpiry = new();
+    private readonly List<RopeSpot> _ropes = new();
     private bool _playerDied;
     private readonly Scheduler _scheduler = new();
     private readonly int[] _occupant; // actor id + 1 for each core tile, 0 if empty
@@ -75,6 +78,7 @@ public sealed class Simulation
         Map = map;
         Rng = new Rng(seed);
         _injuryRng = Rng.Fork("injuries");
+        _gearRng = Rng.Fork("gear");
         _occupant = new int[map.Width * map.Height];
         _vehicleAt = new int[map.Width * map.Height];
         _deckOccupant = new int[map.Width * map.Height];
@@ -125,6 +129,12 @@ public sealed class Simulation
     /// <summary>Raised after an attempt at first aid: (actor, section treated, whether it worked).</summary>
     public event Action<Actor, BodySection, bool>? ActorTreated;
 
+    /// <summary>Raised when something is thrown: (thrower, what, where it landed).</summary>
+    public event Action<Actor, ItemKind, TilePos>? ItemThrown;
+
+    /// <summary>Raised after a rappel: (actor, whether it slipped and fell part of the way).</summary>
+    public event Action<Actor, bool>? Rappelled;
+
     public WorldMap Map { get; }
 
     public HeightMap Terrain => Map.Heights;
@@ -151,6 +161,9 @@ public sealed class Simulation
     public IReadOnlyList<Vehicle> Vehicles => _vehicles;
 
     public IReadOnlyList<Platform> Platforms => _platforms;
+
+    /// <summary>Ropes left tied where people rappelled down.</summary>
+    public IReadOnlyList<RopeSpot> Ropes => _ropes;
 
     /// <summary>Where bleeding actors have left blood, oldest first. Scent comes with weather (build step 10).</summary>
     public IReadOnlyList<BloodSpot> BloodSpots => _blood;
@@ -212,6 +225,27 @@ public sealed class Simulation
         if (Map.InBounds(light.Position) && VehicleAt(light.Position) is { } vehicle)
             vehicle.LightIndices.Add(_lights.Count - 1);
         _lightGrid = null;
+    }
+
+    /// <summary>Switches a light on or off. Lights are never removed, so their indices stay valid.</summary>
+    public void SetLightOn(int index, bool on)
+    {
+        if (_lights[index].On == on)
+            return;
+        _lights[index] = _lights[index] with { On = on };
+        _lightGrid = null;
+    }
+
+    /// <summary>Turns off lights whose time is up (burnt-out flares).</summary>
+    private void ExpireLights()
+    {
+        for (int i = _lightExpiry.Count - 1; i >= 0; i--)
+        {
+            if (_lightExpiry[i].OffTick > CurrentTick)
+                continue;
+            SetLightOn(_lightExpiry[i].Light, false);
+            _lightExpiry.RemoveAt(i);
+        }
     }
 
     public void EmitNoise(TilePos position, int loudness, string kind, int? actorId = null)
@@ -521,9 +555,14 @@ public sealed class Simulation
             ?? OccupiedReason(actor, ActorAt(to), ignoreSmallActors);
     }
 
+    /// <summary>
+    /// Whether a height change is manageable: walked up to the walk limit, climbed up to the climb
+    /// limit (if the actor climbs and its wounds allow), dropped down to the safe drop.
+    /// </summary>
     private static string? HeightStepReason(Actor actor, int step)
     {
-        if (step > actor.Movement.MaxStepUpDm)
+        if (step > actor.Movement.MaxStepUpDm
+            && !(step <= actor.Movement.ClimbUpDm && !actor.IsLarge && actor.Health.CanClimb))
             return $"too steep to climb ({Units.FormatMeters(step)})";
         if (-step > actor.Movement.MaxDropDm)
             return $"too far to drop ({Units.FormatMeters(-step)})";
@@ -644,6 +683,7 @@ public sealed class Simulation
             return StepResult.Idle;
 
         CurrentTick = tick;
+        ExpireLights();
         var actor = _actors[id];
         UpdateHealth(actor);
         if (actor.IsDead)
@@ -692,6 +732,7 @@ public sealed class Simulation
         }
         if (tick > CurrentTick)
             CurrentTick = tick;
+        ExpireLights();
     }
 
     /// <summary>
@@ -737,6 +778,8 @@ public sealed class Simulation
         }
         foreach (var platform in _platforms)
             hasher.Add(platform.Collapsed ? 1 : 0);
+        foreach (var light in _lights)
+            hasher.Add(light.Position.X).Add(light.Position.Y).Add(light.On ? 1 : 0);
         return hasher.Value;
     }
 
@@ -773,16 +816,33 @@ public sealed class Simulation
         actor.OnDeck = onDeck;
         actor.Body = actor.Species.Body.Footprint(anchor, Compass16.Of(facing));
         Occupy(actor);
+        MoveCarriedLight(actor);
+    }
+
+    /// <summary>Keeps a carried flashlight at its holder, pointing where they face.</summary>
+    private void MoveCarriedLight(Actor actor)
+    {
+        if (actor.CarriedLight is not { } index)
+            return;
+        var light = _lights[index];
+        if (light.Position == actor.Position && light.Facing == actor.Facing)
+            return;
+        _lights[index] = light with { Position = actor.Position, Facing = actor.Facing };
+        if (light.On)
+            _lightGrid = null;
     }
 
     private int Resolve(Actor actor, ActorAction action) => action switch
     {
         WaitAction wait => Math.Max(1, wait.Ticks),
-        MoveAction move => actor.IsLarge ? TryMoveLarge(actor, move.Direction, move.Shove) : TryMove(actor, move.Direction),
+        MoveAction move => actor.IsLarge ? TryMoveLarge(actor, move.Direction, move.Shove) : TryMove(actor, move.Direction, move.Sprint),
         BiteAction bite => ResolveBite(actor, bite.Investigative),
         UseDoorAction door => UseDoor(actor, door.Direction),
         ClimbAction => Climb(actor),
         TreatAction => Treat(actor),
+        ThrowAction thrown => Throw(actor, thrown.Item, thrown.Target),
+        ToggleLightAction => ToggleLight(actor),
+        RappelAction rappel => Rappel(actor, rappel.Direction),
         _ => throw new ArgumentOutOfRangeException(nameof(action), $"Unknown action {action}."),
     };
 
@@ -793,7 +853,7 @@ public sealed class Simulation
         return BumpTicks;
     }
 
-    private int TryMove(Actor actor, Direction direction)
+    private int TryMove(Actor actor, Direction direction, bool sprint)
     {
         actor.Facing = direction;
 
@@ -811,11 +871,134 @@ public sealed class Simulation
             DropBlood(actor.Position);
         Place(actor, to, direction, toDeck);
         actor.LastMovedTick = CurrentTick;
-        EmitNoise(to, actor.Species.FootstepLoudness + cover.NoiseModifier + actor.Health.FootstepBonus,
-            NoiseKinds.Footsteps, actor.Id);
 
-        int baseCost = actor.Movement.CostTicks(step, direction.IsDiagonal());
-        return baseCost * cover.MoveCostPercent / 100 * actor.Health.StepCostPercent / 100;
+        int loudness = actor.Species.FootstepLoudness + cover.NoiseModifier + actor.Health.FootstepBonus;
+        if (step > actor.Movement.MaxStepUpDm)
+        {
+            // A climb: hands and feet, slow and noisy, sprinting or not.
+            EmitNoise(to, loudness + GearRules.ClimbLoudnessBonus, NoiseKinds.Scrambling, actor.Id);
+            return GearRules.ClimbStepTicks(step, actor.Skills.Climbing) * actor.Health.ClimbCostPercent / 100;
+        }
+
+        bool running = sprint && actor.Health.CanSprint;
+        EmitNoise(to, loudness + (running ? GearRules.SprintLoudnessBonus : 0), NoiseKinds.Footsteps, actor.Id);
+        int cost = actor.Movement.CostTicks(step, direction.IsDiagonal()) * cover.MoveCostPercent / 100
+            * actor.Health.StepCostPercent / 100;
+        if (running)
+            cost = cost * (actor.Health.SprintWinded ? GearRules.WindedSprintCostPercent : GearRules.SprintCostPercent) / 100;
+        return Math.Max(1, cost);
+    }
+
+    /// <summary>
+    /// Throws a flare toward a tile: it lands short of the target past the thrower's range, scatters
+    /// with distance (less with skill), comes back off walls, then lights up and hisses for 90 s.
+    /// </summary>
+    private int Throw(Actor actor, ItemKind item, TilePos target)
+    {
+        if (item != ItemKind.Flare)
+            return Bump(actor, "that isn't something to throw");
+        if (!actor.Inventory.Has(item))
+            return Bump(actor, "no flares left");
+        int range = GearRules.ThrowRange(actor.Skills.Throwing, actor.Health);
+        if (range <= 0)
+            return Bump(actor, "both arms are useless");
+
+        var from = actor.Position;
+        int dx = target.X - from.X, dy = target.Y - from.Y;
+        int distance = Math.Max(Math.Abs(dx), Math.Abs(dy));
+        if (distance > range)
+        {
+            dx = dx * range / distance;
+            dy = dy * range / distance;
+            distance = range;
+        }
+        int scatter = GearRules.Scatter(distance, actor.Skills.Throwing);
+        if (scatter > 0)
+        {
+            dx += _gearRng.NextInt(-scatter, scatter + 1);
+            dy += _gearRng.NextInt(-scatter, scatter + 1);
+        }
+
+        // Land on the map, and not inside a wall: walk back toward the thrower until it's open ground.
+        var land = new TilePos(Math.Clamp(from.X + dx, 0, Map.Width - 1), Math.Clamp(from.Y + dy, 0, Map.Height - 1));
+        int steps = Math.Max(Math.Abs(land.X - from.X), Math.Abs(land.Y - from.Y));
+        for (int k = steps; k > 0 && Map.CoverAt(land).BlocksMovement; k--)
+            land = new TilePos(from.X + (land.X - from.X) * (k - 1) / k, from.Y + (land.Y - from.Y) * (k - 1) / k);
+
+        actor.Inventory.Use(item);
+        actor.Facing = Directions.FromDelta(land.X - from.X, land.Y - from.Y);
+        actor.LastMovedTick = CurrentTick;
+        MoveCarriedLight(actor);
+
+        _lights.Add(LightSource.Flare(land));
+        _lightExpiry.Add((_lights.Count - 1, CurrentTick + GearRules.FlareBurnTicks));
+        _lightGrid = null;
+        EmitNoise(land, GearRules.FlareLoudness, NoiseKinds.Flare); // no actor: it's the flare that hisses
+        ItemThrown?.Invoke(actor, item, land);
+        return GearRules.ThrowTicks;
+    }
+
+    /// <summary>Switches the carried flashlight on (the first time, it joins the lights) or off.</summary>
+    private int ToggleLight(Actor actor)
+    {
+        if (!actor.Inventory.Has(ItemKind.Flashlight))
+            return Bump(actor, "no flashlight");
+        if (actor.CarriedLight is { } index)
+        {
+            SetLightOn(index, !_lights[index].On);
+        }
+        else
+        {
+            _lights.Add(LightSource.Flashlight(actor.Position, actor.Facing));
+            actor.CarriedLight = _lights.Count - 1;
+            _lightGrid = null;
+        }
+        return GearRules.FlashlightToggleTicks;
+    }
+
+    /// <summary>
+    /// Ropes down to the next tile's ground when the drop is too far to jump and the rope reaches.
+    /// Hurt arms (or no training) make it a gamble: a slip falls part of the way. The rope stays tied.
+    /// </summary>
+    private int Rappel(Actor actor, Direction direction)
+    {
+        actor.Facing = direction;
+        if (actor.IsLarge || !actor.Inventory.Has(ItemKind.Rope))
+            return Bump(actor, "no rope");
+        if (!actor.Health.CanRappel)
+            return Bump(actor, "too badly hurt to rappel");
+
+        var to = actor.Position.Offset(direction);
+        if (!Map.InBounds(to))
+            return Bump(actor, "the edge of the map");
+        int drop = StandHeight(actor) - Terrain[to];
+        if (drop <= actor.Movement.MaxDropDm)
+            return Bump(actor, "no need for a rope here");
+        if (drop > GearRules.RopeLengthDm)
+            return Bump(actor, "the rope won't reach");
+        if (Map.CoverAt(to).BlocksMovement)
+            return Bump(actor, $"{Map.CoverAt(to).Name} is in the way at the bottom");
+        if (ActorAt(to) is { } below)
+            return Bump(actor, $"{below.Name} is in the way at the bottom");
+        if (Map.Structures.HasDeck(to) && Map.Structures.DeckDm(to) < actor.Species.BodyHeightDm)
+            return Bump(actor, "a platform is in the way at the bottom");
+
+        var top = actor.Position;
+        actor.Inventory.Use(ItemKind.Rope);
+        _ropes.Add(new RopeSpot(top, to));
+        bool slipped = _gearRng.Chance(GearRules.RappelFailPercent(actor.Skills.Rappelling, actor.Health.YellowArms), 100);
+        Place(actor, to, direction, onDeck: false);
+        actor.LastMovedTick = CurrentTick;
+        EmitNoise(to, GearRules.RappelLoudness, NoiseKinds.Rope, actor.Id);
+        if (slipped)
+        {
+            int fallen = drop * _gearRng.NextInt(30, 101) / 100;
+            ActorFell?.Invoke(actor, fallen);
+            ApplyFall(actor, fallen);
+            CryOut(actor);
+        }
+        Rappelled?.Invoke(actor, slipped);
+        return GearRules.RappelTicks(drop, actor.Skills.Rappelling);
     }
 
     private void DropBlood(TilePos at)

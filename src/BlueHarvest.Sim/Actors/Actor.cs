@@ -56,6 +56,9 @@ public sealed class Actor
 
     public Inventory Inventory { get; } = new();
 
+    /// <summary>Index in Simulation.Lights of the flashlight it carries (on or off), once it has switched one on.</summary>
+    public int? CarriedLight { get; internal set; }
+
     /// <summary>Standing on the deck over its tile rather than the ground. Always false for large bodies.</summary>
     public bool OnDeck { get; internal set; }
 

@@ -38,6 +38,11 @@ public sealed class OverlayState
     public IReadOnlyList<TilePos> RexPathTiles = Array.Empty<TilePos>();
     public IReadOnlyList<ContactMark> Contacts = Array.Empty<ContactMark>();
 
+    /// <summary>The throw cursor while aiming, the thrower's range, and where they stand.</summary>
+    public TilePos? Cursor;
+    public int CursorRange;
+    public TilePos CursorFrom;
+
     public bool[]? PlayerVisibleTiles;
     public HashSet<int> PlayerSpottedActors = new();
     public int[]? RexScores;
@@ -77,6 +82,9 @@ public partial class AsciiMapView : Node2D
     private static readonly Color DeckActorBacking = new(0.10f, 0.20f, 0.40f, 0.8f);
     private static readonly Color BloodColor = new(0.55f, 0.02f, 0.02f, 0.85f);
     private static readonly Color CorpseInk = new(0.75f, 0.25f, 0.2f, 0.9f);
+    private static readonly Color RopeColor = new(0.85f, 0.75f, 0.45f, 0.9f);
+    private static readonly Color FlareInk = new(1f, 0.35f, 0.25f);
+    private static readonly Color CursorColor = new(1f, 0.9f, 0.3f, 0.85f);
 
     /// <summary>Background, glyph and glyph color per cover type, indexed by CoverType.</summary>
     private static readonly (Color Background, char Glyph, Color Ink)[] CoverLook =
@@ -195,6 +203,8 @@ public partial class AsciiMapView : Node2D
         // Light sources. With lighting on, the light grid already shows their glow.
         foreach (var light in _sim.Lights)
         {
+            if (!light.On)
+                continue;
             if (!o.Lighting)
             {
                 DrawCircle(TileCenter(light.Position), CellSize * 2.5f, LightGlow);
@@ -274,6 +284,26 @@ public partial class AsciiMapView : Node2D
                 if (structures.HasLadder(p))
                     DrawGlyph('H', x, y, ScaleColor(LadderInk, lit), baseline);
             }
+        }
+
+        // Ropes left tied at the top of a drop.
+        foreach (var rope in _sim.Ropes)
+            DrawLine(TileCenter(rope.Top), TileCenter(rope.Bottom), RopeColor, 2f);
+
+        // Lit flares glow on top of the light grid so they're easy to spot.
+        foreach (var light in _sim.Lights)
+        {
+            if (light.On && light.HeightDm < 5 && light.Facing is null)
+                DrawGlyph('*', light.Position.X, light.Position.Y, FlareInk, baseline);
+        }
+
+        // Aiming: the thrower's range and the cursor.
+        if (o.Cursor is { } cursor)
+        {
+            var from = TileCenter(o.CursorFrom);
+            DrawArc(from, (o.CursorRange + 0.5f) * CellSize, 0f, Mathf.Tau, 64, CursorColor, 1f);
+            DrawLine(from, TileCenter(cursor), CursorColor, 1f);
+            DrawRect(new Rect2(cursor.X * CellSize, cursor.Y * CellSize, CellSize, CellSize), CursorColor, false, 2f);
         }
 
         // Actors on top: those on the ground first, then anyone up on a deck.
