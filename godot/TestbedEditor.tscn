@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://baewl1bwjt1ym"]
+
+[ext_resource type="Script" uid="uid://02xhjovvf27m" path="res://Tools/MapEditor.cs" id="1_tfwdq"]
+
+[node name="TestbedEditor" type="Node2D" unique_id=1764088623]
+script = ExtResource("1_tfwdq")
