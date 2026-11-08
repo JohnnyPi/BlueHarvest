@@ -122,7 +122,7 @@ public sealed class CreatureBrain : IActorController
     /// </summary>
     public int Score(Actor self, Contact contact, long now)
     {
-        if (contact.Class == ContactClass.Object)
+        if (contact.Class is ContactClass.Object or ContactClass.Ally or ContactClass.Threat)
             return int.MinValue;
         int confidence = contact.Confidence(now, Profile);
         if (confidence <= 0)

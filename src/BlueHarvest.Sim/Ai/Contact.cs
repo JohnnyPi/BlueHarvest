@@ -33,6 +33,12 @@ public enum ContactClass : byte
 
     /// <summary>Identified as uninteresting (a light that turned out to be a pole, a vehicle with nobody in it). Ignored.</summary>
     Object,
+
+    /// <summary>Something dangerous: a big animal seen, or heard by its heavy tread. People fear these.</summary>
+    Threat,
+
+    /// <summary>One of its own kind. People look out for these; predators ignore them.</summary>
+    Ally,
 }
 
 /// <summary>
@@ -68,6 +74,9 @@ public sealed class Contact
 
     /// <summary>Whether it was moving when last seen.</summary>
     public bool Moving { get; internal set; }
+
+    /// <summary>When it was last heard screaming; long.MinValue if never.</summary>
+    public long LastScreamTick { get; internal set; } = long.MinValue;
 
     /// <summary>The creature went where it was (or bit there) and found nothing since.</summary>
     public bool Searched { get; internal set; }

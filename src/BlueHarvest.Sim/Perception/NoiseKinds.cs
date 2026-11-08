@@ -18,6 +18,7 @@ public static class NoiseKinds
     public const string Flare = "a hissing flare";
     public const string Rope = "a creaking rope";
     public const string Scrambling = "scrambling";
+    public const string Talking = "talking";
 
     /// <summary>Someone hurt cries out. A creature that hears it knows it's prey.</summary>
     public const string Scream = "a scream";

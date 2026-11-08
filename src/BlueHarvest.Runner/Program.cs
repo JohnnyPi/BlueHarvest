@@ -28,8 +28,8 @@ Console.WriteLine();
 Console.WriteLine("Start (map-file cover characters; @ you, h NPC, T rex, R raptor):");
 PrintMap(sim);
 
-// Run a second at a time, logging each creature's activity whenever it changes.
-var brains = sim.Actors.Where(a => a.Controller is CreatureBrain).ToList();
+// Run a second at a time, logging what each creature and person is doing whenever it changes.
+var brains = sim.Actors.Where(a => a.Controller is CreatureBrain or HumanBrain).ToList();
 var player = sim.Actors.FirstOrDefault(a => a.Glyph == '@');
 var director = new Director();
 var lastDescription = new Dictionary<int, string>();
@@ -38,7 +38,7 @@ const int MaxLogLines = 60;
 if (brains.Count > 0)
 {
     Console.WriteLine();
-    Console.WriteLine("Creature activity:");
+    Console.WriteLine("Activity:");
 }
 for (int second = 1; second <= seconds; second++)
 {
@@ -47,7 +47,12 @@ for (int second = 1; second <= seconds; second++)
         director.Update(sim, player);
     foreach (var creature in brains)
     {
-        string description = ((CreatureBrain)creature.Controller).Describe(sim);
+        string description = creature.IsDead ? "dead" : creature.Controller switch
+        {
+            CreatureBrain rex => rex.Describe(sim),
+            HumanBrain person => person.Mood.ToString().ToLowerInvariant() + (person.RefusingOrder ? ", ignoring orders" : ""),
+            _ => "",
+        };
         if (lastDescription.TryGetValue(creature.Id, out var previous) && previous == description)
             continue;
         lastDescription[creature.Id] = description;

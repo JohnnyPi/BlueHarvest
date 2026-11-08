@@ -66,11 +66,11 @@ public class TestbedTests
     }
 
     [Fact]
-    public void RexGetsABrain_NpcsHoldStill()
+    public void RexAndNpcsGetBrains()
     {
         var sim = ScenarioBuilder.Build(MapFile.Parse(Text), seed: 1, new PlayerController());
         Assert.IsType<CreatureBrain>(Assert.Single(sim.Actors, a => a.Species == Species.Rex).Controller);
-        Assert.All(sim.Actors.Where(a => a.Glyph == 'h'), a => Assert.IsType<HoldStillController>(a.Controller));
+        Assert.All(sim.Actors.Where(a => a.Glyph == 'h'), a => Assert.IsType<HumanBrain>(a.Controller));
     }
 
     [Fact]

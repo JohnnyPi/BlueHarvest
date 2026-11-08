@@ -56,6 +56,9 @@ public sealed class Actor
 
     public Inventory Inventory { get; } = new();
 
+    /// <summary>The last order it was given, if any (people only).</summary>
+    public StandingOrder? Order { get; internal set; }
+
     /// <summary>Index in Simulation.Lights of the flashlight it carries (on or off), once it has switched one on.</summary>
     public int? CarriedLight { get; internal set; }
 

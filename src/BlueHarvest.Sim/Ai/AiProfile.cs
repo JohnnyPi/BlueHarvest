@@ -22,6 +22,8 @@ namespace BlueHarvest.Sim.Ai;
 /// <param name="SearchedConfidenceCap">Confidence left after looking (or biting) where a contact was and finding nothing.</param>
 /// <param name="StuckTurnsBeforeGivingUp">Turns without progress toward a contact before it counts as searched.</param>
 /// <param name="MaxContacts">Memory size, not counting things it has identified as uninteresting.</param>
+/// <param name="ThreatMinForce">A detected actor of another species this strong or stronger is a threat.</param>
+/// <param name="ThreatNoiseLoudness">An actor heard making a noise this loud (at the source) is a threat: a heavy tread, crashing.</param>
 public sealed record AiProfile(
     int PreyMaxBodyHeightDm,
     int ConfidenceDecayPerSecond,
@@ -39,7 +41,9 @@ public sealed record AiProfile(
     int WanderScore,
     int SearchedConfidenceCap,
     int StuckTurnsBeforeGivingUp,
-    int MaxContacts)
+    int MaxContacts,
+    int ThreatMinForce = int.MaxValue,
+    int ThreatNoiseLoudness = int.MaxValue)
 {
     /// <summary>
     /// Fixates on moving prey, follows noises, drawn to lights it doesn't know and test-bites them.
@@ -63,4 +67,30 @@ public sealed record AiProfile(
         SearchedConfidenceCap: 20,
         StuckTurnsBeforeGivingUp: 8,
         MaxContacts: 16);
+
+    /// <summary>
+    /// People: nothing is prey and lights don't draw them; anything strong (a raptor or bigger) is a
+    /// threat, and so is anything heard stomping or crashing. Threats stay in mind longer than the Rex
+    /// keeps prey: about 20 s unheard.
+    /// </summary>
+    public static readonly AiProfile Human = new(
+        PreyMaxBodyHeightDm: 0,
+        ConfidenceDecayPerSecond: 4,
+        UncertaintyGrowthTicks: 100,
+        GlimpseConfidenceCap: 30,
+        HeardConfidencePerPoint: 4,
+        HeardConfidenceCap: 80,
+        LightInterestThreshold: 101,
+        HuntWeight: 0,
+        InvestigateWeight: 0,
+        LightWeight: 0,
+        MovingPreyBonus: 0,
+        FocusBonus: 0,
+        DistancePenaltyPer10Tiles: 0,
+        WanderScore: 0,
+        SearchedConfidenceCap: 20,
+        StuckTurnsBeforeGivingUp: 8,
+        MaxContacts: 16,
+        ThreatMinForce: 5,
+        ThreatNoiseLoudness: 40);
 }

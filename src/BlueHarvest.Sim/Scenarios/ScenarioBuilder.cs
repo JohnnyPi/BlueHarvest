@@ -10,11 +10,10 @@ public static class ScenarioBuilder
 {
     /// <summary>
     /// Spawns the player, NPCs and the Rex from markers and adds the lights. Pass a controller to
-    /// drive the player; otherwise the player wanders randomly. The Rex gets its AI (a CreatureBrain);
-    /// NPCs hold still until their own AI arrives in build step 9. Vehicles get their names and
+    /// drive the player; otherwise the player wanders randomly. The Rex gets a CreatureBrain and NPCs
+    /// a HumanBrain, with traits and kit from the NpcRoster by name. Vehicles get their names and
     /// integrity from the map; headlights on them are mounted and move with them. People whose marker
-    /// is on a deck tile start on the deck. The player gets the testbed survivor's skills and kit;
-    /// NPCs are park staff with nothing useful on them.
+    /// is on a deck tile start on the deck. The player gets the testbed survivor's skills and kit.
     /// </summary>
     public static Simulation Build(MapData data, ulong seed, IActorController? player = null)
     {
@@ -47,9 +46,11 @@ public static class ScenarioBuilder
 
                 case MarkerKind.Npc:
                     npcCount++;
-                    sim.AddActor(marker.Name ?? $"Survivor {npcCount}", 'h', marker.Position, Species.Human,
-                        new HoldStillController(), onDeck: OnDeck(data.Map, marker.Position),
-                        loadout: Loadout.ParkStaff);
+                    string name = marker.Name ?? $"Survivor {npcCount}";
+                    var (traits, kit) = NpcRoster.For(name, sim.Rng.Fork($"traits:{i}"));
+                    sim.AddActor(name, 'h', marker.Position, Species.Human,
+                        new HumanBrain(traits, AiProfile.Human, ai), onDeck: OnDeck(data.Map, marker.Position),
+                        loadout: kit);
                     break;
 
                 case MarkerKind.Rex:

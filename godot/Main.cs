@@ -28,7 +28,7 @@ public partial class Main : Node2D
     private const string MapPath = "res://Maps/testbed.bhmap";
     private const string Controls =
         "Move: arrows / numpad / hjkl yubn   Wait: . or numpad 5   Close a door: c   Ladder: < >   Zoom: + -\n" +
-        "First aid: t   Flare: f (aim, Enter)   Flashlight: x   Rope: r + direction   Sprint: s\n" +
+        "First aid: t   Flare: f (aim, Enter)   Flashlight: x   Rope: r + direction   Sprint: s   Order: o then f/s/h\n" +
         "Overlays: [1] lighting  [2] your view  [3] rex view  [4] noise  [5] rex path  [6] rex memory   [G] omniscient rex (debug)";
 
     private Simulation _sim = null!;
@@ -47,6 +47,7 @@ public partial class Main : Node2D
     private InputMode _mode = InputMode.Normal;
     private TilePos _cursor;
     private bool _sprint;
+    private Actor? _orderTarget;
 
     /// <summary>What the next keys mean: normal play, aiming a throw, or choosing which way to rappel.</summary>
     private enum InputMode
@@ -54,6 +55,7 @@ public partial class Main : Node2D
         Normal,
         Aim,
         Rappel,
+        Order,
     }
     private CreatureBrain? _rexBrain;
     private Director _director = new();
@@ -84,6 +86,8 @@ public partial class Main : Node2D
         _sim.ActorTreated += OnActorTreated;
         _sim.ItemThrown += OnItemThrown;
         _sim.Rappelled += OnRappelled;
+        _sim.ActorScreamed += OnActorScreamed;
+        _sim.OrderGiven += OnOrderGiven;
 
         _map = new AsciiMapView();
         _map.Bind(_sim, font, MovementProfile.Human.MaxStepUpDm);
@@ -176,7 +180,8 @@ public partial class Main : Node2D
 
     /// <summary>
     /// Keys that change what the next keys mean, or toggle a setting without taking a turn:
-    /// f aims a flare, r readies the rope, s toggles sprinting, x switches the flashlight (that one takes a turn).
+    /// f aims a flare, r readies the rope, s toggles sprinting, x switches the flashlight (that one takes a turn),
+    /// o picks the nearest person in earshot to give an order to.
     /// </summary>
     private bool TryStartMode(Key key)
     {
@@ -210,6 +215,16 @@ public partial class Main : Node2D
             case Key.X:
                 Submit(new ToggleLightAction());
                 return true;
+            case Key.O:
+                _orderTarget = NearestListener();
+                if (_orderTarget is null)
+                {
+                    _message = $"Nobody within {Simulation.OrderRange} tiles to hear you.";
+                    return true;
+                }
+                _mode = InputMode.Order;
+                _message = $"Tell {_orderTarget.Name} to: f follow you, s stay here, h hide (Esc to cancel).";
+                return true;
             default:
                 return false;
         }
@@ -222,6 +237,22 @@ public partial class Main : Node2D
             _mode = InputMode.Normal;
             _message = "Never mind.";
             Refresh(snapCamera: false);
+            return;
+        }
+
+        if (_mode == InputMode.Order)
+        {
+            NpcOrder? order = key.Keycode switch
+            {
+                Key.F => NpcOrder.Follow,
+                Key.S => NpcOrder.Stay,
+                Key.H => NpcOrder.Hide,
+                _ => null,
+            };
+            if (order is not { } chosen || _orderTarget is not { } target || key.Echo)
+                return;
+            _mode = InputMode.Normal;
+            Submit(new OrderAction(target.Id, chosen));
             return;
         }
 
@@ -247,6 +278,19 @@ public partial class Main : Node2D
             _mode = InputMode.Normal;
             Submit(new ThrowAction(ItemKind.Flare, _cursor));
         }
+    }
+
+    /// <summary>The nearest living person (not you) close enough to hear an order.</summary>
+    private Actor? NearestListener()
+    {
+        var at = _playerActor.Position;
+        return _sim.Actors
+            .Where(a => a != _playerActor && !a.IsDead && a.Controller is HumanBrain)
+            .Select(a => (Actor: a, Distance: Math.Max(Math.Abs(a.Position.X - at.X), Math.Abs(a.Position.Y - at.Y))))
+            .Where(x => x.Distance <= Simulation.OrderRange)
+            .OrderBy(x => x.Distance)
+            .Select(x => x.Actor)
+            .FirstOrDefault();
     }
 
     private TilePos Clamp(TilePos p) =>
@@ -402,7 +446,7 @@ public partial class Main : Node2D
     private void OnActorBitten(Actor biter, Actor victim)
     {
         _message = victim == _playerActor
-            ? $"The {biter.Name}'s jaws close on you! (Injuries arrive in build step 8.)"
+            ? $"The {biter.Name}'s jaws close on you!"
             : $"The {biter.Name} bites {victim.Name}!";
     }
 
@@ -432,7 +476,7 @@ public partial class Main : Node2D
     private void OnActorFell(Actor actor, int dropDm)
     {
         if (actor == _playerActor)
-            _message += $" You drop {Units.FormatMeters(dropDm)}. (Injuries arrive in build step 8.)";
+            _message += $" You drop {Units.FormatMeters(dropDm)}.";
     }
 
     private void OnActorInjured(Actor actor, BodySection section, Severity severity, string cause)
@@ -456,12 +500,41 @@ public partial class Main : Node2D
             _message += " Everything goes dark for a moment...";
     }
 
-    private void OnActorTreated(Actor actor, BodySection section, bool worked)
+    private void OnActorTreated(Actor treater, Actor patient, BodySection section, bool worked)
     {
-        if (actor == _playerActor)
+        string part = InjuryRules.Name(section);
+        if (treater == _playerActor && patient == _playerActor)
             _message = worked
-                ? $"You patch up your {InjuryRules.Name(section)}. It still hurts, but the bleeding has stopped."
-                : $"Your hands shake; the dressing on your {InjuryRules.Name(section)} won't hold.";
+                ? $"You patch up your {part}. It still hurts, but the bleeding has stopped."
+                : $"Your hands shake; the dressing on your {part} won't hold.";
+        else if (treater == _playerActor)
+            _message = worked
+                ? $"You patch up {patient.Name}'s {part}."
+                : $"Your hands shake; the dressing on {patient.Name}'s {part} won't hold.";
+        else if (patient == _playerActor)
+            _message += worked
+                ? $" {treater.Name} patches up your {part}. The bleeding stops."
+                : $" {treater.Name} tries to dress your {part}, but it won't hold.";
+        else
+            _message += worked ? $" {treater.Name} patches up {patient.Name}." : "";
+    }
+
+    private void OnActorScreamed(Actor actor)
+    {
+        if (actor != _playerActor)
+            _message += $" {actor.Name} screams!";
+    }
+
+    private void OnOrderGiven(Actor by, Actor target, NpcOrder order)
+    {
+        if (by != _playerActor)
+            return;
+        _message = order switch
+        {
+            NpcOrder.Follow => $"\"{target.Name}, stay with me.\"",
+            NpcOrder.Stay => $"\"{target.Name}, stay here. Don't move.\"",
+            _ => $"\"{target.Name}, find cover and hide!\"",
+        };
     }
 
     private void OnItemThrown(Actor actor, ItemKind item, TilePos landed)
@@ -600,6 +673,7 @@ public partial class Main : Node2D
             $"{(moving ? "moving" : "still")}{Shelter(here)}\n" +
             RexLine(rexPercepts) + "\n" +
             MindLine() + "\n" +
+            PeopleLine() + "\n" +
             HearingLine(playerPercepts) + "\n" +
             $"{_message}\n" +
             Controls;
@@ -713,6 +787,16 @@ public partial class Main : Node2D
                 : $"   out of reach: {(status.OutOfReach ? "yes" : "no")}, attention elsewhere: {(status.AttentionElsewhere ? "yes" : "no")}";
         }
         return $"Rex is {mind}.\nTension {_director.Tension}{calm}{escape}";
+    }
+
+    /// <summary>Each other person and their state of mind: "Marisol: hiding (fear 42)".</summary>
+    private string PeopleLine()
+    {
+        var people = _sim.Actors
+            .Where(a => a != _playerActor && a.Controller is HumanBrain)
+            .Select(a => a.IsDead ? $"{a.Name}: dead" : $"{a.Name}: {((HumanBrain)a.Controller).Describe()}")
+            .ToList();
+        return people.Count == 0 ? "Nobody else here." : "People: " + string.Join("   ", people);
     }
 
     private string HearingLine(Percepts percepts)

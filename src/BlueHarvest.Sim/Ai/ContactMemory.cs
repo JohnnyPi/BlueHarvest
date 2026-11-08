@@ -49,10 +49,20 @@ public sealed class ContactMemory
 
             int distance = (int)Math.Sqrt(Distance2(eye, noise.Position));
             int confidence = Math.Min(Profile.HeardConfidenceCap, heard.Perceived * Profile.HeardConfidencePerPoint);
-            if (noise.Kind == NoiseKinds.Scream && contact.Class != ContactClass.Object)
+            if (noise.Kind == NoiseKinds.Scream)
             {
-                contact.Class = ContactClass.Prey;
-                confidence = 100;
+                // A predator knows a scream means food. Anyone else just knows someone is in trouble.
+                contact.LastScreamTick = now;
+                if (Profile.PreyMaxBodyHeightDm > 0 && contact.Class is ContactClass.Unknown or ContactClass.Prey)
+                {
+                    contact.Class = ContactClass.Prey;
+                    confidence = 100;
+                }
+            }
+            else if (contact.Class == ContactClass.Unknown && noise.ActorId is not null
+                && noise.Loudness >= Profile.ThreatNoiseLoudness)
+            {
+                contact.Class = ContactClass.Threat;
             }
             Refresh(contact, now, noise.Position, sim.Terrain[noise.Position], confidence, uncertainty: 1 + distance / 8,
                 $"heard {noise.Kind}");
@@ -76,8 +86,7 @@ public sealed class ContactMemory
             if (seen.Detected)
             {
                 var contact = Touch(ContactKey.ForActor(target.Id), now);
-                if (contact.Class != ContactClass.Object)
-                    contact.Class = IsPrey(target) ? ContactClass.Prey : ContactClass.Object;
+                contact.Class = Classify(self, target);
                 Refresh(contact, now, target.Position, sim.StandHeight(target), Math.Min(100, 50 + seen.Score),
                     uncertainty: 0, "seen");
                 contact.Moving = seen.Moving;
@@ -159,6 +168,13 @@ public sealed class ContactMemory
         contact.LastUpdatedTick = now;
         contact.Searched = true;
     }
+
+    /// <summary>What a clearly seen actor is to this mind: its own kind, a threat, prey, or nothing much.</summary>
+    private ContactClass Classify(Actor self, Actor target) =>
+        target.Species == self.Species ? ContactClass.Ally
+        : target.Species.Force >= Profile.ThreatMinForce ? ContactClass.Threat
+        : IsPrey(target) ? ContactClass.Prey
+        : ContactClass.Object;
 
     private bool IsPrey(Actor target) =>
         !target.IsLarge && target.Species.BodyHeightDm <= Profile.PreyMaxBodyHeightDm;

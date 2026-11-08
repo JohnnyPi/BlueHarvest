@@ -56,6 +56,14 @@ public sealed record Loadout(string Name, Skills Skills, IReadOnlyList<(ItemKind
         new Skills(Climbing: 1, Rappelling: 1, FirstAid: 1, Throwing: 1),
         new[] { (ItemKind.FirstAidKit, 1), (ItemKind.Flare, 3), (ItemKind.Flashlight, 1), (ItemKind.Rope, 1) });
 
-    /// <summary>The testbed's NPCs: park staff with nothing useful on them.</summary>
+    /// <summary>A doctor: good at first aid, with two kits.</summary>
+    public static readonly Loadout Doctor = new("doctor", new Skills(FirstAid: 3),
+        new[] { (ItemKind.FirstAidKit, 2) });
+
+    /// <summary>A park ranger: some first aid and climbing, a kit and a flashlight.</summary>
+    public static readonly Loadout Ranger = new("ranger", new Skills(Climbing: 2, FirstAid: 1, Tracking: 2),
+        new[] { (ItemKind.FirstAidKit, 1), (ItemKind.Flashlight, 1) });
+
+    /// <summary>Park staff with nothing useful on them.</summary>
     public static readonly Loadout ParkStaff = new("park staff", Skills.None, Array.Empty<(ItemKind, int)>());
 }

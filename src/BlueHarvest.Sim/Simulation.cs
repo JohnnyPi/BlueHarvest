@@ -17,6 +17,18 @@ public sealed class Simulation
     /// <summary>Time lost walking into something you can't pass.</summary>
     public const int BumpTicks = 10;
 
+    /// <summary>How long a scream takes.</summary>
+    public const int ScreamTicks = 60;
+
+    /// <summary>How long giving an order takes.</summary>
+    public const int OrderTicks = 60;
+
+    /// <summary>How far (tiles) an order carries.</summary>
+    public const int OrderRange = 8;
+
+    /// <summary>How loud an order is, at the speaker.</summary>
+    public const int TalkLoudness = 14;
+
     /// <summary>Extra time for each tile of cover a large body smashes through.</summary>
     public const int SmashTicks = 30;
 
@@ -126,8 +138,14 @@ public sealed class Simulation
     /// <summary>Raised when a concussed actor blacks out for a few seconds.</summary>
     public event Action<Actor>? ActorBlackedOut;
 
-    /// <summary>Raised after an attempt at first aid: (actor, section treated, whether it worked).</summary>
-    public event Action<Actor, BodySection, bool>? ActorTreated;
+    /// <summary>Raised after an attempt at first aid: (who gave it, who got it, section treated, whether it worked).</summary>
+    public event Action<Actor, Actor, BodySection, bool>? ActorTreated;
+
+    /// <summary>Raised when someone cries out on purpose (panicking): (who).</summary>
+    public event Action<Actor>? ActorScreamed;
+
+    /// <summary>Raised when an order is given and heard: (who gave it, who got it, the order).</summary>
+    public event Action<Actor, Actor, NpcOrder>? OrderGiven;
 
     /// <summary>Raised when something is thrown: (thrower, what, where it landed).</summary>
     public event Action<Actor, ItemKind, TilePos>? ItemThrown;
@@ -839,12 +857,16 @@ public sealed class Simulation
         BiteAction bite => ResolveBite(actor, bite.Investigative),
         UseDoorAction door => UseDoor(actor, door.Direction),
         ClimbAction => Climb(actor),
-        TreatAction => Treat(actor),
+        TreatAction treat => Treat(actor, treat.PatientId),
+        ScreamAction => Scream(actor),
+        OrderAction order => GiveOrder(actor, order.TargetId, order.Order),
         ThrowAction thrown => Throw(actor, thrown.Item, thrown.Target),
         ToggleLightAction => ToggleLight(actor),
         RappelAction rappel => Rappel(actor, rappel.Direction),
         _ => throw new ArgumentOutOfRangeException(nameof(action), $"Unknown action {action}."),
     };
+
+    private static int Chebyshev(TilePos a, TilePos b) => Math.Max(Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
 
     private int Bump(Actor actor, string reason)
     {
@@ -1008,13 +1030,28 @@ public sealed class Simulation
             _blood.RemoveAt(0);
     }
 
-    /// <summary>First aid on the worst red wound: a kit, a working arm, and some skill (or luck).</summary>
-    private int Treat(Actor actor)
+    /// <summary>
+    /// First aid on the worst red wound, on yourself or on someone next to you at the same level:
+    /// the treater's kit, a working arm of theirs, and their skill (or luck).
+    /// </summary>
+    private int Treat(Actor actor, int? patientId)
     {
-        var health = actor.Health;
+        var patient = actor;
+        if (patientId is { } id && id != actor.Id)
+        {
+            if (id < 0 || id >= _actors.Count)
+                return Bump(actor, "nobody there");
+            patient = _actors[id];
+            if (patient.IsDead)
+                return Bump(actor, $"{patient.Name} is beyond help");
+            if (Chebyshev(actor.Position, patient.Position) > 1 || patient.OnDeck != actor.OnDeck)
+                return Bump(actor, $"{patient.Name} is out of reach");
+        }
+
+        var health = patient.Health;
         if (health.WorstUntreated() is not { } section)
-            return Bump(actor, "nothing needs first aid");
-        if (!health.CanTreat)
+            return Bump(actor, patient == actor ? "nothing needs first aid" : $"{patient.Name} needs no first aid");
+        if (!actor.Health.CanTreat)
             return Bump(actor, "both arms are useless");
         if (!actor.Inventory.Has(ItemKind.FirstAidKit))
             return Bump(actor, "no first-aid kit");
@@ -1027,8 +1064,38 @@ public sealed class Simulation
             health.Set(section, new Wound(Severity.Yellow, false, CurrentTick));
         }
         EmitNoise(actor.Position, InjuryRules.TreatLoudness, NoiseKinds.FirstAid, actor.Id);
-        ActorTreated?.Invoke(actor, section, worked);
+        ActorTreated?.Invoke(actor, patient, section, worked);
         return InjuryRules.TreatTicks(skill);
+    }
+
+    /// <summary>A scream on purpose: as loud as one from a bite, and any predator in earshot knows what it means.</summary>
+    private int Scream(Actor actor)
+    {
+        if (actor.Species.ScreamLoudness <= 0)
+            return Bump(actor, "can't scream");
+        EmitNoise(actor.Position, actor.Species.ScreamLoudness, NoiseKinds.Scream, actor.Id);
+        ActorScreamed?.Invoke(actor);
+        return ScreamTicks;
+    }
+
+    /// <summary>
+    /// Tell someone within earshot what to do. It's said aloud (a little noise) and becomes their
+    /// standing order; whether they follow it is up to them.
+    /// </summary>
+    private int GiveOrder(Actor actor, int targetId, NpcOrder order)
+    {
+        if (targetId < 0 || targetId >= _actors.Count || targetId == actor.Id)
+            return Bump(actor, "nobody to tell");
+        var target = _actors[targetId];
+        if (target.IsDead)
+            return Bump(actor, $"{target.Name} can't hear you");
+        if (Chebyshev(actor.Position, target.Position) > OrderRange)
+            return Bump(actor, $"{target.Name} is too far away to hear you");
+
+        EmitNoise(actor.Position, TalkLoudness, NoiseKinds.Talking, actor.Id);
+        target.Order = new StandingOrder(order, actor.Id, CurrentTick);
+        OrderGiven?.Invoke(actor, target, order);
+        return OrderTicks;
     }
 
     /// <summary>Climbs the ladder on the actor's tile, up to the deck or down to the ground.</summary>

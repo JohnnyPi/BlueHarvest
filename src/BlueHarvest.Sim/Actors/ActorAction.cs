@@ -32,10 +32,17 @@ public sealed record UseDoorAction(Direction Direction) : ActorAction;
 public sealed record ClimbAction : ActorAction;
 
 /// <summary>
-/// Give yourself first aid: uses a kit to turn the worst red wound (bleeding ones first) yellow and
-/// stop its bleeding. Needs a kit and a working arm; may fail without enough skill.
+/// First aid: uses a kit to turn the worst red wound (bleeding ones first) yellow and stop its
+/// bleeding, on yourself or on <paramref name="PatientId"/> next to you. Needs a kit and a working
+/// arm; may fail without enough skill.
 /// </summary>
-public sealed record TreatAction : ActorAction;
+public sealed record TreatAction(int? PatientId = null) : ActorAction;
+
+/// <summary>Cry out: a scream anyone nearby hears, predators included. Panicking people do it.</summary>
+public sealed record ScreamAction : ActorAction;
+
+/// <summary>Tell another person (by actor id, within earshot) what to do. Talking is a little noise of its own.</summary>
+public sealed record OrderAction(int TargetId, NpcOrder Order) : ActorAction;
 
 /// <summary>Throw an item (a flare) toward a tile. It falls short past the thrower's range and may scatter.</summary>
 public sealed record ThrowAction(ItemKind Item, TilePos Target) : ActorAction;
