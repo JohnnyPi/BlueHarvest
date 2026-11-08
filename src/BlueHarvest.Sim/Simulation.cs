@@ -1,5 +1,6 @@
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Core;
+using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.Lighting;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.Time;
@@ -54,6 +55,9 @@ public sealed class Simulation
     private readonly List<NoiseEvent> _noises = new();
     private readonly List<Vehicle> _vehicles = new();
     private readonly List<Platform> _platforms = new();
+    private readonly List<BloodSpot> _blood = new();
+    private readonly Rng _injuryRng;
+    private bool _playerDied;
     private readonly Scheduler _scheduler = new();
     private readonly int[] _occupant; // actor id + 1 for each core tile, 0 if empty
     private readonly int[] _vehicleAt; // vehicle id + 1 for each vehicle tile, 0 if none
@@ -70,6 +74,7 @@ public sealed class Simulation
     {
         Map = map;
         Rng = new Rng(seed);
+        _injuryRng = Rng.Fork("injuries");
         _occupant = new int[map.Width * map.Height];
         _vehicleAt = new int[map.Width * map.Height];
         _deckOccupant = new int[map.Width * map.Height];
@@ -108,6 +113,18 @@ public sealed class Simulation
     /// <summary>Raised when an actor falls: (actor, height fallen in decimeters).</summary>
     public event Action<Actor, int>? ActorFell;
 
+    /// <summary>Raised when a section is wounded: (actor, section, its severity now, cause).</summary>
+    public event Action<Actor, BodySection, Severity, string>? ActorInjured;
+
+    /// <summary>Raised when an actor dies: (actor, cause). Its body stays where it fell.</summary>
+    public event Action<Actor, string>? ActorDied;
+
+    /// <summary>Raised when a concussed actor blacks out for a few seconds.</summary>
+    public event Action<Actor>? ActorBlackedOut;
+
+    /// <summary>Raised after an attempt at first aid: (actor, section treated, whether it worked).</summary>
+    public event Action<Actor, BodySection, bool>? ActorTreated;
+
     public WorldMap Map { get; }
 
     public HeightMap Terrain => Map.Heights;
@@ -135,6 +152,9 @@ public sealed class Simulation
 
     public IReadOnlyList<Platform> Platforms => _platforms;
 
+    /// <summary>Where bleeding actors have left blood, oldest first. Scent comes with weather (build step 10).</summary>
+    public IReadOnlyList<BloodSpot> BloodSpots => _blood;
+
     /// <summary>Noises from the last <see cref="NoiseMemoryTicks"/> ticks, oldest first.</summary>
     public IReadOnlyList<NoiseEvent> RecentNoises => _noises;
 
@@ -153,14 +173,19 @@ public sealed class Simulation
     public LightGrid Light => _lightGrid ??= LightGrid.Compute(Map, _lights, _ambientLight);
 
     /// <param name="onDeck">Start on the deck over <paramref name="position"/> (single-tile actors only).</param>
+    /// <param name="loadout">Skills and starting gear; none if left out.</param>
     public Actor AddActor(string name, char glyph, TilePos position, Species species, IActorController controller,
-        Direction facing = Direction.South, bool onDeck = false)
+        Direction facing = Direction.South, bool onDeck = false, Loadout? loadout = null)
     {
         var actor = new Actor(_actors.Count, name, glyph, position, species, facing, controller)
         {
             NextActTick = CurrentTick,
             OnDeck = onDeck,
+            Skills = (loadout ?? Loadout.Empty).Skills,
         };
+        actor.Health.LastUpdatedTick = CurrentTick;
+        foreach (var (kind, count) in (loadout ?? Loadout.Empty).Items)
+            actor.Inventory.Add(kind, count);
         if (onDeck && (actor.IsLarge || !Map.InBounds(position) || !Map.Structures.HasDeck(position)))
             throw new ArgumentException($"{name} can't start on a deck at {position}.", nameof(onDeck));
         foreach (var tile in CoreTiles(actor.Body))
@@ -256,6 +281,111 @@ public sealed class Simulation
     /// <summary>Sets a vehicle's integrity directly (setup, debug), 0-100. 0 means breached.</summary>
     public void SetVehicleIntegrity(Vehicle vehicle, int integrity) =>
         vehicle.Integrity = Math.Clamp(integrity, 0, Vehicle.MaxIntegrity);
+
+    /// <summary>An actor's senses as its wounds leave them (a hurt head blurs vision and dulls hearing).</summary>
+    public SenseProfile SensesOf(Actor actor) => actor.Health.Adjust(actor.Species.Senses);
+
+    /// <summary>
+    /// Wounds a section. A red wound on a section that's already red kills; a yellow one on a yellow
+    /// section makes it red; a yellow one on a red section changes nothing. Public for setup and debug;
+    /// in play, bites, tail blows and falls call it.
+    /// </summary>
+    public void Injure(Actor actor, BodySection section, Severity severity, bool bleeding, string cause)
+    {
+        if (actor.IsDead || severity == Severity.Green)
+            return;
+        UpdateHealth(actor);
+        if (actor.IsDead)
+            return;
+
+        var health = actor.Health;
+        var current = health[section];
+        if (severity == Severity.Red)
+        {
+            if (current.Severity == Severity.Red)
+            {
+                Kill(actor, $"{cause}: a second major wound to the {InjuryRules.Name(section)}");
+                return;
+            }
+            health.Set(section, new Wound(Severity.Red, bleeding, CurrentTick));
+        }
+        else if (current.Severity == Severity.Red)
+        {
+            return;
+        }
+        else
+        {
+            var now = current.Severity == Severity.Yellow ? Severity.Red : Severity.Yellow;
+            health.Set(section, new Wound(now, false, CurrentTick));
+        }
+        ActorInjured?.Invoke(actor, section, health[section].Severity, cause);
+    }
+
+    /// <summary>
+    /// Brings bleeding and healing up to the current tick: blood loss grows with every bleeding wound
+    /// and kills at the limit; yellow wounds left alone long enough heal to green.
+    /// </summary>
+    public void UpdateHealth(Actor actor)
+    {
+        var health = actor.Health;
+        long elapsed = CurrentTick - health.LastUpdatedTick;
+        if (actor.IsDead || elapsed <= 0)
+            return;
+
+        health.BloodLossTicks += elapsed * health.BleedingWounds;
+        health.LastUpdatedTick = CurrentTick;
+        if (health.BloodLossTicks >= InjuryRules.BleedOutTicks)
+        {
+            Kill(actor, "bled out");
+            return;
+        }
+
+        foreach (var section in Enum.GetValues<BodySection>())
+        {
+            var wound = health[section];
+            if (wound.Severity == Severity.Yellow && CurrentTick - wound.SinceTick >= InjuryRules.YellowHealTicks)
+                health.Set(section, Wound.None);
+        }
+    }
+
+    /// <summary>Picks a section for a blow by the hit weights, skipping any in <paramref name="exclude"/>.</summary>
+    private BodySection RandomSection(ICollection<BodySection> exclude)
+    {
+        int total = InjuryRules.HitWeights.Where(w => !exclude.Contains(w.Section)).Sum(w => w.Weight);
+        int roll = _injuryRng.NextInt(Math.Max(1, total));
+        foreach (var (section, weight) in InjuryRules.HitWeights)
+        {
+            if (exclude.Contains(section))
+                continue;
+            if (roll < weight)
+                return section;
+            roll -= weight;
+        }
+        return BodySection.Torso;
+    }
+
+    private void Kill(Actor actor, string cause)
+    {
+        if (actor.IsDead)
+            return;
+        actor.Health.DeathCause = cause;
+        actor.Health.DiedTick = CurrentTick;
+        Vacate(actor);
+        if (actor.Controller is PlayerController)
+            _playerDied = true;
+        ActorDied?.Invoke(actor, cause);
+    }
+
+    /// <summary>A fall past the safe drop wounds a leg, and worse the further it goes.</summary>
+    private void ApplyFall(Actor actor, int dropDm)
+    {
+        int excess = dropDm - actor.Movement.MaxDropDm;
+        if (excess <= 0)
+            return;
+        var leg = _injuryRng.Chance(1, 2) ? BodySection.LeftLeg : BodySection.RightLeg;
+        foreach (var (section, severity) in InjuryRules.FallWounds(excess, leg))
+            Injure(actor, section, severity, bleeding: false, $"fell {Units.FormatMeters(dropDm)}");
+    }
 
     /// <summary>Where an actor's eyes and ears are: its head tip for large bodies, clamped to the map.</summary>
     public TilePos EyeTile(Actor actor)
@@ -510,14 +640,27 @@ public sealed class Simulation
     /// </summary>
     public StepResult Step()
     {
-        if (!_scheduler.TryPeek(out int id, out long tick))
+        if (!PeekLiving(out int id, out long tick))
             return StepResult.Idle;
 
         CurrentTick = tick;
         var actor = _actors[id];
+        UpdateHealth(actor);
+        if (actor.IsDead)
+        {
+            _scheduler.TryDequeue(out _, out _);
+            return StepResult.Acted;
+        }
+
         var action = actor.Controller.Decide(actor, this);
         if (action is null)
             return StepResult.AwaitingInput;
+
+        if (actor.Health.Concussed && _injuryRng.Chance(InjuryRules.BlackoutPercent, 100))
+        {
+            action = new WaitAction(InjuryRules.BlackoutTicks);
+            ActorBlackedOut?.Invoke(actor);
+        }
 
         _scheduler.TryDequeue(out _, out _);
         int cost = Resolve(actor, action);
@@ -527,10 +670,22 @@ public sealed class Simulation
         return StepResult.Acted;
     }
 
+    /// <summary>The next actor due that's still alive; the dead are dropped from the schedule on the way.</summary>
+    private bool PeekLiving(out int id, out long tick)
+    {
+        while (_scheduler.TryPeek(out id, out tick))
+        {
+            if (!_actors[id].IsDead)
+                return true;
+            _scheduler.TryDequeue(out _, out _);
+        }
+        return false;
+    }
+
     /// <summary>Runs every turn due at or before the given tick, stopping early if input is needed.</summary>
     public void RunUntil(long tick)
     {
-        while (_scheduler.TryPeekTick(out long next) && next <= tick)
+        while (PeekLiving(out _, out long next) && next <= tick)
         {
             if (Step() == StepResult.AwaitingInput)
                 return;
@@ -539,11 +694,16 @@ public sealed class Simulation
             CurrentTick = tick;
     }
 
-    /// <summary>Turn-based mode: runs everyone else until an actor needs input.</summary>
+    /// <summary>
+    /// Turn-based mode: runs everyone else until an actor needs input, or until an actor driven by a
+    /// PlayerController has died (the run is over; StepResult.PlayerDied).
+    /// </summary>
     public StepResult RunUntilInputNeeded(int maxActions = 100_000)
     {
         for (int i = 0; i < maxActions; i++)
         {
+            if (_playerDied)
+                return StepResult.PlayerDied;
             var result = Step();
             if (result != StepResult.Acted)
                 return result;
@@ -563,7 +723,11 @@ public sealed class Simulation
                 .Add(actor.OnDeck ? 1 : 0)
                 .Add((int)actor.Facing)
                 .Add(actor.LastMovedTick)
-                .Add(actor.NextActTick);
+                .Add(actor.NextActTick)
+                .Add(actor.Health.BloodLossTicks)
+                .Add(actor.IsDead ? 1 : 0);
+            foreach (var section in Enum.GetValues<BodySection>())
+                hasher.Add((int)actor.Health[section].Severity).Add(actor.Health[section].Bleeding ? 1 : 0);
         }
         foreach (var vehicle in _vehicles)
         {
@@ -618,6 +782,7 @@ public sealed class Simulation
         BiteAction bite => ResolveBite(actor, bite.Investigative),
         UseDoorAction door => UseDoor(actor, door.Direction),
         ClimbAction => Climb(actor),
+        TreatAction => Treat(actor),
         _ => throw new ArgumentOutOfRangeException(nameof(action), $"Unknown action {action}."),
     };
 
@@ -642,12 +807,45 @@ public sealed class Simulation
 
         int step = Map.SurfaceHeight(to, toDeck) - StandHeight(actor);
         var cover = toDeck ? Covers.Deck : Map.CoverAt(to);
+        if (actor.Health.BleedingWounds > 0)
+            DropBlood(actor.Position);
         Place(actor, to, direction, toDeck);
         actor.LastMovedTick = CurrentTick;
-        EmitNoise(to, actor.Species.FootstepLoudness + cover.NoiseModifier, NoiseKinds.Footsteps, actor.Id);
+        EmitNoise(to, actor.Species.FootstepLoudness + cover.NoiseModifier + actor.Health.FootstepBonus,
+            NoiseKinds.Footsteps, actor.Id);
 
         int baseCost = actor.Movement.CostTicks(step, direction.IsDiagonal());
-        return baseCost * cover.MoveCostPercent / 100;
+        return baseCost * cover.MoveCostPercent / 100 * actor.Health.StepCostPercent / 100;
+    }
+
+    private void DropBlood(TilePos at)
+    {
+        _blood.Add(new BloodSpot(at, CurrentTick));
+        if (_blood.Count > InjuryRules.MaxBloodSpots)
+            _blood.RemoveAt(0);
+    }
+
+    /// <summary>First aid on the worst red wound: a kit, a working arm, and some skill (or luck).</summary>
+    private int Treat(Actor actor)
+    {
+        var health = actor.Health;
+        if (health.WorstUntreated() is not { } section)
+            return Bump(actor, "nothing needs first aid");
+        if (!health.CanTreat)
+            return Bump(actor, "both arms are useless");
+        if (!actor.Inventory.Has(ItemKind.FirstAidKit))
+            return Bump(actor, "no first-aid kit");
+
+        int skill = actor.Skills.FirstAid;
+        bool worked = _injuryRng.Chance(InjuryRules.TreatSuccessPercent(skill), 100);
+        if (worked)
+        {
+            actor.Inventory.Use(ItemKind.FirstAidKit);
+            health.Set(section, new Wound(Severity.Yellow, false, CurrentTick));
+        }
+        EmitNoise(actor.Position, InjuryRules.TreatLoudness, NoiseKinds.FirstAid, actor.Id);
+        ActorTreated?.Invoke(actor, section, worked);
+        return InjuryRules.TreatTicks(skill);
     }
 
     /// <summary>Climbs the ladder on the actor's tile, up to the deck or down to the ground.</summary>
@@ -658,6 +856,8 @@ public sealed class Simulation
             return Bump(actor, "it can't climb");
         if (!Map.Structures.HasLadder(p) || !Map.Structures.HasDeck(p))
             return Bump(actor, "there's no ladder here");
+        if (!actor.Health.CanClimb)
+            return Bump(actor, "too badly hurt to climb");
 
         bool up = !actor.OnDeck;
         if (ActorAt(p, onDeck: up) is { } inTheWay)
@@ -668,7 +868,7 @@ public sealed class Simulation
         Place(actor, p, actor.Facing, up);
         actor.LastMovedTick = CurrentTick;
         EmitNoise(p, ClimbLoudness, NoiseKinds.Climbing, actor.Id);
-        return Math.Max(1, Map.Structures.DeckDm(p) * actor.Movement.ClimbTicksPerDm);
+        return Math.Max(1, Map.Structures.DeckDm(p) * actor.Movement.ClimbTicksPerDm * actor.Health.ClimbCostPercent / 100);
     }
 
     private int UseDoor(Actor actor, Direction direction)
@@ -798,6 +998,9 @@ public sealed class Simulation
             {
                 EmitNoise(tile, StrikeLoudness, NoiseKinds.HeavyBlow, actor.Id);
                 ActorStruck?.Invoke(actor, victim);
+                bool broken = _injuryRng.Chance(InjuryRules.TailBlowRedPercent, 100);
+                Injure(victim, RandomSection(Array.Empty<BodySection>()), broken ? Severity.Red : Severity.Yellow,
+                    bleeding: false, $"struck by the {actor.Name}'s tail");
                 CryOut(victim);
             }
         }
@@ -821,7 +1024,7 @@ public sealed class Simulation
     {
         var oldTiles = vehicle.Tiles.ToList();
         var oldSet = new HashSet<TilePos>(oldTiles);
-        var occupants = _actors.Where(a => !a.IsLarge && !a.OnDeck && oldSet.Contains(a.Position)).ToList();
+        var occupants = _actors.Where(a => !a.IsLarge && !a.OnDeck && !a.IsDead && oldSet.Contains(a.Position)).ToList();
         foreach (var occupant in occupants)
             Vacate(occupant);
 
@@ -915,6 +1118,13 @@ public sealed class Simulation
         foreach (var hit in hits)
         {
             ActorBitten?.Invoke(actor, hit.Victim);
+            var wounded = new List<BodySection>();
+            for (int i = 0; i < actor.Species.BiteWounds && !hit.Victim.IsDead; i++)
+            {
+                var section = RandomSection(wounded);
+                wounded.Add(section);
+                Injure(hit.Victim, section, Severity.Red, bleeding: true, $"bitten by the {actor.Name}");
+            }
             CryOut(hit.Victim);
         }
         foreach (var vehicle in vehiclesBitten)
@@ -928,7 +1138,7 @@ public sealed class Simulation
 
     private void CryOut(Actor victim)
     {
-        if (victim.Species.ScreamLoudness > 0)
+        if (victim.Species.ScreamLoudness > 0 && !victim.IsDead)
             EmitNoise(victim.Position, victim.Species.ScreamLoudness, NoiseKinds.Scream, victim.Id);
     }
 
@@ -983,6 +1193,13 @@ public sealed class Simulation
             }
         }
 
+        var tiles = new HashSet<TilePos>(platform.Tiles);
+        foreach (var body in _actors)
+        {
+            if (body.IsDead && body.OnDeck && tiles.Contains(body.Position))
+                body.OnDeck = false; // bodies come down with it
+        }
+
         var fell = new List<Actor>();
         foreach (var (rider, fromDm) in riders)
         {
@@ -991,7 +1208,9 @@ public sealed class Simulation
             rider.Body = rider.Species.Body.Footprint(rider.Position, Compass16.Of(rider.Facing));
             Occupy(rider);
             fell.Add(rider);
-            ActorFell?.Invoke(rider, Math.Max(0, fromDm - Terrain[rider.Position]));
+            int drop = Math.Max(0, fromDm - Terrain[rider.Position]);
+            ActorFell?.Invoke(rider, drop);
+            ApplyFall(rider, drop);
             CryOut(rider);
         }
 

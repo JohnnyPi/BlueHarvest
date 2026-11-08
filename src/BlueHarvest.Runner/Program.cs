@@ -68,7 +68,12 @@ foreach (var actor in sim.Actors)
 
 Console.WriteLine();
 if (player is not null)
+{
     Console.WriteLine($"Director: tension now {director.Tension}, peak {director.PeakSoFar}");
+    Console.WriteLine(player.IsDead
+        ? $"{player.Name} died at {Ticks.Format(player.Health.DiedTick)}: {player.Health.DeathCause}."
+        : $"{player.Name} is alive; wounds: {Wounds(player)}.");
+}
 Console.WriteLine($"State hash: {sim.ComputeStateHash():X16}");
 
 static void PrintMap(Simulation sim)
@@ -83,6 +88,16 @@ static void PrintMap(Simulation sim)
         }
         Console.WriteLine("  " + new string(line));
     }
+}
+
+static string Wounds(BlueHarvest.Sim.Actors.Actor actor)
+{
+    var hurt = Enum.GetValues<BlueHarvest.Sim.Injuries.BodySection>()
+        .Where(s => actor.Health[s].Severity != BlueHarvest.Sim.Injuries.Severity.Green)
+        .Select(s => $"{BlueHarvest.Sim.Injuries.InjuryRules.Name(s)} {actor.Health[s].Severity.ToString().ToLowerInvariant()}"
+            + (actor.Health[s].Bleeding ? " (bleeding)" : ""))
+        .ToList();
+    return hurt.Count == 0 ? "none" : string.Join(", ", hurt);
 }
 
 static string? FindUp(string relativePath)

@@ -75,6 +75,8 @@ public partial class AsciiMapView : Node2D
     private static readonly Color DeckRim = new(0.05f, 0.08f, 0.15f, 0.9f);
     private static readonly Color LadderInk = new(0.95f, 0.80f, 0.45f);
     private static readonly Color DeckActorBacking = new(0.10f, 0.20f, 0.40f, 0.8f);
+    private static readonly Color BloodColor = new(0.55f, 0.02f, 0.02f, 0.85f);
+    private static readonly Color CorpseInk = new(0.75f, 0.25f, 0.2f, 0.9f);
 
     /// <summary>Background, glyph and glyph color per cover type, indexed by CoverType.</summary>
     private static readonly (Color Background, char Glyph, Color Ink)[] CoverLook =
@@ -243,6 +245,10 @@ public partial class AsciiMapView : Node2D
             }
         }
 
+        // Blood: a dark spot where someone bleeding has passed.
+        foreach (var spot in _sim.BloodSpots)
+            DrawCircle(TileCenter(spot.Position) + new Vector2(3f, 4f), 2.5f, BloodColor);
+
         // Decks: translucent planks over whatever is beneath, a dark rim on their edges, 'H' for ladders.
         var structures = _sim.Map.Structures;
         for (int y = 0; y < terrain.Height; y++)
@@ -285,6 +291,11 @@ public partial class AsciiMapView : Node2D
                     continue;
                 }
                 var p = actor.Position;
+                if (actor.IsDead)
+                {
+                    DrawGlyph('%', p.X, p.Y, CorpseInk, baseline);
+                    continue;
+                }
                 DrawRect(new Rect2(p.X * CellSize + 2, p.Y * CellSize + 2, CellSize - 4, CellSize - 4),
                     onDeck ? DeckActorBacking : ActorBacking);
                 DrawGlyph(actor.Glyph, p.X, p.Y, ColorFor(actor.Glyph), baseline);

@@ -51,12 +51,12 @@ public static class PerceptionSystem
     /// </summary>
     public static Percepts Perceive(Simulation sim, Actor observer, long sinceTick)
     {
-        var senses = observer.Species.Senses;
+        var senses = sim.SensesOf(observer);
 
         var seen = new List<SightContact>();
         foreach (var target in sim.Actors)
         {
-            if (target == observer)
+            if (target == observer || target.IsDead)
                 continue;
             bool moving = target.MovedRecently(sim.CurrentTick, MotionWindowTicks);
             int score = SightScore(sim, observer, target.Position, sim.StandHeight(target), target.Species.BodyHeightDm, moving);
@@ -100,7 +100,7 @@ public static class PerceptionSystem
     /// </summary>
     public static int SightScore(Simulation sim, Actor observer, TilePos target, int targetBaseDm, int targetHeightDm, bool moving)
     {
-        var senses = observer.Species.Senses;
+        var senses = sim.SensesOf(observer);
         var from = sim.EyeTile(observer);
         int dx = target.X - from.X, dy = target.Y - from.Y;
         long d2 = (long)dx * dx + (long)dy * dy;
@@ -150,7 +150,7 @@ public static class PerceptionSystem
     /// <summary>How bright a light source looks to the observer, 0-100; 0 if out of view.</summary>
     public static int LightScore(Simulation sim, Actor observer, LightSource light)
     {
-        var senses = observer.Species.Senses;
+        var senses = sim.SensesOf(observer);
         var from = sim.EyeTile(observer);
         int dx = light.Position.X - from.X, dy = light.Position.Y - from.Y;
         long d2 = (long)dx * dx + (long)dy * dy;

@@ -13,7 +13,8 @@ public static class ScenarioBuilder
     /// drive the player; otherwise the player wanders randomly. The Rex gets its AI (a CreatureBrain);
     /// NPCs hold still until their own AI arrives in build step 9. Vehicles get their names and
     /// integrity from the map; headlights on them are mounted and move with them. People whose marker
-    /// is on a deck tile start on the deck.
+    /// is on a deck tile start on the deck. The player gets the testbed survivor's skills and kit;
+    /// NPCs are park staff with nothing useful on them.
     /// </summary>
     public static Simulation Build(MapData data, ulong seed, IActorController? player = null)
     {
@@ -40,13 +41,15 @@ public static class ScenarioBuilder
                         throw new FormatException($"The map has more than one player marker (second at {marker.Position}).");
                     hasPlayer = true;
                     sim.AddActor(marker.Name ?? "Survivor", '@', marker.Position, Species.Human,
-                        player ?? new RandomWalker(ai), onDeck: OnDeck(data.Map, marker.Position));
+                        player ?? new RandomWalker(ai), onDeck: OnDeck(data.Map, marker.Position),
+                        loadout: Loadout.TestbedSurvivor);
                     break;
 
                 case MarkerKind.Npc:
                     npcCount++;
                     sim.AddActor(marker.Name ?? $"Survivor {npcCount}", 'h', marker.Position, Species.Human,
-                        new HoldStillController(), onDeck: OnDeck(data.Map, marker.Position));
+                        new HoldStillController(), onDeck: OnDeck(data.Map, marker.Position),
+                        loadout: Loadout.ParkStaff);
                     break;
 
                 case MarkerKind.Rex:

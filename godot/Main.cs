@@ -7,6 +7,7 @@ using BlueHarvest.Sim;
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Ai;
 using BlueHarvest.Sim.Core;
+using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.Demo;
 using BlueHarvest.Sim.Navigation;
 using BlueHarvest.Sim.Perception;
@@ -26,7 +27,7 @@ public partial class Main : Node2D
     private const ulong Seed = 12345;
     private const string MapPath = "res://Maps/testbed.bhmap";
     private const string Controls =
-        "Move: arrows / numpad / hjkl yubn   Wait: . or numpad 5   Close a door: c   Ladder: < >   Zoom: + -\n" +
+        "Move: arrows / numpad / hjkl yubn   Wait: . or numpad 5   Close a door: c   Ladder: < >   First aid: t   Zoom: + -\n" +
         "Overlays: [1] lighting  [2] your view  [3] rex view  [4] noise  [5] rex path  [6] rex memory   [G] omniscient rex (debug)";
 
     private Simulation _sim = null!;
@@ -36,6 +37,9 @@ public partial class Main : Node2D
     private AsciiMapView _map = null!;
     private Camera2D _camera = null!;
     private Label _hud = null!;
+    private RichTextLabel _body = null!;
+    private Control _deathScreen = null!;
+    private Label _deathText = null!;
     private string _message = "";
     private long _lastTurnTick;
     private GoToController? _rexHunt;
@@ -62,6 +66,10 @@ public partial class Main : Node2D
         _sim.VehicleShoved += OnVehicleShoved;
         _sim.PlatformCollapsed += OnPlatformCollapsed;
         _sim.ActorFell += OnActorFell;
+        _sim.ActorInjured += OnActorInjured;
+        _sim.ActorDied += OnActorDied;
+        _sim.ActorBlackedOut += OnActorBlackedOut;
+        _sim.ActorTreated += OnActorTreated;
 
         _map = new AsciiMapView();
         _map.Bind(_sim, font, MovementProfile.Human.MaxStepUpDm);
@@ -80,16 +88,34 @@ public partial class Main : Node2D
         _hud.AddThemeColorOverride("font_color", new Color(0.92f, 0.92f, 0.86f));
         _hud.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.9f));
         hudLayer.AddChild(_hud);
+        BuildBodyPanel(hudLayer, font);
+        BuildDeathScreen(hudLayer, font);
 
         _sim.RunUntilInputNeeded();
         _director.Update(_sim, _playerActor);
         Refresh(snapCamera: true);
+        ShowDeathIfDead();
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
         if (@event is not InputEventKey { Pressed: true } key)
             return;
+
+        if (_playerActor.IsDead)
+        {
+            if (key.Keycode == Key.R && !key.Echo)
+            {
+                GetViewport().SetInputAsHandled();
+                GetTree().ReloadCurrentScene();
+            }
+            else if (TryZoom(key.Keycode) || (!key.Echo && TryToggleOverlay(key.Keycode)))
+            {
+                GetViewport().SetInputAsHandled();
+                Refresh(snapCamera: false);
+            }
+            return;
+        }
 
         if (TryZoom(key.Keycode) || (!key.Echo && (TryToggleOverlay(key.Keycode) || TryToggleHunt(key.Keycode))))
         {
@@ -111,6 +137,7 @@ public partial class Main : Node2D
         _sim.RunUntilInputNeeded();
         _director.Update(_sim, _playerActor);
         Refresh(snapCamera: false);
+        ShowDeathIfDead();
     }
 
     /// <summary>Builds the simulation from the testbed file, or the demo map if that fails.</summary>
@@ -153,6 +180,7 @@ public partial class Main : Node2D
         Key.Kp1 or Key.B => new MoveAction(Direction.SouthWest),
         Key.Kp3 or Key.N => new MoveAction(Direction.SouthEast),
         Key.Kp5 or Key.Period or Key.Space => new WaitAction(_playerActor.Movement.StepTicks),
+        Key.T => new TreatAction(),
         _ => null,
     };
 
@@ -285,10 +313,127 @@ public partial class Main : Node2D
             _message += $" You drop {Units.FormatMeters(dropDm)}. (Injuries arrive in build step 8.)";
     }
 
+    private void OnActorInjured(Actor actor, BodySection section, Severity severity, string cause)
+    {
+        if (actor != _playerActor)
+            return;
+        string how = severity == Severity.Red ? "badly hurt" : "hurt";
+        string bleeding = actor.Health[section].Bleeding ? ", bleeding" : "";
+        _message += $" Your {InjuryRules.Name(section)} is {how}{bleeding} ({cause}).";
+    }
+
+    private void OnActorDied(Actor actor, string cause)
+    {
+        if (actor != _playerActor)
+            _message += $" {actor.Name} is dead ({cause}).";
+    }
+
+    private void OnActorBlackedOut(Actor actor)
+    {
+        if (actor == _playerActor)
+            _message += " Everything goes dark for a moment...";
+    }
+
+    private void OnActorTreated(Actor actor, BodySection section, bool worked)
+    {
+        if (actor == _playerActor)
+            _message = worked
+                ? $"You patch up your {InjuryRules.Name(section)}. It still hurts, but the bleeding has stopped."
+                : $"Your hands shake; the dressing on your {InjuryRules.Name(section)} won't hold.";
+    }
+
     private void OnMoveBlocked(Actor actor, string reason)
     {
         if (actor == _playerActor)
             _message = $"Blocked: {reason}.";
+    }
+
+    /// <summary>A small paper doll in the top right: each body section colored green, yellow or red.</summary>
+    private void BuildBodyPanel(CanvasLayer layer, Font font)
+    {
+        _body = new RichTextLabel
+        {
+            BbcodeEnabled = true,
+            FitContent = true,
+            ScrollActive = false,
+            AutowrapMode = TextServer.AutowrapMode.Off,
+            CustomMinimumSize = new Vector2(220, 0),
+            AnchorLeft = 1f,
+            AnchorRight = 1f,
+            OffsetLeft = -232,
+            OffsetRight = -12,
+            OffsetTop = 8,
+        };
+        _body.AddThemeFontOverride("normal_font", font);
+        _body.AddThemeFontSizeOverride("normal_font_size", 18);
+        layer.AddChild(_body);
+    }
+
+    /// <summary>Shown when the run ends: how you died, how long you lasted, where your body lies.</summary>
+    private void BuildDeathScreen(CanvasLayer layer, Font font)
+    {
+        _deathScreen = new ColorRect
+        {
+            Color = new Color(0f, 0f, 0f, 0.75f),
+            AnchorRight = 1f,
+            AnchorBottom = 1f,
+            Visible = false,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        _deathText = new Label
+        {
+            AnchorRight = 1f,
+            AnchorBottom = 1f,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _deathText.AddThemeFontOverride("font", font);
+        _deathText.AddThemeFontSizeOverride("font_size", 24);
+        _deathText.AddThemeColorOverride("font_color", new Color(0.95f, 0.85f, 0.8f));
+        _deathScreen.AddChild(_deathText);
+        layer.AddChild(_deathScreen);
+    }
+
+    private void ShowDeathIfDead()
+    {
+        if (!_playerActor.IsDead || _deathScreen.Visible)
+            return;
+        var health = _playerActor.Health;
+        var wounds = Enum.GetValues<BodySection>()
+            .Where(s => health[s].Severity != Severity.Green)
+            .Select(s => $"{InjuryRules.Name(s)}: {health[s].Severity.ToString().ToLowerInvariant()}")
+            .ToList();
+        _deathText.Text =
+            "YOU DIED\n\n" +
+            $"{health.DeathCause}\n" +
+            $"after {Ticks.Format(health.DiedTick)} on the island\n" +
+            $"your body lies at {_playerActor.Position}\n\n" +
+            (wounds.Count > 0 ? string.Join("   ", wounds) + "\n\n" : "") +
+            "Press R to try again";
+        _deathScreen.Visible = true;
+    }
+
+    private static string Tint(Severity severity) => severity switch
+    {
+        Severity.Red => "#ff5040",
+        Severity.Yellow => "#f0c840",
+        _ => "#70d070",
+    };
+
+    private string BodyText()
+    {
+        var h = _playerActor.Health;
+        string Part(BodySection s, string glyph) =>
+            $"[color={Tint(h[s].Severity)}]{glyph}[/color]";
+
+        string text =
+            $"  {Part(BodySection.Head, "O")}\n" +
+            $" {Part(BodySection.LeftArm, "/")}{Part(BodySection.Torso, "|")}{Part(BodySection.RightArm, "\\")}\n" +
+            $" {Part(BodySection.LeftLeg, "/")} {Part(BodySection.RightLeg, "\\")}\n";
+        if (h.BleedTicksLeft(_sim.CurrentTick) is { } left)
+            text += $"[color=#ff5040]bleeding: {left / Ticks.PerSecond} s left[/color]\n";
+        text += $"first-aid kits: {_playerActor.Inventory.Count(ItemKind.FirstAidKit)}";
+        return text;
     }
 
     private void Refresh(bool snapCamera)
@@ -302,6 +447,8 @@ public partial class Main : Node2D
         _camera.Position = AsciiMapView.TileCenter(_playerActor.Position);
         if (snapCamera)
             _camera.ResetSmoothing();
+
+        _body.Text = BodyText();
 
         var here = _playerActor.Position;
         bool moving = _playerActor.MovedRecently(_sim.CurrentTick, PerceptionSystem.MotionWindowTicks);

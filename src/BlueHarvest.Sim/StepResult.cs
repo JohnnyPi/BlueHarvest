@@ -10,4 +10,7 @@ public enum StepResult
 
     /// <summary>No actors are scheduled.</summary>
     Idle,
+
+    /// <summary>An actor driven by a PlayerController has died: the run is over.</summary>
+    PlayerDied,
 }

@@ -28,3 +28,9 @@ public sealed record UseDoorAction(Direction Direction) : ActorAction;
 
 /// <summary>Climb the ladder on this tile: up to its deck from the ground, or down from the deck.</summary>
 public sealed record ClimbAction : ActorAction;
+
+/// <summary>
+/// Give yourself first aid: uses a kit to turn the worst red wound (bleeding ones first) yellow and
+/// stop its bleeding. Needs a kit and a working arm; may fail without enough skill.
+/// </summary>
+public sealed record TreatAction : ActorAction;

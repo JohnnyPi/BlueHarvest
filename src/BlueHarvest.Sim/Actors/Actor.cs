@@ -1,3 +1,4 @@
+using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.World;
 
 namespace BlueHarvest.Sim.Actors;
@@ -45,6 +46,15 @@ public sealed class Actor
 
     /// <summary>The tick at which this actor next gets a turn.</summary>
     public long NextActTick { get; internal set; }
+
+    /// <summary>Its six body sections, blood lost, and whether it's dead.</summary>
+    public Health Health { get; } = new();
+
+    public bool IsDead => Health.Dead;
+
+    public Skills Skills { get; internal set; } = Skills.None;
+
+    public Inventory Inventory { get; } = new();
 
     /// <summary>Standing on the deck over its tile rather than the ground. Always false for large bodies.</summary>
     public bool OnDeck { get; internal set; }
