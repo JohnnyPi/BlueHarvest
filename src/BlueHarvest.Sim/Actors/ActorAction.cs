@@ -8,5 +8,20 @@ public abstract record ActorAction;
 /// <summary>Hold still for a number of ticks (at least 1).</summary>
 public sealed record WaitAction(int Ticks) : ActorAction;
 
-/// <summary>Step one tile. A blocked move costs a short bump of time instead.</summary>
-public sealed record MoveAction(Direction Direction) : ActorAction;
+/// <summary>
+/// Step one tile. A blocked move costs a short bump of time instead. With <paramref name="Shove"/>,
+/// a large body's straight step that only a vehicle blocks pushes the vehicle along.
+/// </summary>
+public sealed record MoveAction(Direction Direction, bool Shove = false) : ActorAction;
+
+/// <summary>
+/// Bite whatever is in reach of the head (see Simulation.BiteZone).
+/// <paramref name="Investigative"/> marks a test bite on something the biter hasn't identified.
+/// </summary>
+public sealed record BiteAction(bool Investigative = false) : ActorAction;
+
+/// <summary>
+/// Open or close the door on the neighbouring tile in <paramref name="Direction"/>. Walking into a
+/// closed door opens it too; this is how doors get shut again.
+/// </summary>
+public sealed record UseDoorAction(Direction Direction) : ActorAction;

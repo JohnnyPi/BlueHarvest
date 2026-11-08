@@ -3,11 +3,16 @@ using System;
 using System.Collections.Generic;
 using BlueHarvest.Sim;
 using BlueHarvest.Sim.Actors;
+using BlueHarvest.Sim.Ai;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 using Godot;
 
 namespace BlueHarvest.Game.Rendering;
+
+/// <summary>One remembered contact, as the [6] overlay draws it.</summary>
+/// <param name="Radius">Uncertainty in tiles: the ring's size.</param>
+public readonly record struct ContactMark(TilePos At, int Radius, int Confidence, ContactClass Class, bool Focus);
 
 /// <summary>What the debug overlays show. Main fills it after every turn.</summary>
 public sealed class OverlayState
@@ -27,7 +32,11 @@ public sealed class OverlayState
     /// <summary>[5] The Rex's planned route, when it's hunting.</summary>
     public bool RexPath = true;
 
+    /// <summary>[6] What the Rex remembers: a ring per contact (red prey, yellow unknown, grey ignored), thick for its focus.</summary>
+    public bool RexMemory = true;
+
     public IReadOnlyList<TilePos> RexPathTiles = Array.Empty<TilePos>();
+    public IReadOnlyList<ContactMark> Contacts = Array.Empty<ContactMark>();
 
     public bool[]? PlayerVisibleTiles;
     public HashSet<int> PlayerSpottedActors = new();
@@ -60,6 +69,8 @@ public partial class AsciiMapView : Node2D
     private static readonly Color PathDot = new(1f, 0.3f, 0.25f, 0.8f);
     private static readonly Color RexCore = new(0.35f, 0.06f, 0.05f, 0.85f);
     private static readonly Color RexSoft = new(0.30f, 0.05f, 0.05f, 0.55f);
+    private static readonly Color LockedInk = new(1f, 0.35f, 0.3f);
+    private static readonly Color DamagedInk = new(1f, 0.3f, 0.25f);
 
     /// <summary>Background, glyph and glyph color per cover type, indexed by CoverType.</summary>
     private static readonly (Color Background, char Glyph, Color Ink)[] CoverLook =
@@ -142,8 +153,9 @@ public partial class AsciiMapView : Node2D
                 if (o.PlayerView && o.PlayerVisibleTiles is { } visible && !visible[y * width + x])
                     shade *= 0.25f;
 
-                DrawRect(new Rect2(x * CellSize, y * CellSize, CellSize, CellSize), Scale(look.Background, shade));
-                DrawGlyph(look.Glyph, x, y, Scale(look.Ink, Math.Min(1f, shade * 1.3f)), baseline);
+                var (glyph, ink) = StructureLook(p, look.Glyph, look.Ink);
+                DrawRect(new Rect2(x * CellSize, y * CellSize, CellSize, CellSize), ScaleColor(look.Background, shade));
+                DrawGlyph(glyph, x, y, ScaleColor(ink, Math.Min(1f, shade * 1.3f)), baseline);
             }
         }
 
@@ -201,6 +213,30 @@ public partial class AsciiMapView : Node2D
                 DrawCircle(TileCenter(p), 3f, PathDot);
         }
 
+        // The Rex's memory: where it thinks things are, how sure it is, and what it's after.
+        if (o.RexMemory)
+        {
+            foreach (var mark in o.Contacts)
+            {
+                float alpha = mark.Class == ContactClass.Object ? 0.3f : 0.35f + 0.6f * mark.Confidence / 100f;
+                var color = mark.Class switch
+                {
+                    ContactClass.Prey => new Color(1f, 0.2f, 0.15f, alpha),
+                    ContactClass.Unknown => new Color(1f, 0.85f, 0.2f, alpha),
+                    _ => new Color(0.65f, 0.65f, 0.65f, alpha),
+                };
+                float radius = (mark.Radius + 0.5f) * CellSize;
+                DrawArc(TileCenter(mark.At), radius, 0f, Mathf.Tau, 48, color, mark.Focus ? 3f : 1.5f);
+                char glyph = mark.Class switch
+                {
+                    ContactClass.Prey => '!',
+                    ContactClass.Unknown => '?',
+                    _ => 'x',
+                };
+                DrawGlyph(glyph, mark.At.X, mark.At.Y, color, baseline);
+            }
+        }
+
         // Actors on top.
         foreach (var actor in _sim.Actors)
         {
@@ -250,7 +286,31 @@ public partial class AsciiMapView : Node2D
         DrawFacing(tip, actor.Facing);
     }
 
-    private static Color Scale(Color c, float factor) => new(c.R * factor, c.G * factor, c.B * factor, c.A);
+    /// <summary>
+    /// Doors show their state ('/' open, '+' closed, red '+' locked). Vehicles redden as they lose
+    /// integrity and show '%' once breached.
+    /// </summary>
+    private (char Glyph, Color Ink) StructureLook(TilePos p, char glyph, Color ink)
+    {
+        var sim = _sim!;
+        switch (sim.Cover[p])
+        {
+            case CoverType.Door:
+                return sim.Map.Structures.DoorAt(p) switch
+                {
+                    DoorState.Open => ('/', ink),
+                    DoorState.Closed => ('+', ink),
+                    _ => ('+', LockedInk),
+                };
+            case CoverType.Vehicle when sim.VehicleAt(p) is { } vehicle:
+                var damaged = ink.Lerp(DamagedInk, 1f - vehicle.Integrity / (float)Vehicle.MaxIntegrity);
+                return (vehicle.Breached ? '%' : glyph, damaged);
+            default:
+                return (glyph, ink);
+        }
+    }
+
+    private static Color ScaleColor(Color c, float factor) => new(c.R * factor, c.G * factor, c.B * factor, c.A);
 
     private void DrawFacing(TilePos p, Direction facing)
     {

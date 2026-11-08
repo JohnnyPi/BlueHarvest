@@ -1,4 +1,5 @@
 using BlueHarvest.Sim;
+using BlueHarvest.Sim.Ai;
 using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.Demo;
 using BlueHarvest.Sim.Scenarios;
@@ -27,7 +28,35 @@ Console.WriteLine();
 Console.WriteLine("Start (map-file cover characters; @ you, h NPC, T rex, R raptor):");
 PrintMap(sim);
 
-sim.RunUntil(Ticks.FromSeconds(seconds));
+// Run a second at a time, logging each creature's activity whenever it changes.
+var brains = sim.Actors.Where(a => a.Controller is CreatureBrain).ToList();
+var player = sim.Actors.FirstOrDefault(a => a.Glyph == '@');
+var director = new Director();
+var lastDescription = new Dictionary<int, string>();
+int logged = 0;
+const int MaxLogLines = 60;
+if (brains.Count > 0)
+{
+    Console.WriteLine();
+    Console.WriteLine("Creature activity:");
+}
+for (int second = 1; second <= seconds; second++)
+{
+    sim.RunUntil(Ticks.FromSeconds(second));
+    if (player is not null)
+        director.Update(sim, player);
+    foreach (var creature in brains)
+    {
+        string description = ((CreatureBrain)creature.Controller).Describe(sim);
+        if (lastDescription.TryGetValue(creature.Id, out var previous) && previous == description)
+            continue;
+        lastDescription[creature.Id] = description;
+        if (logged++ < MaxLogLines)
+            Console.WriteLine($"  {Ticks.Format(sim.CurrentTick),8}  {creature.Name}: {description}");
+    }
+}
+if (logged > MaxLogLines)
+    Console.WriteLine($"  ... and {logged - MaxLogLines} more changes");
 
 Console.WriteLine();
 Console.WriteLine($"After {Ticks.Format(sim.CurrentTick)} and {sim.ActionsResolved} actions:");
@@ -38,6 +67,8 @@ foreach (var actor in sim.Actors)
     Console.WriteLine($"  {actor.Glyph} {actor.Name,-11} at {actor.Position}, next turn at {Ticks.Format(actor.NextActTick)}");
 
 Console.WriteLine();
+if (player is not null)
+    Console.WriteLine($"Director: tension now {director.Tension}, peak {director.PeakSoFar}");
 Console.WriteLine($"State hash: {sim.ComputeStateHash():X16}");
 
 static void PrintMap(Simulation sim)

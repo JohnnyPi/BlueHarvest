@@ -5,7 +5,8 @@ namespace BlueHarvest.Sim.Tests;
 
 public class MapFileTests
 {
-    private const string Small =
+    /// <summary>A version 1 file: heights as 0.5 m level characters, no structure sections.</summary>
+    private const string SmallV1 =
         "bhmap 1\n" +
         "size 4 2\n" +
         "heights\n" +
@@ -20,10 +21,50 @@ public class MapFileTests
         "light 3 0\n" +
         "end\n";
 
+    /// <summary>The same map as written now: decimeter heights, and the doorway listed.</summary>
+    private const string Small =
+        "bhmap 2\n" +
+        "size 4 2\n" +
+        "heights\n" +
+        "0 0 50 80\n" +
+        "0 5 10 15\n" +
+        "cover\n" +
+        ".&F#\n" +
+        "==+V\n" +
+        "doors\n" +
+        "2 1 open\n" +
+        "markers\n" +
+        "player 0 1 Survivor\n" +
+        "npc 1 1\n" +
+        "light 3 0\n" +
+        "end\n";
+
+    /// <summary>A v2 file using every section.</summary>
+    private const string Full =
+        "bhmap 2\n" +
+        "size 5 2\n" +
+        "ambient 6\n" +
+        "heights\n" +
+        "-20 0 1234 80 80\n" +
+        "0 0 0 80 80\n" +
+        "cover\n" +
+        "VV#+_\n" +
+        "VV#__\n" +
+        "roofs\n" +
+        "....6\n" +
+        "...66\n" +
+        "doors\n" +
+        "3 0 locked\n" +
+        "vehicles\n" +
+        "1 1 40 Jeep A\n" +
+        "markers\n" +
+        "player 4 1\n" +
+        "end\n";
+
     [Fact]
-    public void Parse_ReadsHeightsCoverAndMarkers()
+    public void ParseV1_ReadsHeightsCoverAndMarkers()
     {
-        var data = MapFile.Parse(Small);
+        var data = MapFile.Parse(SmallV1);
 
         Assert.Equal(4, data.Map.Width);
         Assert.Equal(2, data.Map.Height);
@@ -32,6 +73,7 @@ public class MapFileTests
         Assert.Equal(CoverType.DenseJungle, data.Map.Cover[new TilePos(1, 0)]);
         Assert.Equal(CoverType.Fence, data.Map.Cover[new TilePos(2, 0)]);
         Assert.Equal(CoverType.Door, data.Map.Cover[new TilePos(2, 1)]);
+        Assert.Equal(DoorState.Open, data.Map.Structures.DoorAt(new TilePos(2, 1)));
 
         Assert.Equal(3, data.Markers.Count);
         Assert.Equal(new MapMarker(MarkerKind.Player, new TilePos(0, 1), "Survivor"), data.Markers[0]);
@@ -40,9 +82,41 @@ public class MapFileTests
     }
 
     [Fact]
-    public void Serialize_RoundTripsExactly()
+    public void V1_IsWrittenBackAsV2()
+    {
+        Assert.Equal(Small, MapFile.Serialize(MapFile.Parse(SmallV1)));
+    }
+
+    [Fact]
+    public void V1Floors_GetARoof()
+    {
+        var data = MapFile.Parse(SmallV1.Replace(".&F#\n", "._F#\n"));
+        Assert.True(data.Map.IsIndoor(new TilePos(1, 0)));
+        Assert.Equal(StructureMap.DefaultRoofDm, data.Map.Structures.RoofDm(new TilePos(1, 0)));
+        Assert.False(data.Map.IsIndoor(new TilePos(0, 0)));
+    }
+
+    [Fact]
+    public void V2_RoundTripsExactly()
     {
         Assert.Equal(Small, MapFile.Serialize(MapFile.Parse(Small)));
+        Assert.Equal(Full, MapFile.Serialize(MapFile.Parse(Full)));
+    }
+
+    [Fact]
+    public void V2_ReadsDecimetersRoofsDoorsAndVehicles()
+    {
+        var data = MapFile.Parse(Full);
+        var map = data.Map;
+
+        Assert.Equal(-20, map.Heights[new TilePos(0, 0)]);
+        Assert.Equal(1234, map.Heights[new TilePos(2, 0)]);
+        Assert.Equal(30, map.Structures.RoofDm(new TilePos(4, 0)));
+        Assert.False(map.IsIndoor(new TilePos(2, 1)));
+        Assert.Equal(DoorState.Locked, map.Structures.DoorAt(new TilePos(3, 0)));
+        Assert.Equal("a locked door", map.CoverAt(new TilePos(3, 0)).Name);
+        Assert.Equal(new VehicleSpec(new TilePos(1, 1), 40, "Jeep A"), Assert.Single(data.VehicleSpecs));
+        Assert.Equal(6, data.AmbientLight);
     }
 
     [Fact]
@@ -72,14 +146,34 @@ public class MapFileTests
 
     [Theory]
     [InlineData("size 4 2\n", "size 4 2\nambient 300\n")] // ambient out of range
-    [InlineData("00ag\n", "00a\n")]               // short height row
-    [InlineData(".&F#\n", ".&F?\n")]              // unknown cover
-    [InlineData("npc 1 1\n", "dragon 1 1\n")]     // unknown marker kind
-    [InlineData("npc 1 1\n", "npc 9 1\n")]        // marker outside the map
-    [InlineData("end\n", "")]                     // missing end
-    [InlineData("bhmap 1\n", "bhmap 2\n")]        // unsupported version
+    [InlineData("0 0 50 80\n", "0 0 50\n")]           // short height row
+    [InlineData("0 0 50 80\n", "0 0 5x 80\n")]        // not a number
+    [InlineData(".&F#\n", ".&F?\n")]                  // unknown cover
+    [InlineData("npc 1 1\n", "dragon 1 1\n")]         // unknown marker kind
+    [InlineData("npc 1 1\n", "npc 9 1\n")]            // marker outside the map
+    [InlineData("end\n", "")]                         // missing end
+    [InlineData("bhmap 2\n", "bhmap 3\n")]            // unsupported version
+    [InlineData("2 1 open\n", "2 1 ajar\n")]          // unknown door state
+    [InlineData("2 1 open\n", "1 1 open\n")]          // door not on a doorway
+    [InlineData("doors\n", "dooors\n")]              // unknown section
     public void Parse_RejectsBrokenFiles(string find, string replace)
     {
         Assert.Throws<FormatException>(() => MapFile.Parse(Small.Replace(find, replace)));
+    }
+
+    [Theory]
+    [InlineData("1 1 40 Jeep A\n", "2 1 40 Jeep A\n")]    // vehicle entry not on a vehicle
+    [InlineData("1 1 40 Jeep A\n", "1 1 140 Jeep A\n")]   // integrity out of range
+    [InlineData("....6\n", "....?\n")]                     // bad roof character
+    [InlineData("roofs\n....6\n...66\ndoors\n3 0 locked\n", "doors\n3 0 locked\nroofs\n....6\n...66\n")] // out of order
+    public void Parse_RejectsBrokenStructureSections(string find, string replace)
+    {
+        Assert.Throws<FormatException>(() => MapFile.Parse(Full.Replace(find, replace)));
+    }
+
+    [Fact]
+    public void StructureSections_NeedVersion2()
+    {
+        Assert.Throws<FormatException>(() => MapFile.Parse(SmallV1.Replace("markers\n", "doors\n2 1 open\nmarkers\n")));
     }
 }

@@ -111,15 +111,29 @@ public class BodyTests
     }
 
     [Fact]
-    public void Rex_IsStoppedByVehicles()
+    public void Rex_ShovesVehicles_UnlessTheyreStuck()
     {
         var map = new WorldMap(20, 20);
         for (int x = 8; x <= 12; x++)
             map.Cover[new TilePos(x, 10)] = CoverType.Vehicle;
         var (sim, drive, rex) = RexOn(map, new TilePos(10, 13), Direction.North);
+        var vehicle = Assert.Single(sim.Vehicles);
 
-        Move(sim, drive, Direction.North);
-        Assert.Equal("a vehicle is in the way", sim.MoveBlockReason(rex, Direction.North));
+        Move(sim, drive, Direction.North);  // free step
+        Assert.Equal("a vehicle is in the way", sim.MoveBlockReason(rex, Direction.North)); // only a shove moves it
+        drive.Pending = new MoveAction(Direction.North, Shove: true);
+        sim.RunUntilInputNeeded();
+
+        Assert.Equal(new TilePos(10, 11), rex.Position);
+        Assert.All(vehicle.Tiles, t => Assert.Equal(9, t.Y));
+        Assert.Equal(CoverType.Grass, sim.Cover[new TilePos(10, 10)]);
+        Assert.Equal(CoverType.Vehicle, sim.Cover[new TilePos(10, 9)]);
+        Assert.Equal(Vehicle.MaxIntegrity - Simulation.ShoveDamage, vehicle.Integrity);
+        Assert.Equal(50 + 50 + Simulation.ShoveTicks, rex.NextActTick);
+
+        for (int x = 6; x <= 14; x++)
+            sim.Cover[new TilePos(x, 8)] = CoverType.Wall;
+        Assert.Equal("vehicle 1 won't budge: a wall is behind it", sim.MoveBlockReason(rex, Direction.North, shove: true));
     }
 
     [Fact]

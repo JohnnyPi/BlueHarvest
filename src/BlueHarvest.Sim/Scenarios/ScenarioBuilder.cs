@@ -1,4 +1,5 @@
 using BlueHarvest.Sim.Actors;
+using BlueHarvest.Sim.Ai;
 using BlueHarvest.Sim.Lighting;
 using BlueHarvest.Sim.World;
 
@@ -9,11 +10,21 @@ public static class ScenarioBuilder
 {
     /// <summary>
     /// Spawns the player, NPCs and the Rex from markers and adds the lights. Pass a controller to
-    /// drive the player; otherwise the player wanders randomly.
+    /// drive the player; otherwise the player wanders randomly. The Rex gets its AI (a CreatureBrain);
+    /// NPCs hold still until their own AI arrives in build step 9. Vehicles get their names and
+    /// integrity from the map; headlights on them are mounted and move with them.
     /// </summary>
     public static Simulation Build(MapData data, ulong seed, IActorController? player = null)
     {
         var sim = new Simulation(data.Map, seed) { AmbientLightPercent = data.AmbientLight };
+        foreach (var spec in data.VehicleSpecs)
+        {
+            var vehicle = sim.VehicleAt(spec.At)
+                ?? throw new FormatException($"The vehicle entry at {spec.At} isn't on a vehicle.");
+            sim.SetVehicleIntegrity(vehicle, spec.Integrity);
+            if (!string.IsNullOrWhiteSpace(spec.Name))
+                vehicle.Name = spec.Name.Trim();
+        }
         bool hasPlayer = false;
         int npcCount = 0;
 
@@ -34,11 +45,11 @@ public static class ScenarioBuilder
                 case MarkerKind.Npc:
                     npcCount++;
                     sim.AddActor(marker.Name ?? $"Survivor {npcCount}", 'h', marker.Position, Species.Human,
-                        new RandomWalker(ai));
+                        new HoldStillController());
                     break;
 
                 case MarkerKind.Rex:
-                    sim.AddActor(marker.Name ?? "Rex", 'T', marker.Position, Species.Rex, new RandomWalker(ai));
+                    sim.AddActor(marker.Name ?? "Rex", 'T', marker.Position, Species.Rex, new CreatureBrain(AiProfile.Rex, ai));
                     break;
 
                 case MarkerKind.Light:

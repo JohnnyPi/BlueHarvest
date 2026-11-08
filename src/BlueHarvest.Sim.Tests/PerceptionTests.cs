@@ -56,11 +56,31 @@ public class SightLineTests
     }
 
     [Fact]
-    public void IndoorAndOutdoor_DontSeeEachOther()
+    public void Roof_HidesWhatsUnderIt_FromHighUp()
     {
-        var trace = SightLine.Trace(Row("._"), new TilePos(0, 0), 16, new TilePos(1, 0), 17, true);
-        Assert.True(trace.IndoorMismatch);
-        Assert.Equal(0, trace.Visibility);
+        var map = Row("...._");
+        map.Structures.SetRoof(new TilePos(4, 0), 30); // a 3 m roof over the last tile
+
+        var fromHigh = SightLine.Trace(map, new TilePos(0, 0), 80, new TilePos(4, 0), 17, true);
+        var fromLevel = SightLine.Trace(map, new TilePos(0, 0), 16, new TilePos(4, 0), 17, true);
+
+        Assert.True(fromHigh.RoofBlocked);  // at x=3 the line is at 3.3 m, above the roof line
+        Assert.Equal(0, fromHigh.Visibility);
+        Assert.False(fromLevel.RoofBlocked); // in under the eaves: nothing blocks it here
+        Assert.Equal(100, fromLevel.Visibility);
+    }
+
+    [Fact]
+    public void ClosedDoor_BlocksSight_OpenDoorDoesnt()
+    {
+        var map = Row("..+..");
+        var open = SightLine.Trace(map, new TilePos(0, 0), 16, new TilePos(4, 0), 17, true);
+        map.Structures.SetDoor(new TilePos(2, 0), DoorState.Closed);
+        var closed = SightLine.Trace(map, new TilePos(0, 0), 16, new TilePos(4, 0), 17, true);
+
+        Assert.Equal(100, open.Visibility);
+        Assert.Equal(0, closed.Visibility);
+        Assert.Equal(1, closed.SolidTiles);
     }
 }
 
@@ -123,7 +143,7 @@ public class LightGridTests
     public void Indoors_StartsDarker()
     {
         var map = Open(2, 1);
-        map.Cover[new TilePos(1, 0)] = CoverType.Floor;
+        map.Structures.SetRoof(new TilePos(1, 0), 30);
         var grid = LightGrid.Compute(map, Array.Empty<LightSource>(), ambientPercent: 30);
         Assert.Equal(30, grid.LevelAt(new TilePos(0, 0)));
         Assert.Equal(10, grid.LevelAt(new TilePos(1, 0)));

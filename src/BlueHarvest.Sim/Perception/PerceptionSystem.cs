@@ -137,7 +137,7 @@ public static class PerceptionSystem
         return loudness - distance
             - trace.SolidTiles * 6
             - (trace.TerrainBlocked ? 10 : 0)
-            - (trace.IndoorMismatch ? 12 : 0);
+            - (trace.RoofBlocked ? 12 : 0);
     }
 
     /// <summary>How bright a light source looks to the observer, 0-100; 0 if out of view.</summary>

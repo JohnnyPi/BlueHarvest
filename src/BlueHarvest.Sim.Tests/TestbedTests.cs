@@ -1,4 +1,5 @@
 using BlueHarvest.Sim.Actors;
+using BlueHarvest.Sim.Ai;
 using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.Scenarios;
 using BlueHarvest.Sim.World;
@@ -62,6 +63,14 @@ public class TestbedTests
         var sim = ScenarioBuilder.Build(MapFile.Parse(Text), seed: 1, player);
         Assert.Single(sim.Actors, a => a.Controller == player);
         Assert.Equal(StepResult.AwaitingInput, sim.RunUntilInputNeeded());
+    }
+
+    [Fact]
+    public void RexGetsABrain_NpcsHoldStill()
+    {
+        var sim = ScenarioBuilder.Build(MapFile.Parse(Text), seed: 1, new PlayerController());
+        Assert.IsType<CreatureBrain>(Assert.Single(sim.Actors, a => a.Species == Species.Rex).Controller);
+        Assert.All(sim.Actors.Where(a => a.Glyph == 'h'), a => Assert.IsType<HoldStillController>(a.Controller));
     }
 
     [Fact]

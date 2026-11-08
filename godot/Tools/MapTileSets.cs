@@ -7,7 +7,7 @@ namespace BlueHarvest.Game.Tools;
 /// <summary>
 /// Builds the editor's tile palettes in code, so there are no tileset files to maintain.
 /// Each palette is one row of tiles; a tile's column is the value it stands for
-/// (height level, CoverType or MarkerKind).
+/// (height level, CoverType, MarkerKind, DoorState or roof level).
 /// </summary>
 public static class MapTileSets
 {
@@ -85,6 +85,42 @@ public static class MapTileSets
             PixelFont.Draw(image, looks[i].Label, i * TilePx, TilePx, Colors.Black);
         }
         return Build(image, looks.Length);
+    }
+
+    /// <summary>One tile per door state, indexed by DoorState: o open, c closed, l locked. Paint them on doorway tiles.</summary>
+    public static TileSet Doors()
+    {
+        var looks = new (Color Color, char Label)[]
+        {
+            (new Color(0.55f, 0.85f, 0.45f), 'o'), // Open
+            (new Color(0.85f, 0.60f, 0.25f), 'c'), // Closed
+            (new Color(0.90f, 0.25f, 0.20f), 'l'), // Locked
+        };
+
+        var image = NewImage(looks.Length);
+        for (int i = 0; i < looks.Length; i++)
+        {
+            Tile(image, i, looks[i].Color);
+            PixelFont.Draw(image, looks[i].Label, i * TilePx, TilePx, Colors.Black);
+        }
+        return Build(image, looks.Length);
+    }
+
+    /// <summary>
+    /// One tile per roof height (0.5 m levels, labelled like heights), drawn translucent so the cover
+    /// shows through. Level 0 means no roof.
+    /// </summary>
+    public static TileSet Roofs()
+    {
+        int count = HeightMap.MaxLevel + 1;
+        var image = NewImage(count);
+        var roof = new Color(0.75f, 0.30f, 0.30f, 0.45f);
+        for (int level = 1; level < count; level++)
+        {
+            Tile(image, level, roof);
+            PixelFont.Draw(image, HeightMap.LevelChar(level), level * TilePx, TilePx, new Color(1f, 1f, 1f, 0.9f));
+        }
+        return Build(image, count);
     }
 
     private static Image NewImage(int count) =>

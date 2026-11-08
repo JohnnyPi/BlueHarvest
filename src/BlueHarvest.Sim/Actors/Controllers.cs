@@ -40,6 +40,12 @@ public sealed class RandomWalker : IActorController
     }
 }
 
+/// <summary>Never moves: waits one step's time each turn. NPCs use it until their own AI arrives (build step 9).</summary>
+public sealed class HoldStillController : IActorController
+{
+    public ActorAction? Decide(Actor self, Simulation sim) => new WaitAction(self.Movement.StepTicks);
+}
+
 /// <summary>Plays back a fixed list of actions, then waits. Used for tests and input replays.</summary>
 public sealed class ScriptedController : IActorController
 {

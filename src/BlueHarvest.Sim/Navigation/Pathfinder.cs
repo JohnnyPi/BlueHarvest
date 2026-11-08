@@ -19,11 +19,20 @@ public static class Pathfinder
     /// <paramref name="goal"/>, as MoveAction directions, or null if there's no path within
     /// <paramref name="maxNodes"/> expansions. An empty list means it's already there.
     /// </summary>
-    public static IReadOnlyList<Direction>? FindPath(Simulation sim, Actor actor, TilePos goal, int tolerance = 0, int maxNodes = 60_000)
+    public static IReadOnlyList<Direction>? FindPath(Simulation sim, Actor actor, TilePos goal, int tolerance = 0, int maxNodes = 60_000) =>
+        FindPath(sim, actor, p => Chebyshev(p, goal) <= tolerance, goal, tolerance, maxNodes);
+
+    /// <summary>
+    /// Moves that bring the actor's anchor to any tile where <paramref name="isGoal"/> holds, or null.
+    /// Every goal tile must lie within <paramref name="slack"/> tiles (Chebyshev) of
+    /// <paramref name="near"/>; that keeps the search's estimate honest.
+    /// </summary>
+    public static IReadOnlyList<Direction>? FindPath(Simulation sim, Actor actor, Func<TilePos, bool> isGoal, TilePos near,
+        int slack, int maxNodes = 60_000)
     {
         return actor.IsLarge
-            ? Search(sim, actor, goal, tolerance, maxNodes, facings: 8, LargeNeighbors)
-            : Search(sim, actor, goal, tolerance, maxNodes, facings: 1, SmallNeighbors);
+            ? Search(sim, actor, isGoal, near, slack, maxNodes, facings: 8, LargeNeighbors)
+            : Search(sim, actor, isGoal, near, slack, maxNodes, facings: 1, SmallNeighbors);
     }
 
     /// <summary>The poses an actor passes through following <paramref name="moves"/> from where it stands.</summary>
@@ -47,8 +56,8 @@ public static class Pathfinder
 
     private delegate void NeighborSource(Simulation sim, Actor actor, TilePos anchor, Direction facing, List<Neighbor> into);
 
-    private static IReadOnlyList<Direction>? Search(Simulation sim, Actor actor, TilePos goal, int tolerance, int maxNodes,
-        int facings, NeighborSource neighbors)
+    private static IReadOnlyList<Direction>? Search(Simulation sim, Actor actor, Func<TilePos, bool> isGoal, TilePos near,
+        int slack, int maxNodes, int facings, NeighborSource neighbors)
     {
         int width = sim.Map.Width, height = sim.Map.Height;
         int states = width * height * facings;
@@ -61,7 +70,7 @@ public static class Pathfinder
         long order = 0;
 
         int minStep = Math.Max(1, actor.Movement.StepTicks * 90 / 100); // fastest cover is the track at 90%
-        int Heuristic(TilePos p) => Math.Max(0, Chebyshev(p, goal) - tolerance) * minStep;
+        int Heuristic(TilePos p) => Math.Max(0, Chebyshev(p, near) - slack) * minStep;
         int Index(TilePos p, Direction f) => (p.Y * width + p.X) * facings + (facings == 1 ? 0 : (int)f);
 
         int start = Index(actor.Position, actor.Facing);
@@ -81,7 +90,7 @@ public static class Pathfinder
             var anchor = new TilePos(cell % width, cell / width);
             var facing = facings == 1 ? actor.Facing : (Direction)(current % facings);
 
-            if (Chebyshev(anchor, goal) <= tolerance)
+            if (isGoal(anchor))
                 return Reconstruct(current, cameFrom, moveTaken);
             if (++expanded > maxNodes)
                 return null;
@@ -114,7 +123,8 @@ public static class Pathfinder
                 continue;
             var to = anchor.Offset(direction);
             int cost = actor.Movement.CostTicks(sim.Terrain[to] - sim.Terrain[anchor], direction.IsDiagonal())
-                * Covers.Get(sim.Cover[to]).MoveCostPercent / 100;
+                * sim.Map.CoverAt(to).MoveCostPercent / 100
+                + (sim.IsClosedDoor(to) ? Simulation.DoorTicks : 0);
             into.Add(new Neighbor(to, direction, direction, Math.Max(1, cost)));
         }
     }
@@ -129,7 +139,7 @@ public static class Pathfinder
         if (sim.Map.InBounds(ahead) && sim.BodyBlockReason(actor, ahead, facing, fromHeight, ignoreSmallActors: true) is null)
         {
             int cost = actor.Movement.CostTicks(sim.Terrain[ahead] - fromHeight, facing.IsDiagonal())
-                * Covers.Get(sim.Cover[ahead]).MoveCostPercent / 100
+                * sim.Map.CoverAt(ahead).MoveCostPercent / 100
                 + sim.SmashCount(actor, ahead, facing) * Simulation.SmashTicks;
             into.Add(new Neighbor(ahead, facing, facing, Math.Max(1, cost)));
         }

@@ -31,7 +31,7 @@ public sealed class LightGrid
         {
             for (int x = 0; x < width; x++)
             {
-                bool indoor = Covers.Get(map.Cover[new TilePos(x, y)]).Indoor;
+                bool indoor = map.IsIndoor(new TilePos(x, y));
                 levels[y * width + x] = indoor ? ambientPercent / 3 : ambientPercent;
             }
         }

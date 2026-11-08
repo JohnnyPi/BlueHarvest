@@ -19,26 +19,55 @@ public sealed class Simulation
     /// <summary>Extra time for each tile of cover a large body smashes through.</summary>
     public const int SmashTicks = 30;
 
+    /// <summary>Time to open or close a door.</summary>
+    public const int DoorTicks = 60;
+
+    /// <summary>Extra time for a large body to shove a vehicle as it steps.</summary>
+    public const int ShoveTicks = 60;
+
+    /// <summary>Force a body needs to shove a vehicle.</summary>
+    public const int ShoveForce = 60;
+
+    /// <summary>Integrity a vehicle loses each time it's shoved.</summary>
+    public const int ShoveDamage = 10;
+
+    /// <summary>Most a shoved vehicle can be pushed uphill, and dropped, per tile.</summary>
+    public const int VehicleMaxStepUpDm = 5;
+    public const int VehicleMaxDropDm = 20;
+
     /// <summary>Noises older than this are forgotten.</summary>
     public const int NoiseMemoryTicks = 300;
 
     public const int BumpLoudness = 10;
+    public const int DoorLoudness = 15;
     public const int SmashLoudness = 40;
     public const int StrikeLoudness = 25;
+    public const int JawsLoudness = 30;
+    public const int BiteCoverLoudness = 35;
+    public const int ShoveLoudness = 40;
+    public const int BreachLoudness = 45;
 
     private readonly List<Actor> _actors = new();
     private readonly List<LightSource> _lights = new();
     private readonly List<NoiseEvent> _noises = new();
+    private readonly List<Vehicle> _vehicles = new();
     private readonly Scheduler _scheduler = new();
     private readonly int[] _occupant; // actor id + 1 for each core tile, 0 if empty
+    private readonly int[] _vehicleAt; // vehicle id + 1 for each vehicle tile, 0 if none
     private LightGrid? _lightGrid;
     private int _ambientLight = 100;
 
+    /// <summary>
+    /// Starts a simulation on a map. Every connected patch of vehicle cover becomes a Vehicle,
+    /// so set vehicle tiles before creating the simulation.
+    /// </summary>
     public Simulation(WorldMap map, ulong seed)
     {
         Map = map;
         Rng = new Rng(seed);
         _occupant = new int[map.Width * map.Height];
+        _vehicleAt = new int[map.Width * map.Height];
+        FindVehicles();
     }
 
     /// <summary>A map with heights only; every tile is grass.</summary>
@@ -52,6 +81,18 @@ public sealed class Simulation
 
     /// <summary>Raised when a large body's head or tail sweeps into another actor: (striker, victim).</summary>
     public event Action<Actor, Actor>? ActorStruck;
+
+    /// <summary>Raised for each actor caught in a bite: (biter, victim).</summary>
+    public event Action<Actor, Actor>? ActorBitten;
+
+    /// <summary>Raised after every bite, hit or miss.</summary>
+    public event Action<Actor, BiteResult>? Bit;
+
+    /// <summary>Raised when a vehicle loses integrity: (vehicle, by whom, how much).</summary>
+    public event Action<Vehicle, Actor, int>? VehicleDamaged;
+
+    /// <summary>Raised when a vehicle is shoved a tile: (vehicle, by whom).</summary>
+    public event Action<Vehicle, Actor>? VehicleShoved;
 
     public WorldMap Map { get; }
 
@@ -69,9 +110,14 @@ public sealed class Simulation
     /// <summary>Tiles of cover smashed or trampled so far.</summary>
     public int CoverChanges { get; private set; }
 
+    /// <summary>Doors opened, closed or locked so far.</summary>
+    public int StructureChanges { get; private set; }
+
     public IReadOnlyList<Actor> Actors => _actors;
 
     public IReadOnlyList<LightSource> Lights => _lights;
+
+    public IReadOnlyList<Vehicle> Vehicles => _vehicles;
 
     /// <summary>Noises from the last <see cref="NoiseMemoryTicks"/> ticks, oldest first.</summary>
     public IReadOnlyList<NoiseEvent> RecentNoises => _noises;
@@ -87,7 +133,7 @@ public sealed class Simulation
         }
     }
 
-    /// <summary>Light level per tile; recomputed when lights, ambient light or cover change.</summary>
+    /// <summary>Light level per tile; recomputed when lights, ambient light, cover or doors change.</summary>
     public LightGrid Light => _lightGrid ??= LightGrid.Compute(Map, _lights, _ambientLight);
 
     public Actor AddActor(string name, char glyph, TilePos position, Species species, IActorController controller,
@@ -114,9 +160,12 @@ public sealed class Simulation
     /// <summary>Swaps an actor's controller, e.g. to make the Rex hunt. Not recorded in replays.</summary>
     public void SetController(Actor actor, IActorController controller) => actor.Controller = controller;
 
+    /// <summary>Adds a light. One placed on a vehicle tile is mounted on that vehicle and moves with it.</summary>
     public void AddLight(LightSource light)
     {
         _lights.Add(light);
+        if (Map.InBounds(light.Position) && VehicleAt(light.Position) is { } vehicle)
+            vehicle.LightIndices.Add(_lights.Count - 1);
         _lightGrid = null;
     }
 
@@ -135,6 +184,31 @@ public sealed class Simulation
         return id >= 0 ? _actors[id] : null;
     }
 
+    /// <summary>The vehicle covering this tile, if any.</summary>
+    public Vehicle? VehicleAt(TilePos position)
+    {
+        if (!Map.InBounds(position))
+            return null;
+        int id = _vehicleAt[position.Y * Map.Width + position.X] - 1;
+        return id >= 0 ? _vehicles[id] : null;
+    }
+
+    /// <summary>Sets a door's state directly (setup, editor, debug). Actors use UseDoorAction.</summary>
+    public void SetDoor(TilePos position, DoorState state)
+    {
+        if (Cover[position] != CoverType.Door)
+            throw new InvalidOperationException($"There's no doorway at {position}.");
+        if (Map.Structures.DoorAt(position) == state)
+            return;
+        Map.Structures.SetDoor(position, state);
+        StructureChanges++;
+        _lightGrid = null;
+    }
+
+    /// <summary>Sets a vehicle's integrity directly (setup, debug), 0-100. 0 means breached.</summary>
+    public void SetVehicleIntegrity(Vehicle vehicle, int integrity) =>
+        vehicle.Integrity = Math.Clamp(integrity, 0, Vehicle.MaxIntegrity);
+
     /// <summary>Where an actor's eyes and ears are: its head tip for large bodies, clamped to the map.</summary>
     public TilePos EyeTile(Actor actor)
     {
@@ -144,27 +218,85 @@ public sealed class Simulation
         return new TilePos(Math.Clamp(tip.X, 0, Map.Width - 1), Math.Clamp(tip.Y, 0, Map.Height - 1));
     }
 
-    /// <summary>Why a move is impossible, or null if it's allowed. For large bodies a move that isn't straight ahead is a 45° turn.</summary>
-    public string? MoveBlockReason(Actor actor, Direction direction)
+    /// <summary>
+    /// Whether an actor standing at <paramref name="from"/> can reach a tile's ground with its jaws
+    /// (or hands): within its reach up and down, and not across a roof line (a head outdoors can't
+    /// reach under a roof, and the reverse).
+    /// </summary>
+    public bool CanReach(Actor actor, TilePos from, TilePos tile)
+    {
+        int rise = Terrain[tile] - Terrain[from];
+        return rise <= actor.Species.ReachUpDm
+            && -rise <= actor.Species.ReachDownDm
+            && Map.IsIndoor(tile) == Map.IsIndoor(actor.IsLarge ? EyeTile(actor) : actor.Position);
+    }
+
+    /// <summary>
+    /// Tiles an actor's jaws reach: every tile next to (or on) its head and neck, except its own core,
+    /// that is within its reach height. Small actors reach the eight tiles around them.
+    /// </summary>
+    public IReadOnlyList<TilePos> BiteZone(Actor actor)
+    {
+        var zone = new List<TilePos>();
+
+        if (!actor.IsLarge)
+        {
+            foreach (var direction in Directions.All)
+            {
+                var p = actor.Position.Offset(direction);
+                if (Map.InBounds(p) && CanReach(actor, actor.Position, p))
+                    zone.Add(p);
+            }
+            return zone;
+        }
+
+        var core = new HashSet<TilePos>(CoreTiles(actor.Body));
+        var seen = new HashSet<TilePos>();
+        foreach (var tile in actor.Body)
+        {
+            if (tile.Part != BodyPart.Head)
+                continue;
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    var p = new TilePos(tile.Position.X + dx, tile.Position.Y + dy);
+                    if (!Map.InBounds(p) || core.Contains(p) || !seen.Add(p))
+                        continue;
+                    if (CanReach(actor, actor.Position, p))
+                        zone.Add(p);
+                }
+            }
+        }
+        return zone;
+    }
+
+    /// <summary>
+    /// Why a move is impossible, or null if it's allowed. For large bodies a move that isn't straight
+    /// ahead is a 45° turn; with <paramref name="shove"/>, a step blocked only by a vehicle pushes it
+    /// if it can move.
+    /// </summary>
+    public string? MoveBlockReason(Actor actor, Direction direction, bool shove = false)
     {
         if (!actor.IsLarge)
             return StepBlockReason(actor, actor.Position, direction, ignoreSmallActors: false);
-
-        var (anchor, facing) = LargeMoveTarget(actor.Position, actor.Facing, direction);
-        return BodyBlockReason(actor, anchor, facing, Terrain[actor.Position], ignoreSmallActors: false);
+        return PlanLargeMove(actor, direction, shove).Blocked;
     }
 
-    public bool CanMove(Actor actor, Direction direction) => MoveBlockReason(actor, direction) is null;
+    public bool CanMove(Actor actor, Direction direction, bool shove = false) => MoveBlockReason(actor, direction, shove) is null;
 
-    /// <summary>Rules for a single-tile actor stepping from <paramref name="from"/>.</summary>
+    /// <summary>
+    /// Rules for a single-tile actor stepping from <paramref name="from"/>. A closed (not locked) door
+    /// doesn't block actors that open doors: walking into it opens it.
+    /// </summary>
     public string? StepBlockReason(Actor actor, TilePos from, Direction direction, bool ignoreSmallActors)
     {
         var to = from.Offset(direction);
         if (!Map.InBounds(to))
             return "the edge of the map";
 
-        var cover = Covers.Get(Cover[to]);
-        if (cover.BlocksMovement)
+        var cover = Map.CoverAt(to);
+        if (cover.BlocksMovement && !(IsClosedDoor(to) && actor.Species.OpensDoors))
             return $"{cover.Name} is in the way";
 
         int step = Terrain[to] - Terrain[from];
@@ -179,20 +311,27 @@ public sealed class Simulation
         return null;
     }
 
+    /// <summary>A doorway whose door is shut but not locked.</summary>
+    public bool IsClosedDoor(TilePos p) =>
+        Cover[p] == CoverType.Door && Map.Structures.DoorAt(p) == DoorState.Closed;
+
     /// <summary>
     /// Rules for a large body standing at <paramref name="anchor"/> facing <paramref name="facing"/>:
     /// every core tile must be on the map, passable or smashable, within climbing range of
-    /// <paramref name="fromHeightDm"/>, and free of other actors' cores.
+    /// <paramref name="fromHeightDm"/>, and free of other actors' cores. Tiles of
+    /// <paramref name="shoving"/> are checked for height only: that vehicle is being pushed out of the way.
     /// </summary>
-    public string? BodyBlockReason(Actor actor, TilePos anchor, Direction facing, int fromHeightDm, bool ignoreSmallActors)
+    public string? BodyBlockReason(Actor actor, TilePos anchor, Direction facing, int fromHeightDm, bool ignoreSmallActors,
+        Vehicle? shoving = null)
     {
         foreach (var tile in CoreTiles(actor.Species.Body.Footprint(anchor, Compass16.Of(facing))))
         {
             if (!Map.InBounds(tile))
                 return "the edge of the map";
 
-            var cover = Covers.Get(Cover[tile]);
-            if (cover.StopsLargeBody(actor.Species.Force))
+            bool movingAway = shoving is not null && VehicleAt(tile) == shoving;
+            var cover = Map.CoverAt(tile);
+            if (!movingAway && cover.StopsLargeBody(actor.Species.Force))
                 return $"{cover.Name} is in the way";
 
             int step = Terrain[tile] - fromHeightDm;
@@ -201,7 +340,7 @@ public sealed class Simulation
             if (-step > actor.Movement.MaxDropDm)
                 return $"too far to drop ({Units.FormatMeters(-step)})";
 
-            if (ActorAt(tile) is { } other && other != actor && !(ignoreSmallActors && !other.IsLarge))
+            if (!movingAway && ActorAt(tile) is { } other && other != actor && !(ignoreSmallActors && !other.IsLarge))
                 return $"{other.Name} is in the way";
         }
         return null;
@@ -213,10 +352,44 @@ public sealed class Simulation
         int count = 0;
         foreach (var tile in CoreTiles(actor.Species.Body.Footprint(anchor, Compass16.Of(facing))))
         {
-            if (Map.InBounds(tile) && Covers.Get(Cover[tile]).IsSmashedBy(actor.Species.Force))
+            if (Map.InBounds(tile) && Map.CoverAt(tile).IsSmashedBy(actor.Species.Force))
                 count++;
         }
         return count;
+    }
+
+    /// <summary>
+    /// Why a vehicle can't be shoved one tile by (dx, dy), or null if it can: every tile it would move
+    /// onto must be on the map, free of obstacles, other vehicles and actors (its occupants move with
+    /// it), and no more than a small step up or a 2 m drop.
+    /// </summary>
+    public string? ShoveBlockReason(Vehicle vehicle, int dx, int dy)
+    {
+        foreach (var tile in vehicle.Tiles)
+        {
+            var dest = new TilePos(tile.X + dx, tile.Y + dy);
+            if (!Map.InBounds(dest))
+                return "the edge of the map is behind it";
+            var other = VehicleAt(dest);
+            if (other == vehicle)
+                continue;
+            if (other is not null)
+                return $"{other.Name} is behind it";
+
+            var cover = Map.CoverAt(dest);
+            if (cover.BlocksMovement || cover.BlocksLargeBodies)
+                return $"{cover.Name} is behind it";
+
+            int step = Terrain[dest] - Terrain[tile];
+            if (step > VehicleMaxStepUpDm)
+                return "the ground rises behind it";
+            if (-step > VehicleMaxDropDm)
+                return "there's a drop behind it";
+
+            if (ActorAt(dest) is { } actor)
+                return $"{actor.Name} is behind it";
+        }
+        return null;
     }
 
     /// <summary>
@@ -284,7 +457,7 @@ public sealed class Simulation
     /// <summary>Fingerprint of the current state. Same seed and inputs must give the same hash.</summary>
     public ulong ComputeStateHash()
     {
-        var hasher = new StateHasher().Add(CurrentTick).Add(CoverChanges);
+        var hasher = new StateHasher().Add(CurrentTick).Add(CoverChanges).Add(StructureChanges);
         foreach (var actor in _actors)
         {
             hasher.Add(actor.Id)
@@ -293,6 +466,12 @@ public sealed class Simulation
                 .Add((int)actor.Facing)
                 .Add(actor.LastMovedTick)
                 .Add(actor.NextActTick);
+        }
+        foreach (var vehicle in _vehicles)
+        {
+            hasher.Add(vehicle.Anchor.X)
+                .Add(vehicle.Anchor.Y)
+                .Add(vehicle.Integrity);
         }
         return hasher.Value;
     }
@@ -331,13 +510,15 @@ public sealed class Simulation
     private int Resolve(Actor actor, ActorAction action) => action switch
     {
         WaitAction wait => Math.Max(1, wait.Ticks),
-        MoveAction move => actor.IsLarge ? TryMoveLarge(actor, move.Direction) : TryMove(actor, move.Direction),
+        MoveAction move => actor.IsLarge ? TryMoveLarge(actor, move.Direction, move.Shove) : TryMove(actor, move.Direction),
+        BiteAction bite => ResolveBite(actor, bite.Investigative),
+        UseDoorAction door => UseDoor(actor, door.Direction),
         _ => throw new ArgumentOutOfRangeException(nameof(action), $"Unknown action {action}."),
     };
 
     private int Bump(Actor actor, string reason)
     {
-        EmitNoise(actor.Position, BumpLoudness, "bump", actor.Id);
+        EmitNoise(actor.Position, BumpLoudness, NoiseKinds.Bump, actor.Id);
         MoveBlocked?.Invoke(actor, reason);
         return BumpTicks;
     }
@@ -351,24 +532,100 @@ public sealed class Simulation
             return Bump(actor, blocked);
 
         var to = actor.Position.Offset(direction);
+        if (IsClosedDoor(to))
+            return SwingDoor(actor, to, DoorState.Open);
+
         int step = Terrain.StepDm(actor.Position, to);
-        var cover = Covers.Get(Cover[to]);
+        var cover = Map.CoverAt(to);
         Place(actor, to, direction);
         actor.LastMovedTick = CurrentTick;
-        EmitNoise(to, actor.Species.FootstepLoudness + cover.NoiseModifier, "footsteps", actor.Id);
+        EmitNoise(to, actor.Species.FootstepLoudness + cover.NoiseModifier, NoiseKinds.Footsteps, actor.Id);
 
         int baseCost = actor.Movement.CostTicks(step, direction.IsDiagonal());
         return baseCost * cover.MoveCostPercent / 100;
     }
 
-    private int TryMoveLarge(Actor actor, Direction direction)
+    private int UseDoor(Actor actor, Direction direction)
+    {
+        actor.Facing = direction;
+        var tile = actor.Position.Offset(direction);
+        if (!actor.Species.OpensDoors)
+            return Bump(actor, "it can't work doors");
+        if (!Map.InBounds(tile) || Cover[tile] != CoverType.Door)
+            return Bump(actor, "there's no door there");
+
+        switch (Map.Structures.DoorAt(tile))
+        {
+            case DoorState.Open:
+                if (ActorAt(tile) is { } inTheWay)
+                    return Bump(actor, $"{inTheWay.Name} is in the doorway");
+                return SwingDoor(actor, tile, DoorState.Closed);
+            case DoorState.Closed:
+                return SwingDoor(actor, tile, DoorState.Open);
+            default:
+                return Bump(actor, "the door is locked");
+        }
+    }
+
+    /// <summary>Opens or shuts a door. Working a door is motion as far as eyes are concerned.</summary>
+    private int SwingDoor(Actor actor, TilePos tile, DoorState state)
+    {
+        SetDoor(tile, state);
+        actor.LastMovedTick = CurrentTick;
+        EmitNoise(tile, DoorLoudness, NoiseKinds.Door, actor.Id);
+        return DoorTicks;
+    }
+
+    /// <summary>
+    /// Where a large body's move goes, and whether it's blocked. With <paramref name="allowShove"/>, a
+    /// straight step blocked only by one vehicle shoves that vehicle, if the body is strong enough and
+    /// the vehicle has room to move.
+    /// </summary>
+    private (TilePos Anchor, Direction Facing, string? Blocked, Vehicle? Shove) PlanLargeMove(Actor actor, Direction direction,
+        bool allowShove)
     {
         var (anchor, facing) = LargeMoveTarget(actor.Position, actor.Facing, direction);
-        bool turning = facing != actor.Facing;
+        int fromHeight = Terrain[actor.Position];
+        string? blocked = BodyBlockReason(actor, anchor, facing, fromHeight, ignoreSmallActors: false);
+        if (blocked is null)
+            return (anchor, facing, null, null);
+        if (!allowShove || facing != actor.Facing || actor.Species.Force < ShoveForce)
+            return (anchor, facing, blocked, null);
 
-        string? blocked = BodyBlockReason(actor, anchor, facing, Terrain[actor.Position], ignoreSmallActors: false);
+        // Is a single vehicle all that's in the way?
+        Vehicle? vehicle = null;
+        foreach (var tile in CoreTiles(actor.Species.Body.Footprint(anchor, Compass16.Of(facing))))
+        {
+            if (VehicleAt(tile) is not { } v)
+                continue;
+            if (vehicle is not null && v != vehicle)
+                return (anchor, facing, blocked, null);
+            vehicle = v;
+        }
+        if (vehicle is null || BodyBlockReason(actor, anchor, facing, fromHeight, ignoreSmallActors: false, vehicle) is not null)
+            return (anchor, facing, blocked, null);
+
+        var (dx, dy) = facing.Delta();
+        string? stuck = ShoveBlockReason(vehicle, dx, dy);
+        return stuck is null
+            ? (anchor, facing, null, vehicle)
+            : (anchor, facing, $"{vehicle.Name} won't budge: {stuck}", null);
+    }
+
+    private int TryMoveLarge(Actor actor, Direction direction, bool allowShove)
+    {
+        var (anchor, facing, blocked, shove) = PlanLargeMove(actor, direction, allowShove);
+        bool turning = facing != actor.Facing;
         if (blocked is not null)
             return Bump(actor, blocked);
+
+        int extra = 0;
+        if (shove is not null)
+        {
+            var (dx, dy) = facing.Delta();
+            ShoveVehicle(shove, dx, dy, actor);
+            extra += ShoveTicks;
+        }
 
         int oldDir16 = Compass16.Of(actor.Facing);
         int heightStep = Terrain[anchor] - Terrain[actor.Position];
@@ -379,8 +636,7 @@ public sealed class Simulation
         int smashed = 0;
         foreach (var tile in CoreTiles(actor.Body))
         {
-            var cover = Covers.Get(Cover[tile]);
-            if (cover.IsSmashedBy(actor.Species.Force))
+            if (Map.CoverAt(tile).IsSmashedBy(actor.Species.Force))
                 smashed++;
             TryBreak(tile, actor.Species.Force);
         }
@@ -408,26 +664,142 @@ public sealed class Simulation
         {
             if (!Map.InBounds(tile))
                 continue;
-            var cover = Covers.Get(Cover[tile]);
+            var cover = Map.CoverAt(tile);
             if (!cover.BlocksMovement && cover.BrokenInto is not null && cover.BreakStrength <= actor.Species.Force / 2)
                 TryBreak(tile, actor.Species.Force);
 
             if (ActorAt(tile) is { } victim && victim != actor && struck.Add(victim.Id))
             {
-                EmitNoise(tile, StrikeLoudness, "a heavy blow", actor.Id);
+                EmitNoise(tile, StrikeLoudness, NoiseKinds.HeavyBlow, actor.Id);
                 ActorStruck?.Invoke(actor, victim);
+                CryOut(victim);
             }
         }
 
-        var anchorCover = Covers.Get(Cover[anchor]);
-        EmitNoise(anchor, actor.Species.FootstepLoudness + anchorCover.NoiseModifier, "footsteps", actor.Id);
+        var anchorCover = Map.CoverAt(anchor);
+        EmitNoise(anchor, actor.Species.FootstepLoudness + anchorCover.NoiseModifier, NoiseKinds.Footsteps, actor.Id);
         if (smashed > 0)
-            EmitNoise(anchor, SmashLoudness, "crashing", actor.Id);
+            EmitNoise(anchor, SmashLoudness, NoiseKinds.Crashing, actor.Id);
 
         int cost = turning
             ? actor.Movement.TurnTicks
             : actor.Movement.CostTicks(heightStep, facing.IsDiagonal()) * anchorCover.MoveCostPercent / 100;
-        return cost + smashed * SmashTicks;
+        return cost + smashed * SmashTicks + extra;
+    }
+
+    /// <summary>
+    /// Moves a vehicle one tile, taking its occupants and mounted lights along, and puts back the
+    /// ground cover it was sitting on. Assumes ShoveBlockReason said yes.
+    /// </summary>
+    private void ShoveVehicle(Vehicle vehicle, int dx, int dy, Actor by)
+    {
+        var oldTiles = vehicle.Tiles.ToList();
+        var oldSet = new HashSet<TilePos>(oldTiles);
+        var occupants = _actors.Where(a => !a.IsLarge && oldSet.Contains(a.Position)).ToList();
+        foreach (var occupant in occupants)
+            Vacate(occupant);
+
+        var newUnder = new Dictionary<TilePos, CoverType>();
+        foreach (var tile in oldTiles)
+        {
+            var dest = new TilePos(tile.X + dx, tile.Y + dy);
+            newUnder[dest] = oldSet.Contains(dest) ? vehicle.Under[dest] : Cover[dest];
+        }
+        foreach (var tile in oldTiles)
+        {
+            Cover[tile] = vehicle.Under[tile];
+            _vehicleAt[tile.Y * Map.Width + tile.X] = 0;
+        }
+
+        vehicle.MoveBy(dx, dy, newUnder);
+        foreach (var tile in vehicle.Tiles)
+        {
+            Cover[tile] = CoverType.Vehicle;
+            _vehicleAt[tile.Y * Map.Width + tile.X] = vehicle.Id + 1;
+        }
+
+        foreach (var occupant in occupants)
+        {
+            occupant.Position = new TilePos(occupant.Position.X + dx, occupant.Position.Y + dy);
+            occupant.Body = occupant.Species.Body.Footprint(occupant.Position, Compass16.Of(occupant.Facing));
+            Occupy(occupant);
+        }
+
+        foreach (int index in vehicle.LightIndices)
+        {
+            var light = _lights[index];
+            _lights[index] = light with { Position = new TilePos(light.Position.X + dx, light.Position.Y + dy) };
+        }
+
+        _lightGrid = null;
+        EmitNoise(vehicle.Anchor, ShoveLoudness, NoiseKinds.MetalScrape, by.Id);
+        VehicleShoved?.Invoke(vehicle, by);
+        DamageVehicle(vehicle, ShoveDamage, by);
+    }
+
+    private void DamageVehicle(Vehicle vehicle, int amount, Actor by)
+    {
+        if (amount <= 0 || vehicle.Breached)
+            return;
+        vehicle.Integrity = Math.Max(0, vehicle.Integrity - amount);
+        VehicleDamaged?.Invoke(vehicle, by, amount);
+        if (vehicle.Breached)
+            EmitNoise(vehicle.Anchor, BreachLoudness, NoiseKinds.MetalTear, by.Id);
+    }
+
+    /// <summary>
+    /// Closes the jaws on the bite zone. Actors there are hit (and cry out if their species does),
+    /// except those inside a vehicle that hasn't been breached yet. Every vehicle in the zone loses
+    /// integrity. The result is kept on the biter for its AI to read.
+    /// </summary>
+    private int ResolveBite(Actor actor, bool investigative)
+    {
+        var zone = BiteZone(actor);
+        var hits = new List<BiteHit>();
+        var coverBitten = new List<TilePos>();
+        var vehiclesBitten = new List<Vehicle>();
+        var hitIds = new HashSet<int>();
+        string? coverSound = null;
+
+        foreach (var tile in zone)
+        {
+            var vehicle = VehicleAt(tile);
+            if (vehicle is not null && !vehiclesBitten.Contains(vehicle))
+                vehiclesBitten.Add(vehicle);
+
+            if (ActorAt(tile) is { } victim && victim != actor && hitIds.Add(victim.Id)
+                && vehicle is not { Breached: false })
+                hits.Add(new BiteHit(victim, tile));
+
+            if (Map.CoverAt(tile).BiteSound is { } sound)
+            {
+                coverBitten.Add(tile);
+                coverSound ??= sound;
+            }
+        }
+
+        EmitNoise(EyeTile(actor), JawsLoudness, NoiseKinds.Jaws, actor.Id);
+        if (coverSound is not null)
+            EmitNoise(coverBitten[0], BiteCoverLoudness, coverSound, actor.Id);
+
+        foreach (var hit in hits)
+        {
+            ActorBitten?.Invoke(actor, hit.Victim);
+            CryOut(hit.Victim);
+        }
+        foreach (var vehicle in vehiclesBitten)
+            DamageVehicle(vehicle, actor.Species.BiteDamage, actor);
+
+        var result = new BiteResult(CurrentTick, investigative, zone, hits, coverBitten, vehiclesBitten);
+        actor.LastBite = result;
+        Bit?.Invoke(actor, result);
+        return Math.Max(1, actor.Movement.BiteTicks);
+    }
+
+    private void CryOut(Actor victim)
+    {
+        if (victim.Species.ScreamLoudness > 0)
+            EmitNoise(victim.Position, victim.Species.ScreamLoudness, NoiseKinds.Scream, victim.Id);
     }
 
     private void TryBreak(TilePos tile, int force)
@@ -438,5 +810,74 @@ public sealed class Simulation
         Cover[tile] = into;
         CoverChanges++;
         _lightGrid = null;
+    }
+
+    /// <summary>
+    /// Turns each 4-connected patch of vehicle cover into a Vehicle, in reading order. The cover under
+    /// it is guessed from its neighbours (usually the track).
+    /// </summary>
+    private void FindVehicles()
+    {
+        int width = Map.Width, height = Map.Height;
+        var seen = new bool[width * height];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                var start = new TilePos(x, y);
+                if (seen[y * width + x] || Cover[start] != CoverType.Vehicle)
+                    continue;
+
+                var tiles = new List<TilePos>();
+                var queue = new Queue<TilePos>();
+                queue.Enqueue(start);
+                seen[y * width + x] = true;
+                while (queue.Count > 0)
+                {
+                    var p = queue.Dequeue();
+                    tiles.Add(p);
+                    foreach (var d in Directions.Cardinal)
+                    {
+                        var n = p.Offset(d);
+                        if (Map.InBounds(n) && !seen[n.Y * width + n.X] && Cover[n] == CoverType.Vehicle)
+                        {
+                            seen[n.Y * width + n.X] = true;
+                            queue.Enqueue(n);
+                        }
+                    }
+                }
+
+                var under = GuessUnder(tiles);
+                var vehicle = new Vehicle(_vehicles.Count, $"vehicle {_vehicles.Count + 1}", tiles,
+                    tiles.ToDictionary(t => t, _ => under));
+                _vehicles.Add(vehicle);
+                foreach (var t in tiles)
+                    _vehicleAt[t.Y * width + t.X] = vehicle.Id + 1;
+            }
+        }
+    }
+
+    /// <summary>The most common cover next to a patch of tiles (ties go to the lower CoverType); grass if none.</summary>
+    private CoverType GuessUnder(List<TilePos> tiles)
+    {
+        var set = new HashSet<TilePos>(tiles);
+        var counts = new int[Covers.All.Count];
+        foreach (var p in tiles)
+        {
+            foreach (var d in Directions.Cardinal)
+            {
+                var n = p.Offset(d);
+                if (Map.InBounds(n) && !set.Contains(n) && Cover[n] != CoverType.Vehicle)
+                    counts[(int)Cover[n]]++;
+            }
+        }
+
+        int best = 0;
+        for (int i = 1; i < counts.Length; i++)
+        {
+            if (counts[i] > counts[best])
+                best = i;
+        }
+        return counts[best] > 0 ? (CoverType)best : CoverType.Grass;
     }
 }

@@ -46,6 +46,9 @@ public sealed class Actor
     /// <summary>The tick at which this actor next gets a turn.</summary>
     public long NextActTick { get; internal set; }
 
+    /// <summary>Its most recent bite, or null if it has never bitten.</summary>
+    public BiteResult? LastBite { get; internal set; }
+
     /// <summary>Whether it stepped within the last <paramref name="windowTicks"/> ticks.</summary>
     public bool MovedRecently(long now, long windowTicks) => now - LastMovedTick <= windowTicks;
 }

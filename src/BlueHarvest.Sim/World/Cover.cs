@@ -25,13 +25,10 @@ public enum CoverType : byte
 /// <param name="SightHeightDm">How tall the cover stands. Sight lines below this pass through it.</param>
 /// <param name="SightOpacityPercent">How much of a sight line passing through it is blocked (100 = solid).</param>
 /// <param name="NoiseModifier">Added to footstep loudness when stepping onto it.</param>
-/// <param name="Indoor">
-/// Roofed. Until structure layers exist, sight and light don't pass between indoor and outdoor tiles,
-/// and sound passing between them is muffled.
-/// </param>
 /// <param name="BlocksLargeBodies">Stops multi-tile cores even though small actors pass (trunks, doorways, vehicles).</param>
 /// <param name="BreakStrength">Force needed to smash or trample it. Only matters with <paramref name="BrokenInto"/> set.</param>
 /// <param name="BrokenInto">What it becomes when smashed or trampled; null means it can't be broken.</param>
+/// <param name="BiteSound">Noise kind when jaws close on it (vehicles); null means a bite passes through it.</param>
 public sealed record CoverInfo(
     CoverType Type,
     char FileChar,
@@ -41,10 +38,10 @@ public sealed record CoverInfo(
     int SightHeightDm = 0,
     int SightOpacityPercent = 0,
     int NoiseModifier = 0,
-    bool Indoor = false,
     bool BlocksLargeBodies = false,
     int BreakStrength = 0,
-    CoverType? BrokenInto = null)
+    CoverType? BrokenInto = null,
+    string? BiteSound = null)
 {
     /// <summary>Whether a body of this force can't pass. Small bodies use BlocksMovement only.</summary>
     public bool StopsLargeBody(int force) =>
@@ -67,18 +64,25 @@ public static class Covers
         new CoverInfo(CoverType.DenseJungle, '&', "dense jungle", 180, false, SightHeightDm: 80, SightOpacityPercent: 45, NoiseModifier: 7,
             BlocksLargeBodies: true, BreakStrength: 90, BrokenInto: CoverType.SparseJungle),
         new CoverInfo(CoverType.Track, '=', "the track", 90, false, NoiseModifier: -2),
-        new CoverInfo(CoverType.Floor, '_', "a floor", 100, false, Indoor: true),
+        new CoverInfo(CoverType.Floor, '_', "a floor", 100, false),
         new CoverInfo(CoverType.Wall, '#', "a wall", 100, true, SightHeightDm: 30, SightOpacityPercent: 100),
         new CoverInfo(CoverType.Door, '+', "a doorway", 110, false, NoiseModifier: 2, BlocksLargeBodies: true),
         new CoverInfo(CoverType.Fence, 'F', "the electric fence", 100, true, SightHeightDm: 40, SightOpacityPercent: 10,
             BreakStrength: 70, BrokenInto: CoverType.BrokenFence),
         new CoverInfo(CoverType.Rock, 'r', "a boulder", 100, true, SightHeightDm: 20, SightOpacityPercent: 100),
         new CoverInfo(CoverType.Vehicle, 'V', "a vehicle", 150, false, SightHeightDm: 18, SightOpacityPercent: 60, NoiseModifier: 5,
-            BlocksLargeBodies: true),
+            BlocksLargeBodies: true, BiteSound: Perception.NoiseKinds.MetalCrunch),
         new CoverInfo(CoverType.BrokenFence, 'f', "a broken fence", 120, false, SightHeightDm: 10, SightOpacityPercent: 5, NoiseModifier: 3),
     };
 
     public static CoverInfo Get(CoverType type) => All[(int)type];
+
+    /// <summary>A doorway whose door is shut: like a wall, but humans can open it (WorldMap.CoverAt).</summary>
+    public static readonly CoverInfo ClosedDoor = new(CoverType.Door, '+', "a closed door", 100, true,
+        SightHeightDm: 30, SightOpacityPercent: 100, NoiseModifier: 2, BlocksLargeBodies: true);
+
+    /// <summary>A doorway whose door is locked: a wall until someone unlocks it.</summary>
+    public static readonly CoverInfo LockedDoor = ClosedDoor with { Name = "a locked door" };
 
     /// <summary>Cover for a map-file character, or null if none uses it.</summary>
     public static CoverInfo? FromFileChar(char c)
