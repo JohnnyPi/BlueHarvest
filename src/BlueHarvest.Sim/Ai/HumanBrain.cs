@@ -320,7 +320,7 @@ public sealed class HumanBrain : IActorController
     private ActorAction? FollowAction(Actor self, Simulation sim, StandingOrder order)
     {
         var leader = sim.Actors[order.FromActorId];
-        if (leader.IsDead)
+        if (leader.IsGone)
             return null;
         Mood = Mood.Following;
         int distance = Chebyshev(self.Position, leader.Position);
@@ -348,7 +348,7 @@ public sealed class HumanBrain : IActorController
                 continue;
             var ally = sim.Actors[contact.Key.Id];
             int distance = Chebyshev(self.Position, ally.Position);
-            if (ally.IsDead || ally.Health.BleedingWounds == 0 || distance > 12 || distance >= nearest)
+            if (ally.IsGone || ally.Health.BleedingWounds == 0 || distance > 12 || distance >= nearest)
                 continue;
             patient = ally;
             nearest = distance;

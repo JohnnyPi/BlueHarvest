@@ -55,6 +55,17 @@ public sealed class Actor
 
     public bool IsDead => Health.Dead;
 
+    /// <summary>The exit it left the map by, or null while it's still here.</summary>
+    public ExitPoint? EscapedVia { get; internal set; }
+
+    /// <summary>When it escaped, or null.</summary>
+    public long? EscapedTick { get; internal set; }
+
+    public bool HasEscaped => EscapedVia is not null;
+
+    /// <summary>Dead or escaped: off the map as far as everyone else is concerned (no turns, not perceived).</summary>
+    public bool IsGone => IsDead || HasEscaped;
+
     public Skills Skills { get; internal set; } = Skills.None;
 
     public Inventory Inventory { get; } = new();

@@ -17,6 +17,7 @@ public enum CoverType : byte
     BrokenFence,
     Support,
     Rubble,
+    WeakFence,
 }
 
 /// <summary>
@@ -82,6 +83,10 @@ public static class Covers
         new CoverInfo(CoverType.Support, '|', "a support post", 100, true, SightHeightDm: 60, SightOpacityPercent: 30,
             BlocksLargeBodies: true, BreakStrength: 60, BrokenInto: CoverType.Rubble),
         new CoverInfo(CoverType.Rubble, 'x', "rubble", 150, false, SightHeightDm: 5, SightOpacityPercent: 10, NoiseModifier: 4),
+        // A sagging, shorted section of fence: it gives under a large body like any fence, and a bite
+        // snaps it (strength 20 = the Rex's bite damage). Sparks markers on it crackle and flicker.
+        new CoverInfo(CoverType.WeakFence, 'w', "a sagging fence", 100, true, SightHeightDm: 40, SightOpacityPercent: 10,
+            BreakStrength: 20, BrokenInto: CoverType.BrokenFence, BiteSound: Perception.NoiseKinds.SnappingWire),
     };
 
     public static CoverInfo Get(CoverType type) => All[(int)type];

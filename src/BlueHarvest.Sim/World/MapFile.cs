@@ -10,6 +10,10 @@ public enum MarkerKind : byte
     Rex,
     Light,
     Headlight,
+    /// <summary>An escape hatch: reaching it ends the run as an escape. Its name says what it is ("culvert").</summary>
+    Exit,
+    /// <summary>A shorted fence tile that crackles and flickers until it's broken: it draws the Rex.</summary>
+    Sparks,
 }
 
 public sealed record MapMarker(MarkerKind Kind, TilePos Position, string? Name = null);
@@ -55,7 +59,7 @@ public sealed record MapData(
 /// 2 0 closed
 /// vehicles         (optional; 'x y integrity [name]' for the vehicle covering x y)
 /// 2 1 100 Jeep A
-/// markers          (kind x y [name]; kinds: player npc rex light headlight)
+/// markers          (kind x y [name]; kinds: player npc rex light headlight exit sparks)
 /// player 0 1 Survivor
 /// end
 /// </code>
@@ -444,6 +448,8 @@ public static class MapFile
         MarkerKind.Rex => "rex",
         MarkerKind.Light => "light",
         MarkerKind.Headlight => "headlight",
+        MarkerKind.Exit => "exit",
+        MarkerKind.Sparks => "sparks",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -454,6 +460,8 @@ public static class MapFile
         "rex" => MarkerKind.Rex,
         "light" => MarkerKind.Light,
         "headlight" => MarkerKind.Headlight,
+        "exit" => MarkerKind.Exit,
+        "sparks" => MarkerKind.Sparks,
         _ => null,
     };
 

@@ -81,7 +81,7 @@ public static class PerceptionSystem
         var seen = new List<SightContact>();
         foreach (var target in sim.Actors)
         {
-            if (target == observer || target.IsDead)
+            if (target == observer || target.IsGone)
                 continue;
             bool moving = target.MovedRecently(sim.CurrentTick, MotionWindowTicks);
             int score = SightScore(sim, observer, target.Position, sim.StandHeight(target), target.Species.BodyHeightDm, moving);

@@ -13,4 +13,7 @@ public enum StepResult
 
     /// <summary>An actor driven by a PlayerController has died: the run is over.</summary>
     PlayerDied,
+
+    /// <summary>An actor driven by a PlayerController has reached an exit: the run is over, survived.</summary>
+    PlayerEscaped,
 }

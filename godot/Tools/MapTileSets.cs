@@ -53,6 +53,7 @@ public static class MapTileSets
             new Color(0.60f, 0.52f, 0.20f),     // Broken fence
             new Color(0.62f, 0.45f, 0.28f),     // Support post
             new Color(0.48f, 0.44f, 0.40f),     // Rubble
+            new Color(0.55f, 0.75f, 1f),        // Sagging fence (sparks go on it)
         };
 
         int count = Covers.All.Count;
@@ -68,7 +69,7 @@ public static class MapTileSets
         return Build(image, count);
     }
 
-    /// <summary>One tile per marker kind: player, NPC, Rex, light, headlight.</summary>
+    /// <summary>One tile per marker kind: player, NPC, Rex, light, headlight, exit, sparks.</summary>
     public static TileSet Markers()
     {
         var looks = new (Color Color, char Label)[]
@@ -78,6 +79,8 @@ public static class MapTileSets
             (new Color(0.95f, 0.20f, 0.15f), 't'), // Rex
             (new Color(1f, 0.65f, 0.20f), '*'),  // Light
             (new Color(1f, 1f, 0.75f), '>'),     // Headlight: put it on a vehicle's front tile
+            (new Color(0.45f, 1f, 0.55f), 'E'),  // Exit: name it ("culvert") in Marker Names
+            (new Color(0.55f, 0.75f, 1f), 'z'),  // Sparks: on a sagging fence tile ('w')
         };
 
         var image = NewImage(looks.Length);

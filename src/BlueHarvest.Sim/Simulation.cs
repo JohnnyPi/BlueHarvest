@@ -78,6 +78,10 @@ public sealed class Simulation
     private readonly List<(int Light, long OffTick)> _lightExpiry = new();
     private readonly List<RopeSpot> _ropes = new();
     private bool _playerDied;
+    private bool _playerEscaped;
+    private readonly List<ExitPoint> _exits = new();
+    private readonly List<SparkingFence> _sparks = new();
+    private long _sparkTick = -1;
     private readonly Scheduler _scheduler = new();
     private readonly int[] _occupant; // actor id + 1 for each core tile, 0 if empty
     private readonly int[] _vehicleAt; // vehicle id + 1 for each vehicle tile, 0 if none
@@ -141,6 +145,15 @@ public sealed class Simulation
     /// <summary>Raised when an actor dies: (actor, cause). Its body stays where it fell.</summary>
     public event Action<Actor, string>? ActorDied;
 
+    /// <summary>Raised when someone steps onto an exit and leaves the map.</summary>
+    public event Action<Actor, ExitPoint>? ActorEscaped;
+
+    /// <summary>Raised when a sparking fence goes dead because its section was broken.</summary>
+    public event Action<SparkingFence>? SparksDied;
+
+    /// <summary>Raised when cover is smashed or bitten through: (tile, what it was, who did it).</summary>
+    public event Action<TilePos, CoverType, Actor?>? CoverBroken;
+
     /// <summary>Raised when a concussed actor blacks out for a few seconds.</summary>
     public event Action<Actor>? ActorBlackedOut;
 
@@ -194,6 +207,47 @@ public sealed class Simulation
 
     /// <summary>Ropes left tied where people rappelled down.</summary>
     public IReadOnlyList<RopeSpot> Ropes => _ropes;
+
+    /// <summary>The map's escape hatches.</summary>
+    public IReadOnlyList<ExitPoint> Exits => _exits;
+
+    /// <summary>Shorted fence sections, live or dead.</summary>
+    public IReadOnlyList<SparkingFence> Sparks => _sparks;
+
+    /// <summary>The exit on a tile, if there is one.</summary>
+    public ExitPoint? ExitAt(TilePos p)
+    {
+        foreach (var exit in _exits)
+        {
+            if (exit.Position == p)
+                return exit;
+        }
+        return null;
+    }
+
+    /// <summary>Adds an escape hatch (scenario setup).</summary>
+    public ExitPoint AddExit(TilePos position, string name)
+    {
+        if (!Map.InBounds(position))
+            throw new ArgumentOutOfRangeException(nameof(position), $"Exit {name} at {position} is off the map.");
+        var exit = new ExitPoint(position, name);
+        _exits.Add(exit);
+        return exit;
+    }
+
+    /// <summary>
+    /// Makes a sagging-fence tile spark: a low flickering light, and a crackle every 1.5 s, until the
+    /// section is broken (scenario setup). The tile must be a sagging fence ('w').
+    /// </summary>
+    public SparkingFence AddSparks(TilePos position)
+    {
+        if (!Map.InBounds(position) || Cover[position] != CoverType.WeakFence)
+            throw new ArgumentException($"Sparks at {position} need a sagging fence tile ('w').", nameof(position));
+        AddLight(new LightSource(position, HeightDm: 15, RadiusTiles: 3, IntensityPercent: 70));
+        var sparks = new SparkingFence(position, _lights.Count - 1);
+        _sparks.Add(sparks);
+        return sparks;
+    }
 
     /// <summary>Where bleeding actors have left blood, oldest first (what you see; what predators smell is in ScentMarks).</summary>
     public IReadOnlyList<BloodSpot> BloodSpots => _blood;
@@ -520,6 +574,54 @@ public sealed class Simulation
         return BodySection.Torso;
     }
 
+    /// <summary>Someone reached an exit: they leave the map (and their flashlight goes with them).</summary>
+    private void Escape(Actor actor, ExitPoint exit)
+    {
+        actor.EscapedVia = exit;
+        actor.EscapedTick = CurrentTick;
+        Vacate(actor);
+        if (actor.CarriedLight is { } light && _lights[light].On)
+            SetLightOn(light, false);
+        if (actor.Controller is PlayerController)
+            _playerEscaped = true;
+        ActorEscaped?.Invoke(actor, exit);
+    }
+
+    /// <summary>
+    /// Live sparks crackle once per 1.5 s window that time has passed into; sparks whose section has
+    /// been broken go dead (light off, silent).
+    /// </summary>
+    private void AdvanceSparks()
+    {
+        if (_sparks.Count == 0 || CurrentTick <= _sparkTick)
+            return;
+        long from = _sparkTick;
+        _sparkTick = CurrentTick;
+        bool crackle = from < 0 || CurrentTick / SparkingFence.CrackleTicks > from / SparkingFence.CrackleTicks;
+        CheckSparks();
+        if (!crackle)
+            return;
+        foreach (var sparks in _sparks)
+        {
+            if (sparks.Live)
+                EmitNoise(sparks.Position, SparkingFence.CrackleLoudness, NoiseKinds.Sparks);
+        }
+    }
+
+    /// <summary>Kills sparks whose tile is no longer a sagging fence.</summary>
+    private void CheckSparks()
+    {
+        foreach (var sparks in _sparks)
+        {
+            if (!sparks.Live || Cover[sparks.Position] == CoverType.WeakFence)
+                continue;
+            sparks.Live = false;
+            sparks.DiedTick = CurrentTick;
+            SetLightOn(sparks.LightIndex, false);
+            SparksDied?.Invoke(sparks);
+        }
+    }
+
     private void Kill(Actor actor, string cause)
     {
         if (actor.IsDead)
@@ -807,9 +909,10 @@ public sealed class Simulation
         CurrentTick = tick;
         ExpireLights();
         AdvanceWeather();
+        AdvanceSparks();
         var actor = _actors[id];
         UpdateHealth(actor);
-        if (actor.IsDead)
+        if (actor.IsGone)
         {
             _scheduler.TryDequeue(out _, out _);
             return StepResult.Acted;
@@ -829,6 +932,8 @@ public sealed class Simulation
 
         _scheduler.TryDequeue(out _, out _);
         int cost = Resolve(actor, action);
+        if (!actor.IsLarge && !actor.IsGone && !actor.OnDeck && ExitAt(actor.Position) is { } exit)
+            Escape(actor, exit);
         actor.NextActTick = tick + cost;
         _scheduler.Schedule(id, actor.NextActTick);
         ActionsResolved++;
@@ -840,7 +945,7 @@ public sealed class Simulation
     {
         while (_scheduler.TryPeek(out id, out tick))
         {
-            if (!_actors[id].IsDead)
+            if (!_actors[id].IsGone)
                 return true;
             _scheduler.TryDequeue(out _, out _);
         }
@@ -859,6 +964,7 @@ public sealed class Simulation
             CurrentTick = tick;
         ExpireLights();
         AdvanceWeather();
+        AdvanceSparks();
     }
 
     /// <summary>
@@ -871,6 +977,8 @@ public sealed class Simulation
         {
             if (_playerDied)
                 return StepResult.PlayerDied;
+            if (_playerEscaped)
+                return StepResult.PlayerEscaped;
             var result = Step();
             if (result != StepResult.Acted)
                 return result;
@@ -907,6 +1015,10 @@ public sealed class Simulation
         foreach (var light in _lights)
             hasher.Add(light.Position.X).Add(light.Position.Y).Add(light.On ? 1 : 0);
         Weather.AddTo(hasher);
+        foreach (var actor in _actors)
+            hasher.Add(actor.EscapedTick ?? -1);
+        foreach (var sparks in _sparks)
+            hasher.Add(sparks.Live ? 1 : 0);
         hasher.Add(_scent.Count).Add(_vibrations.Count);
         if (_scent.Count > 0)
             hasher.Add(_scent[^1].Tick).Add(_scent[^1].Position.X).Add(_scent[^1].Position.Y);
@@ -1161,6 +1273,8 @@ public sealed class Simulation
             patient = _actors[id];
             if (patient.IsDead)
                 return Bump(actor, $"{patient.Name} is beyond help");
+            if (patient.HasEscaped)
+                return Bump(actor, $"{patient.Name} is gone");
             if (Chebyshev(actor.Position, patient.Position) > 1 || patient.OnDeck != actor.OnDeck)
                 return Bump(actor, $"{patient.Name} is out of reach");
         }
@@ -1204,7 +1318,7 @@ public sealed class Simulation
         if (targetId < 0 || targetId >= _actors.Count || targetId == actor.Id)
             return Bump(actor, "nobody to tell");
         var target = _actors[targetId];
-        if (target.IsDead)
+        if (target.IsGone)
             return Bump(actor, $"{target.Name} can't hear you");
         if (Chebyshev(actor.Position, target.Position) > OrderRange)
             return Bump(actor, $"{target.Name} is too far away to hear you");
@@ -1397,7 +1511,7 @@ public sealed class Simulation
     {
         var oldTiles = vehicle.Tiles.ToList();
         var oldSet = new HashSet<TilePos>(oldTiles);
-        var occupants = _actors.Where(a => !a.IsLarge && !a.OnDeck && !a.IsDead && oldSet.Contains(a.Position)).ToList();
+        var occupants = _actors.Where(a => !a.IsLarge && !a.OnDeck && !a.IsGone && oldSet.Contains(a.Position)).ToList();
         foreach (var occupant in occupants)
             Vacate(occupant);
 
@@ -1488,6 +1602,9 @@ public sealed class Simulation
         EmitNoise(EyeTile(actor), JawsLoudness, NoiseKinds.Jaws, actor.Id);
         if (coverSound is not null)
             EmitNoise(coverBitten[0], BiteCoverLoudness, coverSound, actor.Id);
+        // Jaws snap what's weak enough (a sagging fence); vehicles take damage instead (below).
+        foreach (var tile in coverBitten)
+            TryBreak(tile, actor.Species.BiteDamage, actor);
 
         foreach (var hit in hits)
         {
@@ -1525,8 +1642,11 @@ public sealed class Simulation
         Cover[tile] = into;
         CoverChanges++;
         _lightGrid = null;
+        CoverBroken?.Invoke(tile, type, by);
         if (type == CoverType.Support && PlatformAt(tile) is { Collapsed: false } platform)
             CheckCollapse(platform, by);
+        if (type == CoverType.WeakFence)
+            CheckSparks();
     }
 
     /// <summary>A platform with fewer than half its support posts left standing comes down.</summary>

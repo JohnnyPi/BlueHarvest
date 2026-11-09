@@ -30,7 +30,8 @@ public class TestbedTests
     public void ActorsStartOnPassableTiles()
     {
         var data = MapFile.Parse(Text);
-        foreach (var marker in data.Markers.Where(m => m.Kind != MarkerKind.Light))
+        // Lights can sit anywhere, and sparks belong on a fence.
+        foreach (var marker in data.Markers.Where(m => m.Kind is not (MarkerKind.Light or MarkerKind.Sparks)))
         {
             var cover = Covers.Get(data.Map.Cover[marker.Position]);
             Assert.False(cover.BlocksMovement, $"{marker.Kind} at {marker.Position} starts on {cover.Name}.");
@@ -78,7 +79,8 @@ public class TestbedTests
     {
         var data = MapFile.Parse(Text);
         var sim = ScenarioBuilder.Build(data, seed: 1);
-        int lightMarkers = data.Markers.Count(m => m.Kind is MarkerKind.Light or MarkerKind.Headlight);
+        // Sparks bring a flickering light of their own.
+        int lightMarkers = data.Markers.Count(m => m.Kind is MarkerKind.Light or MarkerKind.Headlight or MarkerKind.Sparks);
 
         Assert.Equal(lightMarkers, sim.Lights.Count);
         Assert.Equal(data.AmbientLight, sim.AmbientLightPercent);

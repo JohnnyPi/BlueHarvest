@@ -94,6 +94,10 @@ public partial class AsciiMapView : Node2D
     private static readonly Color FlareInk = new(1f, 0.35f, 0.25f);
     private static readonly Color CursorColor = new(1f, 0.9f, 0.3f, 0.85f);
     private static readonly Color VibrationRing = new(0.80f, 0.55f, 0.30f, 0.65f);
+    private static readonly Color SparkInk = new(0.85f, 0.95f, 1f);
+    private static readonly Color SparkDim = new(0.45f, 0.65f, 1f, 0.8f);
+    private static readonly Color ExitInk = new(0.45f, 1f, 0.55f);
+    private static readonly Color ExitBacking = new(0.05f, 0.35f, 0.12f, 0.85f);
 
     /// <summary>Background, glyph and glyph color per cover type, indexed by CoverType.</summary>
     private static readonly (Color Background, char Glyph, Color Ink)[] CoverLook =
@@ -112,6 +116,7 @@ public partial class AsciiMapView : Node2D
         (new Color(0.18f, 0.22f, 0.12f), '%', new Color(0.70f, 0.60f, 0.20f)),        // Broken fence
         (new Color(0.30f, 0.22f, 0.14f), '|', new Color(0.85f, 0.65f, 0.40f)),        // Support post
         (new Color(0.26f, 0.24f, 0.22f), ':', new Color(0.65f, 0.60f, 0.55f, 0.7f)),  // Rubble
+        (new Color(0.16f, 0.22f, 0.12f), '#', new Color(0.55f, 0.75f, 1f)),           // Sagging fence
     };
 
     private Simulation? _sim;
@@ -334,6 +339,23 @@ public partial class AsciiMapView : Node2D
                 DrawGlyph('*', light.Position.X, light.Position.Y, FlareInk, baseline);
         }
 
+        // A sparking fence section flickers between a bright and a dim crackle while it's live.
+        foreach (var sparks in _sim.Sparks)
+        {
+            if (!sparks.Live)
+                continue;
+            bool bright = (_sim.CurrentTick / 30 + sparks.Position.X) % 2 == 0;
+            DrawGlyph(bright ? '*' : '+', sparks.Position.X, sparks.Position.Y, bright ? SparkInk : SparkDim, baseline);
+        }
+
+        // Exits: green hatches, always shown (the survivor knows the park).
+        foreach (var exit in _sim.Exits)
+        {
+            var p = exit.Position;
+            DrawRect(new Rect2(p.X * CellSize + 1, p.Y * CellSize + 1, CellSize - 2, CellSize - 2), ExitBacking);
+            DrawGlyph('>', p.X, p.Y, ExitInk, baseline);
+        }
+
         // Aiming: the thrower's range and the cursor.
         if (o.Cursor is { } cursor)
         {
@@ -357,6 +379,8 @@ public partial class AsciiMapView : Node2D
                     DrawLargeBody(actor, baseline);
                     continue;
                 }
+                if (actor.HasEscaped)
+                    continue;
                 var p = actor.Position;
                 if (actor.IsDead)
                 {

@@ -14,6 +14,7 @@ public static class ScenarioBuilder
     /// a HumanBrain, with traits and kit from the NpcRoster by name. Vehicles get their names and
     /// integrity from the map; headlights on them are mounted and move with them. People whose marker
     /// is on a deck tile start on the deck. The player gets the testbed survivor's skills and kit.
+    /// Exit markers become escape hatches; sparks markers make their sagging-fence tile crackle.
     /// </summary>
     public static Simulation Build(MapData data, ulong seed, IActorController? player = null)
     {
@@ -67,6 +68,14 @@ public static class ScenarioBuilder
                     sim.AddLight(facing is { } f
                         ? LightSource.Headlight(marker.Position, f)
                         : new LightSource(marker.Position, HeightDm: 10, RadiusTiles: 4, IntensityPercent: 50));
+                    break;
+
+                case MarkerKind.Exit:
+                    sim.AddExit(marker.Position, string.IsNullOrWhiteSpace(marker.Name) ? "an exit" : marker.Name.Trim());
+                    break;
+
+                case MarkerKind.Sparks:
+                    sim.AddSparks(marker.Position);
                     break;
             }
         }

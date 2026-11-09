@@ -102,6 +102,8 @@ public partial class Main : Node2D
         _sim.ActorScreamed += OnActorScreamed;
         _sim.OrderGiven += OnOrderGiven;
         _sim.LightningStruck += OnLightningStruck;
+        _sim.ActorEscaped += OnActorEscaped;
+        _sim.SparksDied += OnSparksDied;
 
         _map = new AsciiMapView();
         _map.Bind(_sim, font, MovementProfile.Human.MaxStepUpDm);
@@ -138,7 +140,7 @@ public partial class Main : Node2D
         _sim.RunUntilInputNeeded();
         _director.Update(_sim, _playerActor);
         Refresh(snapCamera: true);
-        ShowDeathIfDead();
+        ShowEndScreen();
     }
 
     /// <summary>Fades out the lightning flash.</summary>
@@ -155,7 +157,7 @@ public partial class Main : Node2D
         if (@event is not InputEventKey { Pressed: true } key)
             return;
 
-        if (_playerActor.IsDead)
+        if (_playerActor.IsGone)
         {
             if (key.Keycode == Key.R && !key.Echo)
             {
@@ -211,7 +213,7 @@ public partial class Main : Node2D
         _sim.RunUntilInputNeeded();
         _director.Update(_sim, _playerActor);
         Refresh(snapCamera: false);
-        ShowDeathIfDead();
+        ShowEndScreen();
     }
 
     /// <summary>
@@ -321,7 +323,7 @@ public partial class Main : Node2D
     {
         var at = _playerActor.Position;
         return _sim.Actors
-            .Where(a => a != _playerActor && !a.IsDead && a.Controller is HumanBrain)
+            .Where(a => a != _playerActor && !a.IsGone && a.Controller is HumanBrain)
             .Select(a => (Actor: a, Distance: Math.Max(Math.Abs(a.Position.X - at.X), Math.Abs(a.Position.Y - at.Y))))
             .Where(x => x.Distance <= Simulation.OrderRange)
             .OrderBy(x => x.Distance)
@@ -660,10 +662,16 @@ public partial class Main : Node2D
         layer.AddChild(_deathScreen);
     }
 
-    private void ShowDeathIfDead()
+    /// <summary>When the run is over, by death or by escape, shows how it ended.</summary>
+    private void ShowEndScreen()
     {
-        if (!_playerActor.IsDead || _deathScreen.Visible)
+        if (!_playerActor.IsGone || _deathScreen.Visible)
             return;
+        if (_playerActor.HasEscaped)
+        {
+            ShowEscapeScreen();
+            return;
+        }
         var health = _playerActor.Health;
         var wounds = Enum.GetValues<BodySection>()
             .Where(s => health[s].Severity != Severity.Green)
@@ -677,6 +685,53 @@ public partial class Main : Node2D
             (wounds.Count > 0 ? string.Join("   ", wounds) + "\n\n" : "") +
             "Press R to try again";
         _deathScreen.Visible = true;
+    }
+
+    private void ShowEscapeScreen()
+    {
+        var health = _playerActor.Health;
+        var wounds = Enum.GetValues<BodySection>()
+            .Where(s => health[s].Severity != Severity.Green)
+            .Select(s => $"{InjuryRules.Name(s)}: {health[s].Severity.ToString().ToLowerInvariant()}")
+            .ToList();
+        var others = _sim.Actors.Where(a => a != _playerActor && a.Controller is HumanBrain).ToList();
+        string people = others.Count == 0 ? "" :
+            string.Join("   ", others.Select(a => a.IsDead ? $"{a.Name}: dead" : a.HasEscaped ? $"{a.Name}: got out" : $"{a.Name}: still out there")) + "\n\n";
+        _deathText.AddThemeColorOverride("font_color", new Color(0.75f, 1f, 0.8f));
+        _deathText.Text =
+            "YOU ESCAPED\n\n" +
+            $"through the {_playerActor.EscapedVia!.Name}\n" +
+            $"after {Ticks.Format(_playerActor.EscapedTick ?? _sim.CurrentTick)} on the island\n\n" +
+            (wounds.Count > 0 ? string.Join("   ", wounds) + "\n\n" : "no wounds\n\n") +
+            people +
+            "Press R to play again";
+        _deathScreen.Visible = true;
+    }
+
+    private void OnActorEscaped(Actor actor, ExitPoint exit)
+    {
+        if (actor != _playerActor)
+            _message = $"{actor.Name} got out through the {exit.Name}.";
+    }
+
+    private void OnSparksDied(SparkingFence sparks)
+    {
+        _message = "The sagging fence snaps with a shower of sparks. Something is coming through.";
+    }
+
+    /// <summary>Where the exits are from here: straight-line distance and compass direction.</summary>
+    private string ExitsLine()
+    {
+        if (_sim.Exits.Count == 0)
+            return "No exits on this map.";
+        var here = _playerActor.Position;
+        var parts = _sim.Exits
+            .Select(e => (Exit: e, Distance: (int)Math.Sqrt((e.Position.X - here.X) * (e.Position.X - here.X)
+                + (e.Position.Y - here.Y) * (e.Position.Y - here.Y))))
+            .OrderBy(x => x.Distance)
+            .Select(x => x.Distance == 0 ? $"{x.Exit.Name} (here)"
+                : $"{x.Exit.Name} {x.Distance} {Directions.FromDelta(x.Exit.Position.X - here.X, x.Exit.Position.Y - here.Y).Compass()}");
+        return "Exits: " + string.Join(" · ", parts);
     }
 
     private static string Tint(Severity severity) => severity switch
@@ -734,6 +789,7 @@ public partial class Main : Node2D
             HearingLine(playerPercepts) + "\n" +
             FeelLine(playerPercepts) + "\n" +
             WeatherLine() + "\n" +
+            ExitsLine() + "\n" +
             $"{_message}\n" +
             Controls;
     }
@@ -856,7 +912,9 @@ public partial class Main : Node2D
     {
         var people = _sim.Actors
             .Where(a => a != _playerActor && a.Controller is HumanBrain)
-            .Select(a => a.IsDead ? $"{a.Name}: dead" : $"{a.Name}: {((HumanBrain)a.Controller).Describe()}")
+            .Select(a => a.IsDead ? $"{a.Name}: dead"
+                : a.HasEscaped ? $"{a.Name}: got out by the {a.EscapedVia!.Name}"
+                : $"{a.Name}: {((HumanBrain)a.Controller).Describe()}")
             .ToList();
         return people.Count == 0 ? "Nobody else here." : "People: " + string.Join("   ", people);
     }
