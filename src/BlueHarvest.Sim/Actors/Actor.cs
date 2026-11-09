@@ -55,6 +55,9 @@ public sealed class Actor
 
     public bool IsDead => Health.Dead;
 
+    /// <summary>Whether its last step was at a charge (large bodies).</summary>
+    public bool Charging { get; internal set; }
+
     /// <summary>The exit it left the map by, or null while it's still here.</summary>
     public ExitPoint? EscapedVia { get; internal set; }
 

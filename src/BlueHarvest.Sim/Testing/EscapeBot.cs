@@ -1,5 +1,6 @@
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Navigation;
+using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 
 namespace BlueHarvest.Sim.Testing;
@@ -19,7 +20,10 @@ public enum EscapePlan : byte
     /// <summary>Through the gate to the ledge, rope down the retaining wall, out through the culvert.</summary>
     RappelToCulvert,
 
-    /// <summary>Throw a flare away from the route to draw the Rex, then walk (quietly) to the jungle trail.</summary>
+    /// <summary>
+    /// Wait until the Rex isn't looking, throw a flare away from the route, keep still while the Rex
+    /// turns to the light, then run for the jungle trail.
+    /// </summary>
     FlareThenJungle,
 
     /// <summary>Up the watchtower ladder, 6 m up (above the Rex's reach until it knocks the tower down), and wait.</summary>
@@ -66,7 +70,8 @@ public static class EscapePlans
 /// <summary>
 /// A scripted player for batch runs: follows one escape plan without thinking. It uses the map's
 /// layout directly (where the exits, the ledge and the ladder are), as a player who knows the
-/// testbed would; for the flare plan it also reads where the Rex is, to know when to throw again.
+/// testbed would; for the flare plan it also reads where the Rex is and whether it could see the
+/// bot, to know when to throw (throwing in its view gives you away).
 /// It patches up a bleeding wound when it has a kit. It never perceives or panics: the point is to
 /// measure each option, not the bot.
 /// </summary>
@@ -76,17 +81,40 @@ public sealed class EscapeBot : IActorController
     public const int FlareRethrowTiles = 15;
     public const int FlareRethrowTicks = 1_000;
 
+    /// <summary>Before the first flare it keeps still while the Rex can see it, for up to this long; then throws anyway.</summary>
+    public const int FlareHoldTicks = 1_000;
+
+    /// <summary>After the first flare it keeps still this long, while the Rex turns to the light, before it runs.</summary>
+    public const int FlareSettleTicks = 300;
+
     private const int MaxTreatTries = 3;
 
+    /// <summary>If the fence never breaks, it sets off anyway after this long.</summary>
+    public const int MaxWaitTicks = 3_000;
+
     private readonly EscapePlan _plan;
+    private readonly int _reactionTicks;
+    private bool _started;
     private GoToController? _goTo;
     private TilePos _goTarget;
     private bool _rappelled;
     private int _rappelTries;
     private int _treatTries;
     private long _lastThrowTick = long.MinValue / 2;
+    private int _throws;
 
-    public EscapeBot(EscapePlan plan) => _plan = plan;
+    /// <param name="reactionTicks">
+    /// How long after the fence breaks it sets off (on a map with a large creature): the survivors
+    /// don't know it's coming until it does. With no large creature on the map it goes at once.
+    /// </param>
+    public EscapeBot(EscapePlan plan, int reactionTicks = 0)
+    {
+        _plan = plan;
+        _reactionTicks = Math.Max(0, reactionTicks);
+    }
+
+    /// <summary>When it set off, or null while it's still waiting for the breach.</summary>
+    public long? StartedTick { get; private set; }
 
     public EscapePlan Plan => _plan;
 
@@ -103,13 +131,26 @@ public sealed class EscapeBot : IActorController
             return new TreatAction();
         }
 
+        if (!_started)
+        {
+            bool loose = sim.FenceBreachTick is { } breach && sim.CurrentTick >= breach + _reactionTicks;
+            bool noMonster = !sim.Actors.Any(a => a.IsLarge && !a.IsGone);
+            if (!loose && !noMonster && sim.CurrentTick < MaxWaitTicks)
+            {
+                Status = sim.FenceBreachTick is null ? "waiting in the vehicle" : "reacting to the breach";
+                return new WaitAction(Math.Min(50, self.Movement.StepTicks));
+            }
+            _started = true;
+            StartedTick = sim.CurrentTick;
+        }
+
         return _plan switch
         {
             EscapePlan.StayInVehicle => Hold("keeping still in the vehicle"),
             EscapePlan.RunToJungle => ToExit(self, sim, EscapePlans.JungleExit, sprint: true),
             EscapePlan.RunToBuilding => ToExit(self, sim, EscapePlans.BuildingExit, sprint: true),
             EscapePlan.RappelToCulvert => Rappel(self, sim),
-            EscapePlan.FlareThenJungle => Flare(self, sim) ?? ToExit(self, sim, EscapePlans.JungleExit, sprint: false),
+            EscapePlan.FlareThenJungle => Flare(self, sim) ?? ToExit(self, sim, EscapePlans.JungleExit, sprint: true),
             EscapePlan.ClimbWatchtower => Tower(self, sim),
             _ => Hold("waiting"),
         };
@@ -204,27 +245,49 @@ public sealed class EscapeBot : IActorController
     }
 
     /// <summary>
-    /// Throws a flare when it's time: the first turn, then again whenever the Rex comes within
-    /// 15 tiles, at most every 10 s, while flares last. Null when it isn't time.
+    /// The flare plan's next move, or null to get on with running. The first flare goes as soon as
+    /// the Rex can't see the bot (or after <see cref="FlareHoldTicks"/> anyway); then it keeps still
+    /// for <see cref="FlareSettleTicks"/> while the Rex turns to the light. Later flares go whenever
+    /// the Rex comes within 15 tiles, at most every 10 s, while flares last, but never in its view:
+    /// then it's too late, and it keeps running.
     /// </summary>
     private ActorAction? Flare(Actor self, Simulation sim)
     {
+        if (_throws == 1 && sim.CurrentTick - _lastThrowTick < FlareSettleTicks)
+            return Hold("keeping still while the Rex turns to the flare");
         if (!self.Inventory.Has(ItemKind.Flare) || sim.CurrentTick - _lastThrowTick < FlareRethrowTicks)
             return null;
-        bool first = _lastThrowTick < 0;
+        int range = GearRules.ThrowRange(self.Skills.Throwing, self.Health);
+        if (range <= 0)
+            return null;
+        bool first = _throws == 0;
         var rex = sim.Actors.FirstOrDefault(a => a.IsLarge && !a.IsGone);
         bool close = rex is not null
             && Math.Max(Math.Abs(rex.Position.X - self.Position.X), Math.Abs(rex.Position.Y - self.Position.Y)) <= FlareRethrowTiles;
         if (!first && !close)
             return null;
+        if (rex is not null && SeenBy(sim, rex, self))
+        {
+            if (!first)
+                return null;
+            if (sim.CurrentTick - (StartedTick ?? sim.CurrentTick) < FlareHoldTicks)
+                return Hold("keeping still until the Rex looks away");
+        }
         var exit = sim.Exits.FirstOrDefault(e => e.Name == EscapePlans.JungleExit);
-        int range = GearRules.ThrowRange(self.Skills.Throwing, self.Health);
-        if (range <= 0)
-            return null;
         _lastThrowTick = sim.CurrentTick;
+        _throws++;
         Status = "throwing a flare away from the route";
         return new ThrowAction(ItemKind.Flare, LureTarget(sim, self.Position, exit?.Position ?? self.Position, range));
     }
+
+    /// <summary>
+    /// Whether <paramref name="watcher"/> would notice <paramref name="target"/> moving where it stands:
+    /// the same sight check the creature's own perception makes, counting the target as moving
+    /// (throwing is movement).
+    /// </summary>
+    public static bool SeenBy(Simulation sim, Actor watcher, Actor target) =>
+        PerceptionSystem.SightScore(sim, watcher, target.Position, sim.StandHeight(target), target.Species.BodyHeightDm, moving: true)
+            >= sim.SensesOf(watcher).DetectThreshold;
 
     /// <summary>The spot at full throwing range, in whichever of the 8 directions lands farthest from the exit.</summary>
     public static TilePos LureTarget(Simulation sim, TilePos from, TilePos exit, int range)

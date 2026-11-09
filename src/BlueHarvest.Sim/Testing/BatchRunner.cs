@@ -1,5 +1,6 @@
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Ai;
+using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.Scenarios;
 using BlueHarvest.Sim.World;
 
@@ -24,6 +25,8 @@ public enum RunOutcome : byte
 /// <param name="EndTick">When it escaped or died; the time limit otherwise.</param>
 /// <param name="BreachTick">When the Rex first broke a fence tile (the sagging section or any other), if it did.</param>
 /// <param name="HuntedTick">When the Rex first made the player its focus as prey, if it did.</param>
+/// <param name="StartedTick">When the scripted player set off (after the breach and its reaction time).</param>
+/// <param name="CaughtByCharge">Died within 3 s of the Rex charging: it ran them down.</param>
 public sealed record RunResult(
     EscapePlan Plan,
     bool WithNpcs,
@@ -36,7 +39,10 @@ public sealed record RunResult(
     long? HuntedTick,
     int Npcs,
     int NpcsDied,
-    int NpcsEscaped)
+    int NpcsEscaped,
+    long? StartedTick = null,
+    bool CaughtByCharge = false,
+    int ReactionTicks = 0)
 {
     /// <summary>Escaped through an exit, or safe when time ran out: the option worked.</summary>
     public bool GotAway => Outcome is RunOutcome.Escaped or RunOutcome.SafeAtEnd;
@@ -53,16 +59,47 @@ public sealed record BatchSettings(string MapName, string WeatherDescription, in
 /// </summary>
 public static class BatchRunner
 {
+    /// <summary>How far the Rex's start moves either way, per seed.</summary>
+    public const int RexJitterX = 2, RexJitterY = 1;
+
+    /// <summary>A death this soon after the Rex charged counts as being run down.</summary>
+    public const int RunDownTicks = 300;
+
+    /// <summary>The longest the survivor takes to react to the breach, per seed.</summary>
+    public const int MaxReactionTicks = 1_000;
+
+    /// <summary>What a seed varies before the run starts: the Rex's start and the survivor's reaction time.</summary>
+    public readonly record struct Variation(int RexDx, int RexDy, Direction RexFacing, int ReactionTicks);
+
+    /// <summary>The variation for a seed: the same for every plan, so plans are compared on the same starts.</summary>
+    public static Variation VariationFor(ulong seed)
+    {
+        var rng = new Rng(seed).Fork("batch");
+        int dx = rng.NextInt(-RexJitterX, RexJitterX + 1);
+        int dy = rng.NextInt(-RexJitterY, RexJitterY + 1);
+        var facing = new[] { Direction.South, Direction.SouthEast, Direction.SouthWest }[rng.NextInt(3)];
+        return new Variation(dx, dy, facing, rng.NextInt(0, MaxReactionTicks + 1));
+    }
+
     /// <summary>Plays one run to an escape, a death, or the time limit.</summary>
+    /// <param name="vary">Apply the seed's variation (Rex start, reaction time). Off for tests that need the map as drawn.</param>
     public static RunResult RunOnce(string mapText, EscapePlan plan, bool withNpcs, ulong seed, long maxTicks,
-        WeatherSettings? weather = null)
+        WeatherSettings? weather = null, bool vary = true)
     {
         var data = MapFile.Parse(mapText);
         if (!withNpcs)
             data = data with { Markers = data.Markers.Where(m => m.Kind != MarkerKind.Npc).ToList() };
 
-        var bot = new EscapeBot(plan);
-        var sim = ScenarioBuilder.Build(data, seed, bot);
+        var variation = vary ? VariationFor(seed) : new Variation(0, 0, Direction.South, 0);
+        data = data with
+        {
+            Markers = data.Markers.Select(m => m.Kind == MarkerKind.Rex
+                ? m with { Position = new TilePos(m.Position.X + variation.RexDx, m.Position.Y + variation.RexDy) }
+                : m).ToList(),
+        };
+
+        var bot = new EscapeBot(plan, variation.ReactionTicks);
+        var sim = ScenarioBuilder.Build(data, seed, bot, variation.RexFacing);
         if (weather is not null)
             sim.SetWeather(weather);
 
@@ -71,10 +108,17 @@ public static class BatchRunner
         var brain = rex?.Controller as CreatureBrain;
         var npcs = sim.Actors.Where(a => a.Controller is HumanBrain).ToList();
         long? breach = null, hunted = null;
+        long lastCharge = long.MinValue / 2;
+        bool caughtByCharge = false;
         sim.CoverBroken += (_, type, by) =>
         {
             if (by is not null && by == rex && type is CoverType.Fence or CoverType.WeakFence)
                 breach ??= sim.CurrentTick;
+        };
+        sim.ActorDied += (who, _) =>
+        {
+            if (who == player)
+                caughtByCharge = sim.CurrentTick - lastCharge <= RunDownTicks;
         };
 
         var playerKey = ContactKey.ForActor(player.Id);
@@ -82,6 +126,8 @@ public static class BatchRunner
         {
             if (sim.Step() == StepResult.Idle)
                 break;
+            if (rex is { Charging: true })
+                lastCharge = sim.CurrentTick;
             if (hunted is null && brain?.Focus is { Class: ContactClass.Prey } focus && focus.Key == playerKey)
                 hunted = sim.CurrentTick;
         }
@@ -108,7 +154,8 @@ public static class BatchRunner
 
         return new RunResult(plan, withNpcs, seed, outcome, end, player.EscapedVia?.Name,
             player.IsDead ? player.Health.DeathCause : null, breach, hunted,
-            npcs.Count, npcs.Count(n => n.IsDead), npcs.Count(n => n.HasEscaped));
+            npcs.Count, npcs.Count(n => n.IsDead), npcs.Count(n => n.HasEscaped),
+            bot.StartedTick, outcome == RunOutcome.Died && caughtByCharge, variation.ReactionTicks);
     }
 
     /// <summary>

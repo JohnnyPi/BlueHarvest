@@ -16,7 +16,8 @@ public static class ScenarioBuilder
     /// is on a deck tile start on the deck. The player gets the testbed survivor's skills and kit.
     /// Exit markers become escape hatches; sparks markers make their sagging-fence tile crackle.
     /// </summary>
-    public static Simulation Build(MapData data, ulong seed, IActorController? player = null)
+    /// <param name="rexFacing">Which way the Rex starts facing (south if left out).</param>
+    public static Simulation Build(MapData data, ulong seed, IActorController? player = null, Direction? rexFacing = null)
     {
         var sim = new Simulation(data.Map, seed) { AmbientLightPercent = data.AmbientLight };
         sim.SetWeather(data.StartingWeather);
@@ -56,7 +57,8 @@ public static class ScenarioBuilder
                     break;
 
                 case MarkerKind.Rex:
-                    sim.AddActor(marker.Name ?? "Rex", 'T', marker.Position, Species.Rex, new CreatureBrain(AiProfile.Rex, ai));
+                    sim.AddActor(marker.Name ?? "Rex", 'T', marker.Position, Species.Rex, new CreatureBrain(AiProfile.Rex, ai),
+                        rexFacing ?? Direction.South);
                     break;
 
                 case MarkerKind.Light:

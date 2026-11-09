@@ -111,7 +111,7 @@ public sealed class CreatureBrain : IActorController
             Activity.Biting when focus.Class == ContactClass.Prey => $"biting at {what}",
             Activity.Biting => $"test-biting {what} at {focus.Estimate}",
             Activity.Smashing => $"smashing the supports under {what} ({focus.Cue}, confidence {confidence})",
-            Activity.Hunting => $"hunting {what} at {focus.Estimate} ({focus.Cue}, confidence {confidence})",
+            Activity.Hunting => $"{(sim.Actors.Any(a => a.Controller == this && a.Charging) ? "CHARGING" : "hunting")} {what} at {focus.Estimate} ({focus.Cue}, confidence {confidence})",
             _ => $"investigating {what} at {focus.Estimate} ({focus.Cue}, confidence {confidence})",
         };
     }
@@ -186,6 +186,16 @@ public sealed class CreatureBrain : IActorController
     }
 
     /// <summary>
+    /// Charge prey it can see (or saw a moment ago); the simulation only lets a straight step over
+    /// open ground go at a charge, so turns and undergrowth still slow it.
+    /// </summary>
+    private bool ShouldCharge(Contact focus, long now) =>
+        Profile.ChargeSightTicks > 0
+        && focus.Class == ContactClass.Prey
+        && focus.Cue == "seen"
+        && now - focus.LastUpdatedTick <= Profile.ChargeSightTicks;
+
+    /// <summary>
     /// Close in on <paramref name="target"/>: near it, turn the head onto it or step toward it
     /// (shoving a vehicle that's in the way); otherwise path there. With <paramref name="exact"/> the
     /// body itself has to get onto the tile (to trample a post). Too many turns without progress
@@ -204,7 +214,7 @@ public sealed class CreatureBrain : IActorController
             if (sim.CanMove(self, toward, shove: true))
             {
                 _stuckTurns = 0;
-                return new MoveAction(toward, Shove: true);
+                return new MoveAction(toward, Shove: true, Sprint: ShouldCharge(focus, now));
             }
         }
 
@@ -213,10 +223,10 @@ public sealed class CreatureBrain : IActorController
             ? (_goToExact ??= new GoToController(() => _goal, 0))
             : (_goTo ??= new GoToController(() => _goal, Math.Max(1, reach - 1)));
         var action = goTo.Decide(self, sim) ?? new WaitAction(self.Movement.StepTicks);
-        if (action is MoveAction)
+        if (action is MoveAction move)
         {
             _stuckTurns = 0;
-            return action;
+            return ShouldCharge(focus, now) ? move with { Sprint = true } : move;
         }
 
         if (++_stuckTurns >= Profile.StuckTurnsBeforeGivingUp)

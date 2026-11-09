@@ -90,7 +90,7 @@ cover
 ,...,....,,.,,.,,..,......,.,.,,.,,..,,.,.,..,.,..,..,.,rrrr.,.,,,.,,.,,.,,,.,,.,,..,...,..,,...
 ..,....,.,,,..,.,,.,.,,.,......,..,.,..,.,...,.......,..rrrr.,,,,.,,..,,,..,.,..,,.,,,,,...,.,.,
 .,..,.,,.....,,.,,....,..,......,..,.,..............,...rrrr....,.....,,.,,....,...,.,.....,.,,.
-FFFFFFFFFFFFFFFFFFFFFFFFFFFwwwwFFFFFFFFFFFFFFFFFFFFFFFFFrrrrFFFFFFFFFFFFFFFF+FFFFFFFFFFFFFFFFFFF
+FFFFFFFFFFFFFFFFFFFFFwwwwFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFrrrrFFFFFFFFFFFFFFFF+FFFFFFFFFFFFFFFFFFF
 ..,.,,..,.,....,,..,.,...,.,,.,,.,..,,.,,,,,,,.,.,.,,,,,.,......,....,......,,,,,..,..,.,,,...,,
 .,.,....,.,.,...,.....,,.,....,,.,,.,.,,,,,..,,,,,.,...,,..,.,,.,.,.,..,,,..,.,.,.,.,,..,,.,.,..
 ================================================================================================
@@ -278,7 +278,7 @@ player 31 26 Survivor
 npc 45 26 Marisol
 npc 32 27 Dr. Okafor
 npc 46 27 Pete
-rex 28 10 Rex
+rex 22 10 Rex
 light 2 23
 light 8 23
 light 14 23
@@ -299,5 +299,5 @@ headlight 47 27
 exit 6 44 jungle trail
 exit 77 53 floor hatch
 exit 70 16 culvert
-sparks 28 22
+sparks 22 22
 end

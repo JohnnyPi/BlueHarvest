@@ -208,6 +208,9 @@ public sealed class Simulation
     /// <summary>Ropes left tied where people rappelled down.</summary>
     public IReadOnlyList<RopeSpot> Ropes => _ropes;
 
+    /// <summary>When a fence tile (electric or sagging) first broke, by anything: the moment something is loose.</summary>
+    public long? FenceBreachTick { get; private set; }
+
     /// <summary>The map's escape hatches.</summary>
     public IReadOnlyList<ExitPoint> Exits => _exits;
 
@@ -931,6 +934,7 @@ public sealed class Simulation
         }
 
         _scheduler.TryDequeue(out _, out _);
+        actor.Charging = false; // only a charging step sets it again
         int cost = Resolve(actor, action);
         if (!actor.IsLarge && !actor.IsGone && !actor.OnDeck && ExitAt(actor.Position) is { } exit)
             Escape(actor, exit);
@@ -1019,6 +1023,7 @@ public sealed class Simulation
             hasher.Add(actor.EscapedTick ?? -1);
         foreach (var sparks in _sparks)
             hasher.Add(sparks.Live ? 1 : 0);
+        hasher.Add(FenceBreachTick ?? -1);
         hasher.Add(_scent.Count).Add(_vibrations.Count);
         if (_scent.Count > 0)
             hasher.Add(_scent[^1].Tick).Add(_scent[^1].Position.X).Add(_scent[^1].Position.Y);
@@ -1077,7 +1082,7 @@ public sealed class Simulation
     private int Resolve(Actor actor, ActorAction action) => action switch
     {
         WaitAction wait => Math.Max(1, wait.Ticks),
-        MoveAction move => actor.IsLarge ? TryMoveLarge(actor, move.Direction, move.Shove) : TryMove(actor, move.Direction, move.Sprint),
+        MoveAction move => actor.IsLarge ? TryMoveLarge(actor, move.Direction, move.Shove, move.Sprint) : TryMove(actor, move.Direction, move.Sprint),
         BiteAction bite => ResolveBite(actor, bite.Investigative),
         UseDoorAction door => UseDoor(actor, door.Direction),
         ClimbAction => Climb(actor),
@@ -1419,7 +1424,8 @@ public sealed class Simulation
             : (anchor, facing, $"{vehicle.Name} won't budge: {stuck}", null);
     }
 
-    private int TryMoveLarge(Actor actor, Direction direction, bool allowShove)
+    /// <param name="charge">Charge if it can: only a straight step that shoves nothing and smashes nothing goes at a charge.</param>
+    private int TryMoveLarge(Actor actor, Direction direction, bool allowShove, bool charge = false)
     {
         var (anchor, facing, blocked, shove) = PlanLargeMove(actor, direction, allowShove);
         bool turning = facing != actor.Facing;
@@ -1487,8 +1493,12 @@ public sealed class Simulation
         }
 
         var anchorCover = Map.CoverAt(anchor);
-        EmitNoise(anchor, actor.Species.FootstepLoudness + anchorCover.NoiseModifier, NoiseKinds.Footsteps, actor.Id);
-        EmitVibration(anchor, actor.Species.VibrationStrength * (turning ? ScentRules.TurnVibrationPercent : 100) / 100, actor.Id);
+        bool charging = charge && !turning && shove is null && smashed == 0 && actor.Movement.ChargeTicks > 0;
+        actor.Charging = charging;
+        EmitNoise(anchor, actor.Species.FootstepLoudness + anchorCover.NoiseModifier + (charging ? GearRules.SprintLoudnessBonus : 0),
+            NoiseKinds.Footsteps, actor.Id);
+        EmitVibration(anchor, actor.Species.VibrationStrength
+            * (turning ? ScentRules.TurnVibrationPercent : charging ? ScentRules.SprintVibrationPercent : 100) / 100, actor.Id);
         if (!turning)
             LayScent(actor, anchor);
         if (smashed > 0)
@@ -1499,7 +1509,9 @@ public sealed class Simulation
 
         int cost = turning
             ? actor.Movement.TurnTicks
-            : actor.Movement.CostTicks(heightStep, facing.IsDiagonal()) * anchorCover.MoveCostPercent / 100;
+            : (charging
+                ? actor.Movement.ChargeCostTicks(heightStep, facing.IsDiagonal())
+                : actor.Movement.CostTicks(heightStep, facing.IsDiagonal())) * anchorCover.MoveCostPercent / 100;
         return cost + smashed * SmashTicks + extra;
     }
 
@@ -1642,6 +1654,8 @@ public sealed class Simulation
         Cover[tile] = into;
         CoverChanges++;
         _lightGrid = null;
+        if (type is CoverType.Fence or CoverType.WeakFence)
+            FenceBreachTick ??= CurrentTick;
         CoverBroken?.Invoke(tile, type, by);
         if (type == CoverType.Support && PlatformAt(tile) is { Collapsed: false } platform)
             CheckCollapse(platform, by);

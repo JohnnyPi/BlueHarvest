@@ -29,6 +29,7 @@ namespace BlueHarvest.Sim.Ai;
 /// <param name="FeltConfidencePerPoint">Confidence per point of vibration felt.</param>
 /// <param name="FeltConfidenceCap">Most confidence a shake of the ground gives.</param>
 /// <param name="ThreatVibrationStrength">An actor whose step shakes the ground this hard (where it lands) is a threat.</param>
+/// <param name="ChargeSightTicks">Charges prey it saw within this long (its movement profile must have a charge); 0 never charges.</param>
 public sealed record AiProfile(
     int PreyMaxBodyHeightDm,
     int ConfidenceDecayPerSecond,
@@ -53,7 +54,8 @@ public sealed record AiProfile(
     int ScentConfidenceCap = 60,
     int FeltConfidencePerPoint = 3,
     int FeltConfidenceCap = 40,
-    int ThreatVibrationStrength = int.MaxValue)
+    int ThreatVibrationStrength = int.MaxValue,
+    int ChargeSightTicks = 0)
 {
     /// <summary>
     /// Fixates on moving prey, follows noises, drawn to lights it doesn't know and test-bites them.
@@ -76,7 +78,8 @@ public sealed record AiProfile(
         WanderScore: 8,
         SearchedConfidenceCap: 20,
         StuckTurnsBeforeGivingUp: 8,
-        MaxContacts: 16);
+        MaxContacts: 16,
+        ChargeSightTicks: 100);
 
     /// <summary>
     /// People: nothing is prey and lights don't draw them; anything strong (a raptor or bigger) is a
