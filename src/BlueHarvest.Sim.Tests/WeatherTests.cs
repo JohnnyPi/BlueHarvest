@@ -219,7 +219,7 @@ public class ScentTests
         var trail = Assert.Single(PerceptionSystem.Perceive(downwind, rex, 0).Smelled);
         Assert.Equal(human.Id, trail.ActorId);
         Assert.Equal(new TilePos(27, 20), trail.At);
-        Assert.Equal(13, trail.Perceived);
+        Assert.Equal(12, trail.Perceived); // 24 (25 a tick after it was laid, rounded down) - 8 tiles × 1.6
         Assert.False(trail.Blood);
 
         var (upwind, rex2, _) = RexAndStillHuman(new WeatherSettings(WindFrom: Direction.West, WindSpeed: 8));
