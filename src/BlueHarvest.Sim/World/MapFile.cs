@@ -16,13 +16,17 @@ public sealed record MapMarker(MarkerKind Kind, TilePos Position, string? Name =
 
 /// <param name="AmbientLight">Outdoor light before any lights, 0-100. 100 is daylight.</param>
 /// <param name="Vehicles">Names and starting integrity for vehicles, each by one of its tiles. Vehicles not listed get defaults.</param>
+/// <param name="Weather">The weather the scenario starts with; clear if left out.</param>
 public sealed record MapData(
     WorldMap Map,
     IReadOnlyList<MapMarker> Markers,
     int AmbientLight = 100,
-    IReadOnlyList<VehicleSpec>? Vehicles = null)
+    IReadOnlyList<VehicleSpec>? Vehicles = null,
+    WeatherSettings? Weather = null)
 {
     public IReadOnlyList<VehicleSpec> VehicleSpecs => Vehicles ?? Array.Empty<VehicleSpec>();
+
+    public WeatherSettings StartingWeather => Weather ?? WeatherSettings.Clear;
 }
 
 /// <summary>
@@ -31,6 +35,8 @@ public sealed record MapData(
 /// bhmap 2
 /// size 4 2
 /// ambient 6        (optional; outdoor light 0-100, default 100 = daylight)
+/// weather rain 70 wind E 8 fog 0 storm
+///                  (optional; any of: rain 0-100, wind FROM-DIRECTION M/S, fog 0-100, storm; default clear)
 /// heights          (one row per line: decimeters, separated by spaces)
 /// 0 0 50 80
 /// 0 5 10 15
@@ -100,12 +106,18 @@ public static class MapFile
         var map = new WorldMap(width, height);
 
         int ambient = 100;
+        WeatherSettings? weather = null;
         string next = Next("'heights'");
         if (next.StartsWith("ambient", StringComparison.Ordinal))
         {
             string[] parts = next.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length != 2 || parts[0] != "ambient" || !int.TryParse(parts[1], out ambient) || ambient < 0 || ambient > 100)
                 throw new FormatException($"Line {i}: expected 'ambient N' with N from 0 to 100.");
+            next = Next("'heights'");
+        }
+        if (next.StartsWith("weather", StringComparison.Ordinal))
+        {
+            weather = ParseWeather(next, i);
             next = Next("'heights'");
         }
         if (next != "heights")
@@ -252,7 +264,67 @@ public static class MapFile
             markers.Add(new MapMarker(kind, position, parts.Length == 4 ? parts[3].Trim() : null));
         }
 
-        return new MapData(map, markers, ambient, vehicles);
+        return new MapData(map, markers, ambient, vehicles, weather);
+    }
+
+    /// <summary>Reads 'weather rain 70 wind E 8 fog 10 storm': each part optional, in any order.</summary>
+    private static WeatherSettings ParseWeather(string line, int lineNumber)
+    {
+        string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts[0] != "weather")
+            throw new FormatException($"Line {lineNumber}: expected 'weather ...'.");
+        var weather = WeatherSettings.Clear;
+        string usage = "'weather [rain 0-100] [wind N|NE|E|SE|S|SW|W|NW 0-20] [fog 0-100] [storm]'";
+
+        int Percent(int at)
+        {
+            if (at >= parts.Length || !int.TryParse(parts[at], out int value) || value < 0 || value > 100)
+                throw new FormatException($"Line {lineNumber}: '{parts[at - 1]}' needs a number from 0 to 100; expected {usage}.");
+            return value;
+        }
+
+        for (int k = 1; k < parts.Length; k++)
+        {
+            switch (parts[k])
+            {
+                case "rain":
+                    weather = weather with { RainPercent = Percent(++k) };
+                    break;
+                case "fog":
+                    weather = weather with { FogPercent = Percent(++k) };
+                    break;
+                case "storm":
+                    weather = weather with { Storm = true };
+                    break;
+                case "wind":
+                    if (k + 2 >= parts.Length || !Directions.TryParseCompass(parts[k + 1], out var windFrom)
+                        || !int.TryParse(parts[k + 2], out int speed) || speed < 0 || speed > WeatherSettings.MaxWindSpeed)
+                        throw new FormatException($"Line {lineNumber}: 'wind' needs a direction it blows from and a speed 0-{WeatherSettings.MaxWindSpeed} m/s; expected {usage}.");
+                    weather = weather with { WindFrom = windFrom, WindSpeed = speed };
+                    k += 2;
+                    break;
+                default:
+                    throw new FormatException($"Line {lineNumber}: unknown weather '{parts[k]}'; expected {usage}.");
+            }
+        }
+        return weather;
+    }
+
+    /// <summary>The weather line for a file, or null for clear weather (which needs no line).</summary>
+    public static string? FormatWeather(WeatherSettings weather)
+    {
+        if (weather == WeatherSettings.Clear)
+            return null;
+        var sb = new StringBuilder("weather");
+        if (weather.RainPercent > 0)
+            sb.Append(" rain ").Append(weather.RainPercent);
+        if (weather.WindSpeed > 0)
+            sb.Append(" wind ").Append(weather.WindFrom.Compass()).Append(' ').Append(weather.WindSpeed);
+        if (weather.FogPercent > 0)
+            sb.Append(" fog ").Append(weather.FogPercent);
+        if (weather.Storm)
+            sb.Append(" storm");
+        return sb.ToString();
     }
 
     /// <summary>Writes the current format (v2). Roofs, decks, ladders, doors and vehicles sections appear only when there is something in them.</summary>
@@ -264,6 +336,8 @@ public static class MapFile
         sb.Append("size ").Append(map.Width).Append(' ').Append(map.Height).Append('\n');
         if (data.AmbientLight != 100)
             sb.Append("ambient ").Append(data.AmbientLight).Append('\n');
+        if (FormatWeather(data.StartingWeather) is { } weatherLine)
+            sb.Append(weatherLine).Append('\n');
 
         sb.Append("heights\n");
         for (int y = 0; y < map.Height; y++)

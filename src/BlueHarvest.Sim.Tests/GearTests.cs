@@ -69,22 +69,47 @@ public class GearTests
         Assert.InRange(at.X - 5, range - GearRules.Scatter(range, 3), range + GearRules.Scatter(range, 3));
     }
 
-    [Fact]
-    public void AFlare_DrawsTheRex()
+    /// <summary>
+    /// The Rex at (20,30) facing north has its eyes at its head tip, (20,26), and a 120° view. A flare
+    /// at (20,15) is 11 tiles ahead of it (score 64).
+    /// </summary>
+    private static (Simulation Sim, CreatureBrain Brain, PlayerController Drive, Actor Human) RexAndThrower(TilePos thrower)
     {
         var map = new WorldMap(40, 40);
         var sim = new Simulation(map, seed: 5) { AmbientLightPercent = 6 };
         var brain = new CreatureBrain(AiProfile.Rex, sim.Rng.Fork("ai:rex"));
         sim.AddActor("Rex", 'T', new TilePos(20, 30), Species.Rex, brain, Direction.North);
         var drive = new PlayerController();
-        sim.AddActor("You", '@', new TilePos(30, 12), Species.Human, drive, loadout: Expert);
+        var human = sim.AddActor("You", '@', thrower, Species.Human, drive, loadout: Expert);
         sim.RunUntilInputNeeded();
+        return (sim, brain, drive, human);
+    }
+
+    [Fact]
+    public void AFlare_DrawsTheRex()
+    {
+        // Off to its side (dx 13, dy -2 from its eyes), outside its 120° view: it never sees the throw.
+        var (sim, brain, drive, _) = RexAndThrower(new TilePos(33, 24));
 
         Do(sim, drive, new ThrowAction(ItemKind.Flare, new TilePos(20, 15)));
         sim.RunUntil(sim.CurrentTick + 100);
 
         Assert.Equal(new ContactKey(ContactSource.Light, 0), brain.Focus?.Key);
         Assert.Equal(Activity.Investigating, brain.Activity);
+    }
+
+    [Fact]
+    public void ThrowingInItsView_GivesYouAway()
+    {
+        // In its view 17 tiles off. A throw is motion, so it sees the thrower (score 17, needs 10),
+        // and prey outranks a light.
+        var (sim, brain, drive, human) = RexAndThrower(new TilePos(30, 12));
+
+        Do(sim, drive, new ThrowAction(ItemKind.Flare, new TilePos(20, 15)));
+        sim.RunUntil(sim.CurrentTick + 100);
+
+        Assert.Equal(ContactKey.ForActor(human.Id), brain.Focus?.Key);
+        Assert.Equal(ContactClass.Prey, brain.Focus?.Class);
     }
 
     [Fact]

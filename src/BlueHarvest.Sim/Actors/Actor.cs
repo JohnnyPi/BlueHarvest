@@ -41,6 +41,9 @@ public sealed class Actor
     /// <summary>Which way the actor faces. Small actors turn as they move; large ones turn in 45° steps.</summary>
     public Direction Facing { get; internal set; }
 
+    /// <summary>When it last left scent on the ground (each step, and every 20 s while still).</summary>
+    public long LastScentTick { get; internal set; } = NeverMoved;
+
     /// <summary>The tick of its last successful step or turn.</summary>
     public long LastMovedTick { get; internal set; } = NeverMoved;
 

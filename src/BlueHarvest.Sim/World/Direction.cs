@@ -61,6 +61,21 @@ public static class Directions
         };
     }
 
+    /// <summary>Reads a short compass name (N, NE, E, ...; any case), as written by <see cref="Compass"/>.</summary>
+    public static bool TryParseCompass(string text, out Direction direction)
+    {
+        foreach (var d in All)
+        {
+            if (string.Equals(d.Compass(), text, StringComparison.OrdinalIgnoreCase))
+            {
+                direction = d;
+                return true;
+            }
+        }
+        direction = Direction.North;
+        return false;
+    }
+
     /// <summary>Short compass name: N, NE, E, ...</summary>
     public static string Compass(this Direction direction) => direction switch
     {

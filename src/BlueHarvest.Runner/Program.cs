@@ -5,12 +5,22 @@ using BlueHarvest.Sim.Demo;
 using BlueHarvest.Sim.Scenarios;
 using BlueHarvest.Sim.World;
 
-// Usage: BlueHarvest.Runner [seed] [seconds] [map file]
+// Usage: BlueHarvest.Runner [seed] [seconds] [map file] [weather]
 // With no map file, it looks for godot/Maps/testbed.bhmap above the program folder,
-// and falls back to the built-in demo map if it can't find one.
+// and falls back to the built-in demo map if it can't find one. Pass "-" as the map file to use
+// that default while still choosing the weather.
+// Weather (optional): clear, rain, storm or fog, overriding the map's own weather line.
 ulong seed = args.Length > 0 && ulong.TryParse(args[0], out var parsedSeed) ? parsedSeed : 12345UL;
 int seconds = args.Length > 1 && int.TryParse(args[1], out var parsedSeconds) ? parsedSeconds : 60;
-string? mapPath = args.Length > 2 ? args[2] : FindUp(Path.Combine("godot", "Maps", "testbed.bhmap"));
+string? mapPath = args.Length > 2 && args[2] != "-" ? args[2] : FindUp(Path.Combine("godot", "Maps", "testbed.bhmap"));
+WeatherSettings? weatherOverride = args.Length > 3 ? args[3].ToLowerInvariant() switch
+{
+    "clear" => WeatherSettings.Clear,
+    "rain" => new WeatherSettings(RainPercent: 70, WindFrom: Direction.East, WindSpeed: 5),
+    "storm" => WeatherSettings.TestbedStorm,
+    "fog" => new WeatherSettings(FogPercent: 70),
+    _ => throw new ArgumentException($"Unknown weather '{args[3]}'; use clear, rain, storm or fog."),
+} : null;
 
 Simulation sim;
 if (mapPath is not null)
@@ -23,6 +33,12 @@ else
     sim = DemoWorld.Create(seed);
     Console.WriteLine($"Blue Harvest sim {SimInfo.Version} | demo map (no testbed found) | seed {seed} | {seconds}s of game time");
 }
+
+if (weatherOverride is not null)
+    sim.SetWeather(weatherOverride);
+int strikes = 0;
+sim.LightningStruck += _ => strikes++;
+Console.WriteLine($"Weather: {sim.Weather.Settings.Describe()}");
 
 Console.WriteLine();
 Console.WriteLine("Start (map-file cover characters; @ you, h NPC, T rex, R raptor):");
@@ -79,6 +95,8 @@ if (player is not null)
         ? $"{player.Name} died at {Ticks.Format(player.Health.DiedTick)}: {player.Health.DeathCause}."
         : $"{player.Name} is alive; wounds: {Wounds(player)}.");
 }
+Console.WriteLine($"Weather: {sim.Weather.Settings.Describe()}; {strikes} lightning strike(s); "
+    + $"{sim.ScentMarks.Count} scent marks on the ground.");
 Console.WriteLine($"State hash: {sim.ComputeStateHash():X16}");
 
 static void PrintMap(Simulation sim)

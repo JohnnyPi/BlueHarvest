@@ -1,4 +1,5 @@
 using BlueHarvest.Sim.Actors;
+using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.Lighting;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
@@ -31,13 +32,48 @@ public sealed class ContactMemory
     }
 
     /// <summary>
-    /// Folds one turn's percepts into memory. Noises and lights first, then sight, so when several
-    /// cues name the same contact the sharpest (sight) sets the estimate.
+    /// Folds one turn's percepts into memory, vaguest cue first: scent, then ground vibration, then
+    /// noises and lights, then sight, so when several cues name the same contact the sharpest (sight)
+    /// sets the estimate.
     /// </summary>
     public void Observe(Simulation sim, Actor self, Percepts percepts)
     {
         long now = sim.CurrentTick;
         var eye = sim.EyeTile(self);
+
+        // Scent: only a mark laid after the last thing it learned about them moves the estimate, so it
+        // follows a trail forwards and doesn't go back to sniff where it has already looked.
+        foreach (var trail in percepts.Smelled)
+        {
+            var key = ContactKey.ForActor(trail.ActorId);
+            var existing = Find(key);
+            if (existing is not null && trail.LaidTick <= existing.LastUpdatedTick)
+                continue;
+            var contact = existing ?? Touch(key, now);
+            if (trail.ActorId >= 0 && trail.ActorId < sim.Actors.Count)
+                contact.Class = Classify(self, sim.Actors[trail.ActorId]); // it knows the smell of its prey
+            long ageSeconds = (now - trail.LaidTick) / Ticks.PerSecond;
+            Refresh(contact, now, trail.At, sim.Terrain[trail.At],
+                Math.Min(Profile.ScentConfidenceCap, trail.Perceived * Profile.ScentConfidencePerPoint),
+                uncertainty: 2 + (int)(ageSeconds / 10), trail.Blood ? "smelled blood" : "smelled a trail");
+        }
+
+        // Ground vibration: something heavy (or running) over there; how heavy can make it a threat.
+        foreach (var felt in percepts.Felt)
+        {
+            var vibration = felt.Vibration;
+            var key = vibration.ActorId is { } id
+                ? ContactKey.ForActor(id)
+                : new ContactKey(ContactSource.Sound, vibration.Position.Y * sim.Map.Width + vibration.Position.X);
+            var contact = Touch(key, now);
+            if (contact.Class == ContactClass.Unknown && vibration.ActorId is not null
+                && vibration.Strength >= Profile.ThreatVibrationStrength)
+                contact.Class = ContactClass.Threat;
+            int distance = (int)Math.Sqrt(Distance2(self.Position, vibration.Position));
+            Refresh(contact, now, vibration.Position, sim.Terrain[vibration.Position],
+                Math.Min(Profile.FeltConfidenceCap, felt.Perceived * Profile.FeltConfidencePerPoint),
+                uncertainty: 2 + distance / 4, "felt the ground shake");
+        }
 
         foreach (var heard in percepts.Heard)
         {

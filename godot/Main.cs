@@ -29,13 +29,26 @@ public partial class Main : Node2D
     private const string Controls =
         "Move: arrows / numpad / hjkl yubn   Wait: . or numpad 5   Close a door: c   Ladder: < >   Zoom: + -\n" +
         "First aid: t   Flare: f (aim, Enter)   Flashlight: x   Rope: r + direction   Sprint: s   Order: o then f/s/h\n" +
-        "Overlays: [1] lighting  [2] your view  [3] rex view  [4] noise  [5] rex path  [6] rex memory   [G] omniscient rex (debug)";
+        "Overlays: [1] lighting  [2] your view  [3] rex view  [4] noise  [5] rex path  [6] rex memory  [7] scent  [8] vibration\n" +
+        "Debug: [G] omniscient rex   [W] cycle weather (clear, rain, storm, fog)";
+
+    /// <summary>What W cycles through, in order.</summary>
+    private static readonly (string Name, WeatherSettings Settings)[] WeatherPresets =
+    {
+        ("clear", WeatherSettings.Clear),
+        ("rain", new WeatherSettings(RainPercent: 70, WindFrom: Direction.East, WindSpeed: 5)),
+        ("storm", WeatherSettings.TestbedStorm),
+        ("fog", new WeatherSettings(FogPercent: 70)),
+    };
 
     private Simulation _sim = null!;
     private PlayerController _player = null!;
     private Actor _playerActor = null!;
     private Actor? _rex;
     private AsciiMapView _map = null!;
+    private WeatherView _weather = null!;
+    private ColorRect _flash = null!;
+    private float _flashAlpha;
     private Camera2D _camera = null!;
     private Label _hud = null!;
     private RichTextLabel _body = null!;
@@ -88,11 +101,16 @@ public partial class Main : Node2D
         _sim.Rappelled += OnRappelled;
         _sim.ActorScreamed += OnActorScreamed;
         _sim.OrderGiven += OnOrderGiven;
+        _sim.LightningStruck += OnLightningStruck;
 
         _map = new AsciiMapView();
         _map.Bind(_sim, font, MovementProfile.Human.MaxStepUpDm);
         _map.Overlays.PlayerId = _playerActor.Id;
         AddChild(_map);
+
+        _weather = new WeatherView();
+        _weather.Bind(_sim);
+        AddChild(_weather);
 
         _camera = new Camera2D { PositionSmoothingEnabled = true, PositionSmoothingSpeed = 12f };
         AddChild(_camera);
@@ -100,6 +118,14 @@ public partial class Main : Node2D
 
         var hudLayer = new CanvasLayer();
         AddChild(hudLayer);
+        _flash = new ColorRect
+        {
+            Color = new Color(0.92f, 0.95f, 1f, 0f),
+            AnchorRight = 1f,
+            AnchorBottom = 1f,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        hudLayer.AddChild(_flash);
         _hud = new Label { Position = new Vector2(12, 8) };
         _hud.AddThemeFontOverride("font", font);
         _hud.AddThemeFontSizeOverride("font_size", 16);
@@ -113,6 +139,15 @@ public partial class Main : Node2D
         _director.Update(_sim, _playerActor);
         Refresh(snapCamera: true);
         ShowDeathIfDead();
+    }
+
+    /// <summary>Fades out the lightning flash.</summary>
+    public override void _Process(double delta)
+    {
+        if (_flashAlpha <= 0f)
+            return;
+        _flashAlpha = Mathf.Max(0f, _flashAlpha - (float)delta * 1.6f);
+        _flash.Color = new Color(0.92f, 0.95f, 1f, _flashAlpha);
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -135,7 +170,8 @@ public partial class Main : Node2D
             return;
         }
 
-        if (TryZoom(key.Keycode) || (!key.Echo && (TryToggleOverlay(key.Keycode) || TryToggleHunt(key.Keycode))))
+        if (TryZoom(key.Keycode)
+            || (!key.Echo && (TryToggleOverlay(key.Keycode) || TryToggleHunt(key.Keycode) || TryCycleWeather(key.Keycode))))
         {
             GetViewport().SetInputAsHandled();
             Refresh(snapCamera: false);
@@ -405,6 +441,8 @@ public partial class Main : Node2D
             case Key.Key4: o.Noise = !o.Noise; return true;
             case Key.Key5: o.RexPath = !o.RexPath; return true;
             case Key.Key6: o.RexMemory = !o.RexMemory; return true;
+            case Key.Key7: o.Scent = !o.Scent; return true;
+            case Key.Key8: o.Vibration = !o.Vibration; return true;
             default: return false;
         }
     }
@@ -434,6 +472,25 @@ public partial class Main : Node2D
             _message = "DEBUG: the Rex is back on its own senses.";
         }
         return true;
+    }
+
+    /// <summary>Debug: W steps through clear, rain, storm and fog. Not recorded in replays.</summary>
+    private bool TryCycleWeather(Key key)
+    {
+        if (key != Key.W)
+            return false;
+        int current = Array.FindIndex(WeatherPresets, p => p.Settings == _sim.Weather.Settings);
+        var (name, settings) = WeatherPresets[(current + 1) % WeatherPresets.Length];
+        _sim.SetWeather(settings);
+        _message = $"DEBUG: weather set to {name} ({_sim.Weather.Settings.Describe()}).";
+        return true;
+    }
+
+    private void OnLightningStruck(LightningStrike strike)
+    {
+        _flashAlpha = 0.55f;
+        int seconds = strike.ThunderDelayTicks / Ticks.PerSecond;
+        _message = $"Lightning! Everything stands out for a moment. Thunder in about {Math.Max(1, seconds)} s.";
     }
 
     private void OnActorStruck(Actor striker, Actor victim)
@@ -675,6 +732,8 @@ public partial class Main : Node2D
             MindLine() + "\n" +
             PeopleLine() + "\n" +
             HearingLine(playerPercepts) + "\n" +
+            FeelLine(playerPercepts) + "\n" +
+            WeatherLine() + "\n" +
             $"{_message}\n" +
             Controls;
     }
@@ -685,6 +744,7 @@ public partial class Main : Node2D
         int width = _sim.Map.Width, height = _sim.Map.Height;
 
         o.Noises = _sim.RecentNoises.Where(n => n.Tick >= _lastTurnTick).ToList();
+        o.Vibrations = _sim.RecentVibrations.Where(v => v.Tick >= _lastTurnTick).ToList();
         var rexPath = _rexHunt?.RemainingPath ?? _rexBrain?.PlannedPath ?? Array.Empty<Direction>();
         o.RexPathTiles = _rex is not null
             ? Pathfinder.Trace(_rex, rexPath).Select(p => p.Anchor).Distinct().ToList()
@@ -750,7 +810,9 @@ public partial class Main : Node2D
             null => "Rex has no view of you",
         };
         string hearing = rex.Hears(_playerActor) ? ", HEARD you" : "";
-        return $"{sight}{hearing}.   It sees {rex.Lights.Count} light(s).";
+        var trail = rex.Smelled.FirstOrDefault(t => t.ActorId == _playerActor.Id);
+        string smell = trail is null ? "" : trail.Blood ? ", SMELLS your blood" : ", SMELLS your trail";
+        return $"{sight}{hearing}{smell}.   It sees {rex.Lights.Count} light(s).";
     }
 
     private string Shelter(TilePos here)
@@ -808,7 +870,41 @@ public partial class Main : Node2D
             .OrderByDescending(h => h.Perceived)
             .Select(Describe)
             .ToList();
-        return sounds.Count == 0 ? "You hear only the rain." : "You hear: " + string.Join("; ", sounds);
+        string quiet = _sim.Weather.Settings.RainPercent > 0 ? "You hear only the rain." : "You hear nothing close.";
+        return sounds.Count == 0 ? quiet : "You hear: " + string.Join("; ", sounds);
+    }
+
+    /// <summary>What shakes the ground under you: the Rex's tread long before you see it.</summary>
+    private string FeelLine(Percepts percepts)
+    {
+        var shakes = percepts.Felt
+            .GroupBy(f => f.Vibration.ActorId ?? -1)
+            .Select(g => g.OrderByDescending(f => f.Perceived).First())
+            .OrderByDescending(f => f.Perceived)
+            .Select(f =>
+            {
+                var v = f.Vibration;
+                string who = v.ActorId is { } id ? _sim.Actors[id].Name : "something";
+                var here = _playerActor.Position;
+                string where = Directions.FromDelta(v.Position.X - here.X, v.Position.Y - here.Y).Compass();
+                string how = f.Perceived >= 25 ? "the ground shudders" : f.Perceived >= 15 ? "heavy footfalls" : "a faint tremor";
+                return $"{how} ({who}, {where})";
+            })
+            .ToList();
+        return shakes.Count == 0 ? "The ground is still." : "You feel: " + string.Join("; ", shakes);
+    }
+
+    /// <summary>The weather and what it's doing to your ears right now.</summary>
+    private string WeatherLine()
+    {
+        var weather = _sim.Weather;
+        long now = _sim.CurrentTick;
+        string gust = weather.Gust(now) >= 70 ? ", gusting" : "";
+        string thunder = weather.Thunder(now) ? "   THUNDER" : "";
+        string flash = weather.Flash(now) ? "   LIGHTNING" : "";
+        int mask = weather.HearingMask(now);
+        string ears = mask > 0 ? $"   (sounds -{mask})" : "";
+        return $"Weather: {weather.Settings.Describe()}{gust}{thunder}{flash}{ears}";
     }
 
     private string Describe(HeardNoise heard)

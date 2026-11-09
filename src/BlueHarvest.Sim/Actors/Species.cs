@@ -14,6 +14,8 @@ namespace BlueHarvest.Sim.Actors;
 /// <param name="OpensDoors">Can open and close doors.</param>
 /// <param name="ClimbsLadders">Can climb ladders.</param>
 /// <param name="BiteWounds">Red, bleeding wounds its bite deals to a victim (each on a different section).</param>
+/// <param name="ScentStrength">How strongly its body scent marks the ground where it walks or waits; blood is stronger.</param>
+/// <param name="VibrationStrength">How hard one of its steps shakes ordinary ground (mass and gait).</param>
 public sealed record Species(
     string Name,
     MovementProfile Movement,
@@ -28,16 +30,18 @@ public sealed record Species(
     int BiteDamage = 0,
     bool OpensDoors = false,
     bool ClimbsLadders = false,
-    int BiteWounds = 0)
+    int BiteWounds = 0,
+    int ScentStrength = 0,
+    int VibrationStrength = 0)
 {
     public static readonly Species Human = new("human", MovementProfile.Human, SenseProfile.Human,
         BodyHeightDm: 17, FootstepLoudness: 18, Body: BodyPlan.SingleTile, Force: 0, ScreamLoudness: 35,
-        ReachUpDm: 20, ReachDownDm: 10, OpensDoors: true, ClimbsLadders: true);
+        ReachUpDm: 20, ReachDownDm: 10, OpensDoors: true, ClimbsLadders: true, ScentStrength: 25, VibrationStrength: 10);
 
     /// <summary>Single tile for now; a 1×3 body with free turning comes with its AI.</summary>
     public static readonly Species Raptor = new("raptor", MovementProfile.Raptor, SenseProfile.Raptor,
         BodyHeightDm: 15, FootstepLoudness: 12, Body: BodyPlan.SingleTile, Force: 5,
-        ReachUpDm: 20, ReachDownDm: 20, BiteDamage: 5, BiteWounds: 1);
+        ReachUpDm: 20, ReachDownDm: 20, BiteDamage: 5, BiteWounds: 1, ScentStrength: 20, VibrationStrength: 8);
 
     /// <summary>
     /// Smashes sparse jungle and fences; stopped by dense jungle and walls; shoves vehicles.
@@ -45,5 +49,5 @@ public sealed record Species(
     /// </summary>
     public static readonly Species Rex = new("rex", MovementProfile.Rex, SenseProfile.Rex,
         BodyHeightDm: 45, FootstepLoudness: 45, Body: BodyPlan.Rex, Force: 80,
-        ReachUpDm: 50, ReachDownDm: 20, BiteDamage: 20, BiteWounds: 2);
+        ReachUpDm: 50, ReachDownDm: 20, BiteDamage: 20, BiteWounds: 2, ScentStrength: 40, VibrationStrength: 60);
 }

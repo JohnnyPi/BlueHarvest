@@ -43,7 +43,8 @@ public class SimulationTests
     [Fact]
     public void Human_IsBlockedByCliff_AndLosesABump()
     {
-        var sim = Scripted(new[] { "04" }, new TilePos(0, 0), new MoveAction(Direction.East));
+        // 2.5 m: past the 2 m a human can climb (step 8b), so it's a cliff.
+        var sim = Scripted(new[] { "05" }, new TilePos(0, 0), new MoveAction(Direction.East));
         sim.Step();
 
         var actor = sim.Actors[0];

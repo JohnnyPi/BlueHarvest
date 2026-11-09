@@ -31,6 +31,8 @@ public enum CoverType : byte
 /// <param name="BreakStrength">Force needed to smash or trample it. Only matters with <paramref name="BrokenInto"/> set.</param>
 /// <param name="BrokenInto">What it becomes when smashed or trampled; null means it can't be broken.</param>
 /// <param name="BiteSound">Noise kind when jaws close on it (vehicles); null means a bite passes through it.</param>
+/// <param name="VibrationPercent">How well the ground here carries a footfall: rock and decks on piles carry, soft ground damps.</param>
+/// <param name="SoftGround">Earth and vegetation that rain turns to mud, damping footfalls further (outdoors only).</param>
 public sealed record CoverInfo(
     CoverType Type,
     char FileChar,
@@ -43,7 +45,9 @@ public sealed record CoverInfo(
     bool BlocksLargeBodies = false,
     int BreakStrength = 0,
     CoverType? BrokenInto = null,
-    string? BiteSound = null)
+    string? BiteSound = null,
+    int VibrationPercent = 100,
+    bool SoftGround = false)
 {
     /// <summary>Whether a body of this force can't pass. Small bodies use BlocksMovement only.</summary>
     public bool StopsLargeBody(int force) =>
@@ -58,23 +62,23 @@ public static class Covers
 {
     public static readonly IReadOnlyList<CoverInfo> All = new[]
     {
-        new CoverInfo(CoverType.Grass, '.', "grass", 100, false),
+        new CoverInfo(CoverType.Grass, '.', "grass", 100, false, SoftGround: true),
         new CoverInfo(CoverType.Scrub, ',', "scrub", 115, false, SightHeightDm: 10, SightOpacityPercent: 25, NoiseModifier: 2,
-            BreakStrength: 5, BrokenInto: CoverType.Grass),
+            BreakStrength: 5, BrokenInto: CoverType.Grass, VibrationPercent: 95, SoftGround: true),
         new CoverInfo(CoverType.SparseJungle, '"', "sparse jungle", 130, false, SightHeightDm: 60, SightOpacityPercent: 20, NoiseModifier: 4,
-            BlocksLargeBodies: true, BreakStrength: 30, BrokenInto: CoverType.Scrub),
+            BlocksLargeBodies: true, BreakStrength: 30, BrokenInto: CoverType.Scrub, VibrationPercent: 90, SoftGround: true),
         new CoverInfo(CoverType.DenseJungle, '&', "dense jungle", 180, false, SightHeightDm: 80, SightOpacityPercent: 45, NoiseModifier: 7,
-            BlocksLargeBodies: true, BreakStrength: 90, BrokenInto: CoverType.SparseJungle),
-        new CoverInfo(CoverType.Track, '=', "the track", 90, false, NoiseModifier: -2),
-        new CoverInfo(CoverType.Floor, '_', "a floor", 100, false),
+            BlocksLargeBodies: true, BreakStrength: 90, BrokenInto: CoverType.SparseJungle, VibrationPercent: 80, SoftGround: true),
+        new CoverInfo(CoverType.Track, '=', "the track", 90, false, NoiseModifier: -2, VibrationPercent: 110),
+        new CoverInfo(CoverType.Floor, '_', "a floor", 100, false, VibrationPercent: 120),
         new CoverInfo(CoverType.Wall, '#', "a wall", 100, true, SightHeightDm: 30, SightOpacityPercent: 100),
         new CoverInfo(CoverType.Door, '+', "a doorway", 110, false, NoiseModifier: 2, BlocksLargeBodies: true),
         new CoverInfo(CoverType.Fence, 'F', "the electric fence", 100, true, SightHeightDm: 40, SightOpacityPercent: 10,
             BreakStrength: 70, BrokenInto: CoverType.BrokenFence),
-        new CoverInfo(CoverType.Rock, 'r', "a boulder", 100, true, SightHeightDm: 20, SightOpacityPercent: 100),
+        new CoverInfo(CoverType.Rock, 'r', "a boulder", 100, true, SightHeightDm: 20, SightOpacityPercent: 100, VibrationPercent: 140),
         new CoverInfo(CoverType.Vehicle, 'V', "a vehicle", 150, false, SightHeightDm: 18, SightOpacityPercent: 60, NoiseModifier: 5,
             BlocksLargeBodies: true, BiteSound: Perception.NoiseKinds.MetalCrunch),
-        new CoverInfo(CoverType.BrokenFence, 'f', "a broken fence", 120, false, SightHeightDm: 10, SightOpacityPercent: 5, NoiseModifier: 3),
+        new CoverInfo(CoverType.BrokenFence, 'f', "a broken fence", 120, false, SightHeightDm: 10, SightOpacityPercent: 5, NoiseModifier: 3, SoftGround: true),
         new CoverInfo(CoverType.Support, '|', "a support post", 100, true, SightHeightDm: 60, SightOpacityPercent: 30,
             BlocksLargeBodies: true, BreakStrength: 60, BrokenInto: CoverType.Rubble),
         new CoverInfo(CoverType.Rubble, 'x', "rubble", 150, false, SightHeightDm: 5, SightOpacityPercent: 10, NoiseModifier: 4),
@@ -87,7 +91,7 @@ public static class Covers
         SightHeightDm: 30, SightOpacityPercent: 100, NoiseModifier: 2, BlocksLargeBodies: true);
 
     /// <summary>What walking on a deck is like (the cover beneath doesn't matter up there): footsteps ring out.</summary>
-    public static readonly CoverInfo Deck = new(CoverType.Floor, '=', "a platform", 100, false, NoiseModifier: 5);
+    public static readonly CoverInfo Deck = new(CoverType.Floor, '=', "a platform", 100, false, NoiseModifier: 5, VibrationPercent: 160);
 
     /// <summary>A doorway whose door is locked: a wall until someone unlocks it.</summary>
     public static readonly CoverInfo LockedDoor = ClosedDoor with { Name = "a locked door" };

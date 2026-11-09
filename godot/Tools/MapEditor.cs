@@ -48,6 +48,26 @@ public partial class MapEditor : Node2D
     [Export(PropertyHint.Range, "0,100")]
     public int AmbientLight { get; set; } = 100;
 
+    /// <summary>Starting rain, 0-100. Masks sound, washes out scent, shortens sight.</summary>
+    [Export(PropertyHint.Range, "0,100")]
+    public int Rain { get; set; }
+
+    /// <summary>Where the wind blows from (it carries scent the other way).</summary>
+    [Export(PropertyHint.Enum, "N,NE,E,SE,S,SW,W,NW")]
+    public int WindFrom { get; set; } = (int)BlueHarvest.Sim.World.Direction.East;
+
+    /// <summary>Wind speed in m/s, 0 calm to 20.</summary>
+    [Export(PropertyHint.Range, "0,20")]
+    public int WindSpeed { get; set; }
+
+    /// <summary>Fog, 0-100. Shortens sight; sound is unaffected.</summary>
+    [Export(PropertyHint.Range, "0,100")]
+    public int Fog { get; set; }
+
+    /// <summary>Lightning and thunder.</summary>
+    [Export]
+    public bool Storm { get; set; }
+
     /// <summary>Marker names by tile, kept so names survive a round trip. A moved marker loses its name.</summary>
     [Export]
     public Godot.Collections.Dictionary<Vector2I, string> MarkerNames { get; set; } = new();
@@ -96,6 +116,12 @@ public partial class MapEditor : Node2D
         var map = data.Map;
         MapSize = new Vector2I(map.Width, map.Height);
         AmbientLight = data.AmbientLight;
+        var weather = data.StartingWeather;
+        Rain = weather.RainPercent;
+        WindFrom = (int)weather.WindFrom;
+        WindSpeed = weather.WindSpeed;
+        Fog = weather.FogPercent;
+        Storm = weather.Storm;
 
         var heights = EnsureLayer(HeightsLayer, MapTileSets.Heights());
         var cover = EnsureLayer(CoverLayer, MapTileSets.Cover());
@@ -281,7 +307,8 @@ public partial class MapEditor : Node2D
 
         var vehicles = VehicleSpecs(map);
         string path = ProjectSettings.GlobalizePath(MapPath);
-        File.WriteAllText(path, MapFile.Serialize(new MapData(map, sorted, Math.Clamp(AmbientLight, 0, 100), vehicles)));
+        var weather = new WeatherSettings(Rain, (BlueHarvest.Sim.World.Direction)Math.Clamp(WindFrom, 0, 7), WindSpeed, Fog, Storm).Clamped();
+        File.WriteAllText(path, MapFile.Serialize(new MapData(map, sorted, Math.Clamp(AmbientLight, 0, 100), vehicles, weather)));
         GD.Print($"Exported {MapPath} (format v{MapFile.FormatVersion}): {map.Width}x{map.Height}, {sorted.Count} markers, {vehicles.Count} named vehicles.");
     }
 

@@ -18,6 +18,7 @@ public static class ScenarioBuilder
     public static Simulation Build(MapData data, ulong seed, IActorController? player = null)
     {
         var sim = new Simulation(data.Map, seed) { AmbientLightPercent = data.AmbientLight };
+        sim.SetWeather(data.StartingWeather);
         foreach (var spec in data.VehicleSpecs)
         {
             var vehicle = sim.VehicleAt(spec.At)

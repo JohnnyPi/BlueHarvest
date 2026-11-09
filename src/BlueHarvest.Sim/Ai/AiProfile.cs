@@ -24,6 +24,11 @@ namespace BlueHarvest.Sim.Ai;
 /// <param name="MaxContacts">Memory size, not counting things it has identified as uninteresting.</param>
 /// <param name="ThreatMinForce">A detected actor of another species this strong or stronger is a threat.</param>
 /// <param name="ThreatNoiseLoudness">An actor heard making a noise this loud (at the source) is a threat: a heavy tread, crashing.</param>
+/// <param name="ScentConfidencePerPoint">Confidence per point of scent strength at the nose.</param>
+/// <param name="ScentConfidenceCap">Most confidence a trail gives: it says someone passed, not that they're still there.</param>
+/// <param name="FeltConfidencePerPoint">Confidence per point of vibration felt.</param>
+/// <param name="FeltConfidenceCap">Most confidence a shake of the ground gives.</param>
+/// <param name="ThreatVibrationStrength">An actor whose step shakes the ground this hard (where it lands) is a threat.</param>
 public sealed record AiProfile(
     int PreyMaxBodyHeightDm,
     int ConfidenceDecayPerSecond,
@@ -43,7 +48,12 @@ public sealed record AiProfile(
     int StuckTurnsBeforeGivingUp,
     int MaxContacts,
     int ThreatMinForce = int.MaxValue,
-    int ThreatNoiseLoudness = int.MaxValue)
+    int ThreatNoiseLoudness = int.MaxValue,
+    int ScentConfidencePerPoint = 3,
+    int ScentConfidenceCap = 60,
+    int FeltConfidencePerPoint = 3,
+    int FeltConfidenceCap = 40,
+    int ThreatVibrationStrength = int.MaxValue)
 {
     /// <summary>
     /// Fixates on moving prey, follows noises, drawn to lights it doesn't know and test-bites them.
@@ -92,5 +102,6 @@ public sealed record AiProfile(
         StuckTurnsBeforeGivingUp: 8,
         MaxContacts: 16,
         ThreatMinForce: 5,
-        ThreatNoiseLoudness: 40);
+        ThreatNoiseLoudness: 40,
+        ThreatVibrationStrength: 30);
 }

@@ -35,6 +35,14 @@ public sealed class OverlayState
     /// <summary>[6] What the Rex remembers: a ring per contact (red prey, yellow unknown, grey ignored), thick for its focus.</summary>
     public bool RexMemory = true;
 
+    /// <summary>[7] Scent on the ground: green dots for body scent, pink for blood, fading as they wash out.</summary>
+    public bool Scent;
+
+    /// <summary>[8] Ground vibrations since the player's last turn: a brown ring as far as a person would feel it.</summary>
+    public bool Vibration = true;
+
+    public IReadOnlyList<VibrationEvent> Vibrations = Array.Empty<VibrationEvent>();
+
     public IReadOnlyList<TilePos> RexPathTiles = Array.Empty<TilePos>();
     public IReadOnlyList<ContactMark> Contacts = Array.Empty<ContactMark>();
 
@@ -85,6 +93,7 @@ public partial class AsciiMapView : Node2D
     private static readonly Color RopeColor = new(0.85f, 0.75f, 0.45f, 0.9f);
     private static readonly Color FlareInk = new(1f, 0.35f, 0.25f);
     private static readonly Color CursorColor = new(1f, 0.9f, 0.3f, 0.85f);
+    private static readonly Color VibrationRing = new(0.80f, 0.55f, 0.30f, 0.65f);
 
     /// <summary>Background, glyph and glyph color per cover type, indexed by CoverType.</summary>
     private static readonly (Color Background, char Glyph, Color Ink)[] CoverLook =
@@ -258,6 +267,34 @@ public partial class AsciiMapView : Node2D
         // Blood: a dark spot where someone bleeding has passed.
         foreach (var spot in _sim.BloodSpots)
             DrawCircle(TileCenter(spot.Position) + new Vector2(3f, 4f), 2.5f, BloodColor);
+
+        // Scent: a dot per mark, bigger and brighter the stronger it still is.
+        if (o.Scent)
+        {
+            long wash = _sim.Weather.Wash(_sim.CurrentTick);
+            foreach (var mark in _sim.ScentMarks)
+            {
+                int strength = mark.StrengthAt(wash);
+                if (strength <= 0)
+                    continue;
+                float alpha = 0.2f + 0.6f * strength / 100f;
+                var color = mark.Blood ? new Color(1f, 0.35f, 0.6f, alpha) : new Color(0.45f, 0.95f, 0.35f, alpha);
+                DrawCircle(TileCenter(mark.Position) + new Vector2(-4f, -4f), 1.5f + 3f * strength / 100f, color);
+            }
+        }
+
+        // Vibration: how far a person would feel each footfall or crash (their threshold is 10).
+        if (o.Vibration)
+        {
+            foreach (var vibration in o.Vibrations)
+            {
+                float reach = (vibration.Strength - Species.Human.Senses.VibrationThreshold)
+                    / (float)ScentRules.VibrationFalloffPerTile;
+                if (reach <= 0f)
+                    continue;
+                DrawArc(TileCenter(vibration.Position), reach * CellSize, 0f, Mathf.Tau, 64, VibrationRing, 2f);
+            }
+        }
 
         // Decks: translucent planks over whatever is beneath, a dark rim on their edges, 'H' for ladders.
         var structures = _sim.Map.Structures;

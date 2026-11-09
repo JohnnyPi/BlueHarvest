@@ -68,6 +68,11 @@ public sealed class Simulation
     private readonly List<Vehicle> _vehicles = new();
     private readonly List<Platform> _platforms = new();
     private readonly List<BloodSpot> _blood = new();
+    private readonly List<ScentMark> _scent = new();
+    private readonly List<VibrationEvent> _vibrations = new();
+    private long _weatherTick = -1;
+    private int _lightGridAmbient;
+    private long _lightGridTick = long.MinValue;
     private readonly Rng _injuryRng;
     private readonly Rng _gearRng;
     private readonly List<(int Light, long OffTick)> _lightExpiry = new();
@@ -89,6 +94,7 @@ public sealed class Simulation
     {
         Map = map;
         Rng = new Rng(seed);
+        Weather = new Weather(Rng.Fork("weather").NextULong());
         _injuryRng = Rng.Fork("injuries");
         _gearRng = Rng.Fork("gear");
         _occupant = new int[map.Width * map.Height];
@@ -153,6 +159,12 @@ public sealed class Simulation
     /// <summary>Raised after a rappel: (actor, whether it slipped and fell part of the way).</summary>
     public event Action<Actor, bool>? Rappelled;
 
+    /// <summary>Raised as time passes a lightning strike: the flash is now; its thunder follows.</summary>
+    public event Action<LightningStrike>? LightningStruck;
+
+    /// <summary>Raised when the weather is set.</summary>
+    public event Action<WeatherSettings>? WeatherChanged;
+
     public WorldMap Map { get; }
 
     public HeightMap Terrain => Map.Heights;
@@ -183,8 +195,21 @@ public sealed class Simulation
     /// <summary>Ropes left tied where people rappelled down.</summary>
     public IReadOnlyList<RopeSpot> Ropes => _ropes;
 
-    /// <summary>Where bleeding actors have left blood, oldest first. Scent comes with weather (build step 10).</summary>
+    /// <summary>Where bleeding actors have left blood, oldest first (what you see; what predators smell is in ScentMarks).</summary>
     public IReadOnlyList<BloodSpot> BloodSpots => _blood;
+
+    /// <summary>Scent on the ground, oldest first: body scent and blood. Only the last few thousand are kept.</summary>
+    public IReadOnlyList<ScentMark> ScentMarks => _scent;
+
+    /// <summary>Ground vibrations from the last <see cref="NoiseMemoryTicks"/> ticks, oldest first.</summary>
+    public IReadOnlyList<VibrationEvent> RecentVibrations => _vibrations;
+
+    /// <summary>Rain, wind, fog and storm, and what they do to the senses now.</summary>
+    public Weather Weather { get; }
+
+    /// <summary>Ambient light now: the set level, or lightning's while a flash lasts.</summary>
+    public int EffectiveAmbientPercent =>
+        Weather.Flash(CurrentTick) ? Math.Max(_ambientLight, Weather.FlashAmbientPercent) : _ambientLight;
 
     /// <summary>Noises from the last <see cref="NoiseMemoryTicks"/> ticks, oldest first.</summary>
     public IReadOnlyList<NoiseEvent> RecentNoises => _noises;
@@ -200,8 +225,32 @@ public sealed class Simulation
         }
     }
 
-    /// <summary>Light level per tile; recomputed when lights, ambient light, cover or doors change.</summary>
-    public LightGrid Light => _lightGrid ??= LightGrid.Compute(Map, _lights, _ambientLight);
+    /// <summary>Light level per tile; recomputed when lights, ambient light (lightning too), cover or doors change.</summary>
+    public LightGrid Light
+    {
+        get
+        {
+            // Checked once per tick: the renderer asks for every tile, and a storm's flash check isn't free.
+            if (_lightGrid is not null && _lightGridTick == CurrentTick)
+                return _lightGrid;
+            int ambient = EffectiveAmbientPercent;
+            if (_lightGrid is null || _lightGridAmbient != ambient)
+            {
+                _lightGrid = LightGrid.Compute(Map, _lights, ambient);
+                _lightGridAmbient = ambient;
+            }
+            _lightGridTick = CurrentTick;
+            return _lightGrid;
+        }
+    }
+
+    /// <summary>Sets the weather from now on (scenario setup, debug keys; not recorded in replays).</summary>
+    public void SetWeather(WeatherSettings settings)
+    {
+        Weather.Set(settings, CurrentTick);
+        _lightGrid = null; // a storm may start or stop mid-flash
+        WeatherChanged?.Invoke(Weather.Settings);
+    }
 
     /// <param name="onDeck">Start on the deck over <paramref name="position"/> (single-tile actors only).</param>
     /// <param name="loadout">Skills and starting gear; none if left out.</param>
@@ -273,6 +322,56 @@ public sealed class Simulation
     }
 
     /// <summary>
+    /// Shakes the ground at a tile with a blow of <paramref name="strength"/>: what's recorded is what
+    /// the ground there carries (rock and decks more, soft ground less, mud less again).
+    /// </summary>
+    public void EmitVibration(TilePos position, int strength, int? actorId = null, bool onDeck = false)
+    {
+        if (strength <= 0 || !Map.InBounds(position))
+            return;
+        var cover = onDeck ? Covers.Deck : Map.CoverAt(position);
+        int carried = strength * Weather.VibrationPercent(cover, outdoors: !Map.IsIndoor(position)) / 100;
+        if (carried <= 0)
+            return;
+        _vibrations.Add(new VibrationEvent(CurrentTick, position, carried, actorId));
+        _vibrations.RemoveAll(v => v.Tick < CurrentTick - NoiseMemoryTicks);
+    }
+
+    /// <summary>
+    /// Leaves scent where an actor is: its body scent, and blood too if it's bleeding. Nothing gets out
+    /// of an intact vehicle's cab.
+    /// </summary>
+    private void LayScent(Actor actor, TilePos at)
+    {
+        actor.LastScentTick = CurrentTick;
+        if (VehicleAt(at) is { Breached: false })
+            return;
+        long wash = Weather.Wash(CurrentTick);
+        if (actor.Species.ScentStrength > 0)
+            AddScent(new ScentMark(at, CurrentTick, actor.Id, actor.Species.ScentStrength, Blood: false, wash));
+        if (actor.Health.BleedingWounds > 0)
+            AddScent(new ScentMark(at, CurrentTick, actor.Id, ScentRules.BloodStrength, Blood: true, wash));
+    }
+
+    private void AddScent(ScentMark mark)
+    {
+        _scent.Add(mark);
+        if (_scent.Count > ScentRules.MaxMarks + ScentRules.TrimBatch)
+            _scent.RemoveRange(0, ScentRules.TrimBatch);
+    }
+
+    /// <summary>Raises LightningStruck for every strike time has passed since the last call.</summary>
+    private void AdvanceWeather()
+    {
+        if (CurrentTick <= _weatherTick)
+            return;
+        long from = _weatherTick;
+        _weatherTick = CurrentTick;
+        foreach (var strike in Weather.StrikesBetween(from, CurrentTick))
+            LightningStruck?.Invoke(strike);
+    }
+
+    /// <summary>
     /// The actor on the ground at this tile, if any: a single-tile actor, or a large body whose core
     /// covers it. Heads and tails don't occupy tiles. Actors on a deck above are found with ActorOnDeck.
     /// </summary>
@@ -335,7 +434,12 @@ public sealed class Simulation
         vehicle.Integrity = Math.Clamp(integrity, 0, Vehicle.MaxIntegrity);
 
     /// <summary>An actor's senses as its wounds leave them (a hurt head blurs vision and dulls hearing).</summary>
-    public SenseProfile SensesOf(Actor actor) => actor.Health.Adjust(actor.Species.Senses);
+    public SenseProfile SensesOf(Actor actor)
+    {
+        var senses = actor.Health.Adjust(actor.Species.Senses);
+        int percent = Weather.SightRangePercent;
+        return percent >= 100 ? senses : senses with { SightRangeTiles = senses.SightRangeTiles * percent / 100 };
+    }
 
     /// <summary>
     /// Wounds a section. A red wound on a section that's already red kills; a yellow one on a yellow
@@ -702,6 +806,7 @@ public sealed class Simulation
 
         CurrentTick = tick;
         ExpireLights();
+        AdvanceWeather();
         var actor = _actors[id];
         UpdateHealth(actor);
         if (actor.IsDead)
@@ -709,6 +814,8 @@ public sealed class Simulation
             _scheduler.TryDequeue(out _, out _);
             return StepResult.Acted;
         }
+        if (CurrentTick - actor.LastScentTick >= ScentRules.IdleMarkTicks)
+            LayScent(actor, actor.Position);
 
         var action = actor.Controller.Decide(actor, this);
         if (action is null)
@@ -751,6 +858,7 @@ public sealed class Simulation
         if (tick > CurrentTick)
             CurrentTick = tick;
         ExpireLights();
+        AdvanceWeather();
     }
 
     /// <summary>
@@ -798,6 +906,10 @@ public sealed class Simulation
             hasher.Add(platform.Collapsed ? 1 : 0);
         foreach (var light in _lights)
             hasher.Add(light.Position.X).Add(light.Position.Y).Add(light.On ? 1 : 0);
+        Weather.AddTo(hasher);
+        hasher.Add(_scent.Count).Add(_vibrations.Count);
+        if (_scent.Count > 0)
+            hasher.Add(_scent[^1].Tick).Add(_scent[^1].Position.X).Add(_scent[^1].Position.Y);
         return hasher.Value;
     }
 
@@ -893,17 +1005,21 @@ public sealed class Simulation
             DropBlood(actor.Position);
         Place(actor, to, direction, toDeck);
         actor.LastMovedTick = CurrentTick;
+        LayScent(actor, to);
 
         int loudness = actor.Species.FootstepLoudness + cover.NoiseModifier + actor.Health.FootstepBonus;
         if (step > actor.Movement.MaxStepUpDm)
         {
             // A climb: hands and feet, slow and noisy, sprinting or not.
             EmitNoise(to, loudness + GearRules.ClimbLoudnessBonus, NoiseKinds.Scrambling, actor.Id);
+            EmitVibration(to, actor.Species.VibrationStrength, actor.Id, toDeck);
             return GearRules.ClimbStepTicks(step, actor.Skills.Climbing) * actor.Health.ClimbCostPercent / 100;
         }
 
         bool running = sprint && actor.Health.CanSprint;
         EmitNoise(to, loudness + (running ? GearRules.SprintLoudnessBonus : 0), NoiseKinds.Footsteps, actor.Id);
+        EmitVibration(to, actor.Species.VibrationStrength * (running ? ScentRules.SprintVibrationPercent : 100) / 100,
+            actor.Id, toDeck);
         int cost = actor.Movement.CostTicks(step, direction.IsDiagonal()) * cover.MoveCostPercent / 100
             * actor.Health.StepCostPercent / 100;
         if (running)
@@ -1011,6 +1127,7 @@ public sealed class Simulation
         bool slipped = _gearRng.Chance(GearRules.RappelFailPercent(actor.Skills.Rappelling, actor.Health.YellowArms), 100);
         Place(actor, to, direction, onDeck: false);
         actor.LastMovedTick = CurrentTick;
+        LayScent(actor, to);
         EmitNoise(to, GearRules.RappelLoudness, NoiseKinds.Rope, actor.Id);
         if (slipped)
         {
@@ -1257,8 +1374,14 @@ public sealed class Simulation
 
         var anchorCover = Map.CoverAt(anchor);
         EmitNoise(anchor, actor.Species.FootstepLoudness + anchorCover.NoiseModifier, NoiseKinds.Footsteps, actor.Id);
+        EmitVibration(anchor, actor.Species.VibrationStrength * (turning ? ScentRules.TurnVibrationPercent : 100) / 100, actor.Id);
+        if (!turning)
+            LayScent(actor, anchor);
         if (smashed > 0)
+        {
             EmitNoise(anchor, SmashLoudness, NoiseKinds.Crashing, actor.Id);
+            EmitVibration(anchor, ScentRules.SmashVibration, actor.Id);
+        }
 
         int cost = turning
             ? actor.Movement.TurnTicks
@@ -1312,6 +1435,7 @@ public sealed class Simulation
 
         _lightGrid = null;
         EmitNoise(vehicle.Anchor, ShoveLoudness, NoiseKinds.MetalScrape, by.Id);
+        EmitVibration(vehicle.Anchor, ScentRules.ShoveVibration, by.Id);
         VehicleShoved?.Invoke(vehicle, by);
         DamageVehicle(vehicle, ShoveDamage, by);
     }
@@ -1467,6 +1591,7 @@ public sealed class Simulation
         StructureChanges++;
         _lightGrid = null;
         EmitNoise(platform.Tiles[platform.Tiles.Count / 2], CollapseLoudness, NoiseKinds.Collapse, by?.Id);
+        EmitVibration(platform.Tiles[platform.Tiles.Count / 2], ScentRules.CollapseVibration, by?.Id);
         PlatformCollapsed?.Invoke(platform, by, fell);
     }
 
