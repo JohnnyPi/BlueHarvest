@@ -35,4 +35,12 @@ public sealed record IslandParams
     public double Pali { get; init; } = 0.85;
     /// <summary>Sea-cliff retreat in km (at full scale).</summary>
     public double Cliffs { get; init; } = 1.2;
+
+    // ---------- stage 3: climate ----------
+    /// <summary>Sea-level air temperature, °C; it falls 6.5 °C per km of height.</summary>
+    public double SeaTemp { get; init; } = 24;
+    /// <summary>Height of the trade-wind cloud base, m.</summary>
+    public double CloudBase { get; init; } = 650;
+    /// <summary>Wetland multiplier.</summary>
+    public double Wetlands { get; init; } = 1;
 }

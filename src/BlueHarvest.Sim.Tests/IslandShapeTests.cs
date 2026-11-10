@@ -1,4 +1,3 @@
-using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.World.Generation;
 using Xunit;
 
@@ -15,13 +14,6 @@ public class IslandShapeTests
     public sealed record Expected(int Nx, int Ny, int Islets, int Lakes, int Rivers, int Falls,
         ulong Anchors, ulong Landmass, ulong Coast, ulong Erosion, ulong Tree, ulong LakeGroup, ulong RiverGroup, ulong FallGroup, ulong CoastClasses);
 
-    private static readonly Dictionary<string, IslandParams> Cases = new()
-    {
-        ["Default"] = new IslandParams(),
-        ["Seed12"] = new IslandParams { Seed = 12 },
-        ["SmallNoCliffs"] = new IslandParams { Seed = 44, Scale = 50, Wind = 100, Cliffs = 0, Iterations = 5, Pali = 0.5 },
-    };
-
     // node tools/island-lab/golden-shape.js
     private static readonly Dictionary<string, Expected> Golden = new()
     {
@@ -33,43 +25,13 @@ public class IslandShapeTests
             0x5850EE1E9F1A5CAEUL, 0x07068763515188B1UL, 0x25EAD217B29B0C1DUL, 0x99D090EF101A971AUL, 0xCDE3328EFC7F7B3AUL, 0xCA13BF47F879E296UL, 0xAA16AEC51396608BUL, 0xEA33F90D7C9ACF76UL, 0x71B7BA3E4ADABAC2UL),
     };
 
-    public static IEnumerable<object[]> CaseNames => Cases.Keys.Select(k => new object[] { k });
+    public static IEnumerable<object[]> CaseNames => Golden.Keys.Select(k => new object[] { k });
 
-    private static readonly Dictionary<string, IslandShape> Built = new();
-    private static readonly object BuildLock = new();
-
-    private static IslandShape Shape(string name)
-    {
-        lock (BuildLock)
-        {
-            if (!Built.TryGetValue(name, out IslandShape? shape))
-            {
-                shape = IslandShape.Generate(Cases[name]);
-                Built[name] = shape;
-            }
-            return shape;
-        }
-    }
-
-    private sealed class Hash
-    {
-        private readonly StateHasher _h = new();
-        public ulong Value => _h.Value;
-        public Hash D(double v) { _h.Add(BitConverter.DoubleToUInt64Bits(v)); return this; }
-        public Hash I(long v) { _h.Add(v); return this; }
-        public Hash U(uint v) { _h.Add((ulong)v); return this; }
-        /// <summary>NaN bit patterns differ between runtimes, so NaN hashes as a marker.</summary>
-        public Hash Nan(double v) => double.IsNaN(v) ? I(-7) : D(v);
-        public Hash Ds(double[] a) { I(a.Length); foreach (double v in a) D(v); return this; }
-        public Hash Ds(float[] a) { I(a.Length); foreach (float v in a) D(v); return this; }
-        public Hash Is(byte[] a) { I(a.Length); foreach (byte v in a) I(v); return this; }
-        public Hash Is(int[] a) { I(a.Length); foreach (int v in a) I(v); return this; }
-        public Hash Is(List<int> a) { I(a.Count); foreach (int v in a) I(v); return this; }
-    }
+    private static IslandShape Shape(string name) => TestIslands.Shape(name);
 
     private static ulong AnchorsHash(IslandAnchors a)
     {
-        var h = new Hash().D(a.S).D(a.W).D(a.H).D(a.Along.X).D(a.Along.Y).D(a.Across.X).D(a.Across.Y);
+        var h = new GenHasher().D(a.S).D(a.W).D(a.H).D(a.Along.X).D(a.Along.Y).D(a.Across.X).D(a.Across.Y);
         foreach (Shield s in new[] { a.OldShield, a.YoungShield })
         {
             h.Ds(s.Ridge.Xs).Ds(s.Ridge.Ys).D(s.Ridge.Total).D(s.Peak).D(s.WPos).D(s.WNeg)
@@ -110,7 +72,7 @@ public class IslandShapeTests
     public void Landmass_MatchesReference(string name)
     {
         IslandShape w = Shape(name);
-        ulong got = new Hash().Ds(w.OldWeight).Ds(w.Lava).Ds(w.Erodibility).Ds(w.PaliCut).Value;
+        ulong got = new GenHasher().Ds(w.OldWeight).Ds(w.Lava).Ds(w.Erodibility).Ds(w.PaliCut).Value;
         Assert.Equal(Golden[name].Landmass, got);
     }
 
@@ -119,7 +81,7 @@ public class IslandShapeTests
     public void Coast_MatchesReference(string name)
     {
         IslandShape w = Shape(name);
-        ulong got = new Hash().Ds(w.Height0).Is(w.Land).Is(w.Ocean).Ds(w.DistLand).Ds(w.DistSea).D(w.CutKm2).Value;
+        ulong got = new GenHasher().Ds(w.Height0).Is(w.Land).Is(w.Ocean).Ds(w.DistLand).Ds(w.DistSea).D(w.CutKm2).Value;
         Assert.Equal(Golden[name].Coast, got);
     }
 
@@ -128,7 +90,7 @@ public class IslandShapeTests
     public void Erosion_MatchesReference(string name)
     {
         IslandShape w = Shape(name);
-        ulong got = new Hash().Ds(w.Height).Ds(w.Filled).Ds(w.Rain).Value;
+        ulong got = new GenHasher().Ds(w.Height).Ds(w.Filled).Ds(w.Rain).Value;
         Assert.Equal(Golden[name].Erosion, got);
     }
 
@@ -138,7 +100,7 @@ public class IslandShapeTests
     {
         IslandShape w = Shape(name);
         DrainageTree t = w.Tree;
-        var h = new Hash().Is(t.Receiver).Ds(t.ReceiverDistance);
+        var h = new GenHasher().Is(t.Receiver).Ds(t.ReceiverDistance);
         for (int i = 0; i < t.N; i++) if (t.Receiver[i] == DrainageTree.Outlet) h.I(t.Mouth[i]);
         h.I(t.StackCount);
         for (int i = 0; i < t.StackCount; i++) h.I(t.Stack[i]);
@@ -150,7 +112,7 @@ public class IslandShapeTests
     public void Lakes_MatchReference(string name)
     {
         IslandShape w = Shape(name);
-        var h = new Hash().I(w.Lakes.Count);
+        var h = new GenHasher().I(w.Lakes.Count);
         foreach (Lake l in w.Lakes) h.I(l.Id).D(l.AreaKm2).D(l.Depth).D(l.Level).D(l.Cx).D(l.Cy);
         h.I(w.N);
         foreach (float v in w.LakeLevel) h.Nan(v);
@@ -162,7 +124,7 @@ public class IslandShapeTests
     public void Rivers_MatchReference(string name)
     {
         IslandShape w = Shape(name);
-        var h = new Hash().Ds(w.Flow).Ds(w.ToSea).Is(w.IsRiver).Is(w.Heads).I(w.Rivers.Count);
+        var h = new GenHasher().Ds(w.Flow).Ds(w.ToSea).Is(w.IsRiver).Is(w.Heads).I(w.Rivers.Count);
         foreach (River r in w.Rivers)
             h.I(r.End == RiverEnd.Sea ? 1 : 0).I(r.Head).Ds(r.Xs).Ds(r.Ys).Ds(r.Qs).Ds(r.Hs);
         h.D(w.StreamLength);
@@ -174,7 +136,7 @@ public class IslandShapeTests
     public void Falls_MatchReference(string name)
     {
         IslandShape w = Shape(name);
-        var h = new Hash().I(w.Falls.Count);
+        var h = new GenHasher().I(w.Falls.Count);
         foreach (Waterfall f in w.Falls) h.D(f.X).D(f.Y).D(f.Drop).D(f.Q).I(f.IntoSea ? 1 : 0).I(f.OnRiver ? 1 : 0);
         Assert.Equal(Golden[name].FallGroup, h.Value);
     }
@@ -184,7 +146,7 @@ public class IslandShapeTests
     public void CoastClasses_MatchReference(string name)
     {
         IslandShape w = Shape(name);
-        ulong got = new Hash().Is(w.Coast).Is(w.Sea).Ds(w.CoastNx).Ds(w.CoastNy).Ds(w.CoastExposure).Ds(w.CliffMask)
+        ulong got = new GenHasher().Is(w.Coast).Is(w.Sea).Ds(w.CoastNx).Ds(w.CoastNy).Ds(w.CoastExposure).Ds(w.CliffMask)
             .D(w.SeaCliffTop).I(w.SeaCliffCells).I(w.PaliCells).D(w.PaliDrop).Value;
         Assert.Equal(Golden[name].CoastClasses, got);
     }
@@ -194,7 +156,7 @@ public class IslandShapeTests
     {
         var p = new IslandParams { Seed = 3, Scale = 40, Iterations = 2 };
         IslandShape a = IslandShape.Generate(p), b = IslandShape.Generate(p);
-        Assert.Equal(new Hash().Ds(a.Height).Value, new Hash().Ds(b.Height).Value);
+        Assert.Equal(new GenHasher().Ds(a.Height).Value, new GenHasher().Ds(b.Height).Value);
     }
 
     [Fact]

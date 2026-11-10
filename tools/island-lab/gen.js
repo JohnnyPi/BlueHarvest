@@ -1960,6 +1960,7 @@ var IslandGen = (function () {
       }
     }
     lap('climate and biomes');
+    if (p.stopAfter === 'climate') return { temp, fog, wet, crest, slopeD, nearLake, biome, region, biomeKm2, regionKm2, regionLabels, tMin, tMax };
 
     // ---------- stage 4: the works of people, and caves ----------
     const W4 = works({ p, A, nx, ny, cell, n, area, H, H0, land, lake, rain, slopeD, biome, region, distLand, distSea, coast,
