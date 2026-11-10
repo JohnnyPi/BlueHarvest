@@ -24,7 +24,7 @@ public partial class HelpPanel : PanelContainer
         "[color=#e9b04c]Close a door[/color]    c          [color=#e9b04c]Ladder[/color]       < >\n" +
         "[color=#e9b04c]Order[/color]           o, then f follow · s stay · h hide\n" +
         "\n" +
-        "[color=#e9b04c]F1[/color] this help   [color=#e9b04c]F9[/color] debug panel   [color=#e9b04c]Esc[/color] cancel";
+        "[color=#e9b04c]F1[/color] this help   [color=#e9b04c]F9[/color] debug panel   [color=#e9b04c]F10[/color] main menu   [color=#e9b04c]Esc[/color] cancel";
 
     public HelpPanel()
     {

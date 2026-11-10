@@ -177,6 +177,12 @@ public partial class Main : Node2D
             return;
         }
 
+        if (!key.Echo && key.Keycode == Key.F10)
+        {
+            viewport.SetInputAsHandled();
+            GetTree().ChangeSceneToFile(Island.FrontMenu.MenuScene);
+            return;
+        }
         if (!key.Echo && key.Keycode == Key.F9)
         {
             viewport.SetInputAsHandled();
