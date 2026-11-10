@@ -1231,6 +1231,7 @@ var IslandGen = (function () {
         }
       }
     }
+    if (p.stopAfter === 'sites') return { stop: { sites, leylines, paddocks, padCell, power, powerKm, labels, prims, mx, my } };
     // ---------- caves: lava tubes on the young flanks, sea caves in the cliffs ----------
     say('Tracing lava tubes');
     const caves = [];
@@ -1965,6 +1966,7 @@ var IslandGen = (function () {
     // ---------- stage 4: the works of people, and caves ----------
     const W4 = works({ p, A, nx, ny, cell, n, area, H, H0, land, lake, rain, slopeD, biome, region, distLand, distSea, coast,
       coastNX, coastNY, coastEx, sea, Q, isRiver, lava, oldW, crest, wet, say, lap });
+    if (W4.stop) return W4.stop;
 
     // ---------- metrics ----------
     const lbl = new Int32Array(n), lsz = components(land, nx, ny, lbl);

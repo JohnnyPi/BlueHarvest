@@ -43,4 +43,8 @@ public sealed record IslandParams
     public double CloudBase { get; init; } = 650;
     /// <summary>Wetland multiplier.</summary>
     public double Wetlands { get; init; } = 1;
+
+    // ---------- stage 4: the works ----------
+    /// <summary>Paddock size multiplier (0 = no paddocks).</summary>
+    public double PaddockSize { get; init; } = 1;
 }

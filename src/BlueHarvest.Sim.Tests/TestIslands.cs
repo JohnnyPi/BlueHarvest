@@ -23,7 +23,12 @@ internal static class TestIslands
     private static readonly Dictionary<string, Lazy<IslandClimate>> Climates =
         Cases.ToDictionary(kv => kv.Key, kv => new Lazy<IslandClimate>(() => IslandClimate.Compute(Shape(kv.Key))));
 
+    private static readonly Dictionary<string, Lazy<IslandWorks>> WorksByName =
+        Cases.ToDictionary(kv => kv.Key, kv => new Lazy<IslandWorks>(() => IslandWorks.Compute(Shape(kv.Key), Climate(kv.Key))));
+
     public static IslandShape Shape(string name) => Shapes[name].Value;
+
+    public static IslandWorks Works(string name) => WorksByName[name].Value;
 
     public static IslandClimate Climate(string name) => Climates[name].Value;
 }
@@ -36,6 +41,8 @@ internal sealed class GenHasher
     public GenHasher D(double v) { _h.Add(BitConverter.DoubleToUInt64Bits(v)); return this; }
     public GenHasher I(long v) { _h.Add(v); return this; }
     public GenHasher U(uint v) { _h.Add((ulong)v); return this; }
+    /// <summary>A string as its length and UTF-16 code units.</summary>
+    public GenHasher S(string s) { I(s.Length); foreach (char ch in s) I(ch); return this; }
     /// <summary>NaN bit patterns differ between runtimes, so NaN hashes as a marker.</summary>
     public GenHasher Nan(double v) => double.IsNaN(v) ? I(-7) : D(v);
     public GenHasher Ds(double[] a) { I(a.Length); foreach (double v in a) D(v); return this; }
