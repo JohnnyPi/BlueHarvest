@@ -51,6 +51,13 @@ public sealed class OverlayState
     public int CursorRange;
     public TilePos CursorFrom;
 
+    /// <summary>The tile under the mouse, outlined; null when the mouse is off the map or over a panel.</summary>
+    public TilePos? Hover;
+
+    /// <summary>The walk the mouse would start: a dot per step, and a label at the end ("14 steps · 9.8 s").</summary>
+    public IReadOnlyList<TilePos> PathPreview = Array.Empty<TilePos>();
+    public string? PathLabel;
+
     public bool[]? PlayerVisibleTiles;
     public HashSet<int> PlayerSpottedActors = new();
     public int[]? RexScores;
@@ -98,6 +105,11 @@ public partial class AsciiMapView : Node2D
     private static readonly Color SparkDim = new(0.45f, 0.65f, 1f, 0.8f);
     private static readonly Color ExitInk = new(0.45f, 1f, 0.55f);
     private static readonly Color ExitBacking = new(0.05f, 0.35f, 0.12f, 0.85f);
+    private static readonly Color PreviewDot = new(1f, 1f, 0.94f, 0.75f);
+    private static readonly Color HoverEdge = new(1f, 1f, 1f, 0.8f);
+    private static readonly Color LabelBacking = new(0.03f, 0.04f, 0.035f, 0.85f);
+    private static readonly Color LabelInk = new(0.95f, 0.94f, 0.86f);
+    private const int LabelFontSize = 14;
 
     /// <summary>Background, glyph and glyph color per cover type, indexed by CoverType.</summary>
     private static readonly (Color Background, char Glyph, Color Ink)[] CoverLook =
@@ -365,6 +377,10 @@ public partial class AsciiMapView : Node2D
             DrawRect(new Rect2(cursor.X * CellSize, cursor.Y * CellSize, CellSize, CellSize), CursorColor, false, 2f);
         }
 
+        // The walk the mouse would start.
+        foreach (var p in o.PathPreview)
+            DrawCircle(TileCenter(p), 3f, PreviewDot);
+
         // Actors on top: those on the ground first, then anyone up on a deck.
         foreach (bool onDeck in new[] { false, true })
         {
@@ -393,6 +409,22 @@ public partial class AsciiMapView : Node2D
                 DrawFacing(actor.Position, actor.Facing);
             }
         }
+
+        // The tile under the mouse, and the walk's length beside the last step.
+        if (o.Hover is { } hover && o.Cursor is null)
+            DrawRect(new Rect2(hover.X * CellSize + 1, hover.Y * CellSize + 1, CellSize - 2, CellSize - 2), HoverEdge, false, 1.5f);
+        if (o.PathLabel is { } label && o.PathPreview.Count > 0)
+            DrawLabel(label, TileCenter(o.PathPreview[^1]) + new Vector2(0, -CellSize * 0.75f));
+    }
+
+    /// <summary>A short line of text on a dark backing, centred above <paramref name="at"/>.</summary>
+    private void DrawLabel(string text, Vector2 at)
+    {
+        var size = _font.GetStringSize(text, HorizontalAlignment.Left, -1, LabelFontSize);
+        var box = new Rect2(at.X - size.X / 2f - 5f, at.Y - size.Y, size.X + 10f, size.Y + 4f);
+        DrawRect(box, LabelBacking);
+        DrawString(_font, new Vector2(box.Position.X + 5f, at.Y - _font.GetDescent(LabelFontSize) + 1f), text,
+            HorizontalAlignment.Left, -1, LabelFontSize, LabelInk);
     }
 
     /// <summary>Core as solid 'O' tiles, neck 'o', tail '~', and the actor's glyph on the head tip.</summary>
