@@ -47,4 +47,6 @@ public sealed record IslandParams
     // ---------- stage 4: the works ----------
     /// <summary>Paddock size multiplier (0 = no paddocks).</summary>
     public double PaddockSize { get; init; } = 1;
+    /// <summary>0 turns the transit lines off.</summary>
+    public double Transit { get; init; } = 1;
 }

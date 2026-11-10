@@ -1493,6 +1493,7 @@ var IslandGen = (function () {
             let Lk = 0; for (let m = 1; m < pts.length; m++) Lk += D.hyp(pts[m][0] - pts[m - 1][0], pts[m][1] - pts[m - 1][1]);
             link(nodeAt(order[k].x, order[k].y), nodeAt(order[k + 1].x, order[k + 1].y), Lk / 7 + 240);
           }
+          if (xs.length) { // no line at all if the first leg could not be built
           labels.push('Tram stop'); const sl = labels.length - 1;
           for (const t of order) {
             // a platform beside the line where it leaves the compound
@@ -1504,6 +1505,7 @@ var IslandGen = (function () {
           }
           let km = 0; for (let m = 1; m < xs.length; m++) km += D.hyp(xs[m] - xs[m - 1], ys[m] - ys[m - 1]) / 1000;
           transit.tram = { name: 'Park tram', xs: Float32Array.from(xs), ys: Float32Array.from(ys), stops, km };
+          }
         }
       }
       // underground monorail: the corporate core, straight under everything
@@ -1546,6 +1548,7 @@ var IslandGen = (function () {
       t.nearestTransit = best >= 0 ? { id: best, name: sites[best].name, minutes: walkTransit[a][best] } : null;
     });
     lap('walking and transit');
+    if (p.stopAfter === 'transit') return { stop: { walk, walkTransit, transit, objectives, labels, prims, nearest: sites.map(t => t.nearest), nearestTransit: sites.map(t => t.nearestTransit) } };
 
     // ---------- wildlife habitat ----------
     say('Mapping wildlife');

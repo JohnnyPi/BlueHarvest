@@ -60,6 +60,12 @@ public sealed class Prim
     public List<(int X, int Y)>? Doors { get; init; }
 }
 
+/// <summary>A point in a <see cref="PrimList"/>'s history.</summary>
+public readonly record struct PrimMark(int Front, int Back)
+{
+    public int Count => Front + Back;
+}
+
 /// <summary>
 /// The works' primitives in drawing order. Buildings go to the front (so furniture draws over
 /// their floors), everything else to the back, exactly as the reference does with unshift/push.
@@ -74,6 +80,16 @@ public sealed class PrimList
     public void AddFront(Prim p) => _front.Add(p);
 
     public void Add(Prim p) => _back.Add(p);
+
+    /// <summary>The list's current extent, to read it back later as it was now.</summary>
+    public PrimMark Mark() => new(_front.Count, _back.Count);
+
+    /// <summary>The primitives that existed at a mark, in the drawing order they had then.</summary>
+    public IEnumerable<Prim> InOrder(PrimMark at)
+    {
+        for (int i = at.Front - 1; i >= 0; i--) yield return _front[i];
+        for (int i = 0; i < at.Back; i++) yield return _back[i];
+    }
 
     /// <summary>All primitives in drawing order.</summary>
     public IEnumerable<Prim> InOrder()

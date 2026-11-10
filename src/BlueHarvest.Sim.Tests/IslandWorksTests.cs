@@ -41,8 +41,9 @@ public class IslandWorksTests
         Assert.Equal(e.Sites, w.Sites.Count);
         Assert.Equal(e.Paddocks, w.Paddocks.Count);
         Assert.Equal(e.Power, w.Power.Count);
-        Assert.Equal(e.Labels, w.Labels.Count);
-        Assert.Equal(e.Prims, w.Prims.Count);
+        // as they stood when the compounds were finished; transit adds more later
+        Assert.Equal(e.Labels, w.CompoundLabelCount);
+        Assert.Equal(e.Prims, w.CompoundPrims.Count);
     }
 
     [Theory]
@@ -104,14 +105,14 @@ public class IslandWorksTests
     public void Compounds_MatchReference(string name)
     {
         IslandWorks w = TestIslands.Works(name);
-        var h = new GenHasher().I(w.Labels.Count);
-        foreach (string s in w.Labels) h.S(s);
-        h.I(w.Prims.Count);
-        foreach (Prim q in w.Prims.InOrder()) HashPrim(h, q);
+        var h = new GenHasher().I(w.CompoundLabelCount);
+        foreach (string s in w.Labels.Take(w.CompoundLabelCount)) h.S(s);
+        h.I(w.CompoundPrims.Count);
+        foreach (Prim q in w.Prims.InOrder(w.CompoundPrims)) HashPrim(h, q);
         Assert.Equal(Golden[name].CompoundGroup, h.Value);
     }
 
-    private static void HashPrim(GenHasher h, Prim q)
+    internal static void HashPrim(GenHasher h, Prim q)
     {
         h.I((int)q.Kind);
         switch (q.Kind)

@@ -5,6 +5,8 @@ public sealed record Corporation(string Name, string Goal);
 /// <summary>A kind of facility. Placed in table order: the objective anchors (docks, airstrip, comms, control) first.</summary>
 public sealed record FacilityType(string Key, string Name, string Icon, int Count, int Corp, double Apart = 0, bool Major = false);
 
+public sealed record NearestSite(int Id, string Name, double Minutes);
+
 public sealed record Runway(double X1, double Y1, double X2, double Y2, double H);
 
 /// <summary>A placed facility.</summary>
@@ -27,6 +29,9 @@ public sealed class Site
     /// <summary>Docks: the outward coast normal.</summary>
     public (double X, double Y)? Dir { get; set; }
     public Runway? Runway { get; set; }
+    /// <summary>The nearest other facility on foot, and with transit.</summary>
+    public NearestSite? Nearest { get; set; }
+    public NearestSite? NearestTransit { get; set; }
     /// <summary>Which side of the compound fence faces the nearest road: 'n', 'e', 's' or 'w'.</summary>
     public char Gate { get; set; } = 's';
 }
@@ -80,9 +85,9 @@ public sealed class Road
 
 /// <summary>
 /// Stage 4 of island generation: the works of people. Stage 4a: facilities, species paddocks,
-/// power lines and the compounds' buildings. Stage 4b: roads.
+/// power lines and the compounds' buildings. Stage 4b: roads. Stage 4c: walking times and transit.
 /// </summary>
-public sealed class IslandWorks
+public sealed partial class IslandWorks
 {
     public static readonly Corporation[] Corps =
     [
@@ -184,6 +189,8 @@ public sealed class IslandWorks
         works.RouteRoads();
         works.StringPower();
         works.BuildCompounds();
+        works.TimeWalks();
+        works.LayTransit();
         return works;
     }
 
@@ -894,6 +901,17 @@ public sealed class IslandWorks
     {
         List<string> labels = Labels;
         PrimList prims = Prims;
+        BuildCompoundsCore(labels, prims);
+        CompoundLabelCount = labels.Count;
+        CompoundPrims = prims.Mark();
+    }
+
+    /// <summary>How many labels and primitives the compounds made, before transit added its own.</summary>
+    public int CompoundLabelCount { get; private set; }
+    public PrimMark CompoundPrims { get; private set; }
+
+    private void BuildCompoundsCore(List<string> labels, PrimList prims)
+    {
         foreach (Site t in Sites) FacilityPrograms.BuildCompound(t.X, t.Y, t.Name, t.Kind, labels, prims);
         foreach (Paddock q in Paddocks)
         {
