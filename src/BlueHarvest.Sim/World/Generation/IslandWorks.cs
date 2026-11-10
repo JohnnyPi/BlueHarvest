@@ -86,6 +86,7 @@ public sealed class Road
 /// <summary>
 /// Stage 4 of island generation: the works of people. Stage 4a: facilities, species paddocks,
 /// power lines and the compounds' buildings. Stage 4b: roads. Stage 4c: walking times and transit.
+/// Stage 4d: caves, wrecks, ruins and wildlife.
 /// </summary>
 public sealed partial class IslandWorks
 {
@@ -136,6 +137,8 @@ public sealed partial class IslandWorks
     private readonly int _nx, _ny, _n;
     private readonly double _cell, _area, _s, _sq;
     private readonly int[] _lblM;
+    private readonly List<int> _landCells = []; // every third cell that is land: the pool random picks draw from
+    private double[] _seaFrac = [];             // share of sea within 1.5 km, for headlands
     private readonly int _mainL;
 
     public List<Site> Sites { get; } = [];
@@ -191,6 +194,10 @@ public sealed partial class IslandWorks
         works.BuildCompounds();
         works.TimeWalks();
         works.LayTransit();
+        works.TraceCaves();
+        works.ScatterWrecks();
+        works.PlaceRuins();
+        works.MapWildlife();
         return works;
     }
 
@@ -256,6 +263,7 @@ public sealed partial class IslandWorks
         mx /= mc; my /= mc;
         CenterX = mx; CenterY = my;
         var seaFrac = new double[n];
+        _seaFrac = seaFrac;
         for (int i = 0; i < n; i++) seaFrac[i] = land[i] != 0 ? 0 : 1;
         GenGrid.BoxBlur(seaFrac, nx, ny, Math.Max(1, (int)GenMath.Round(1500 / _cell)), 1);
 
@@ -365,7 +373,7 @@ public sealed partial class IslandWorks
         }
 
         // ley lines: straight lines that the herds follow; survey stations sit where they cross
-        var landCells = new List<int>();
+        List<int> landCells = _landCells;
         for (int i = 0; i < n; i += 3) if (land[i] != 0) landCells.Add(i);
         double big = a.W + a.H;
         void LineThrough(double ax, double ay, double bx, double by)

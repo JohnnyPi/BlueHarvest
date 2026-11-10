@@ -61,6 +61,15 @@ public static class GenGrid
         return d;
     }
 
+    /// <summary>Bilinear sample of a grid at fractional cell coordinates (0,0 = centre of the first cell), clamped at the edges.</summary>
+    public static double Bilinear(float[] f, int nx, int ny, double gx, double gy)
+    {
+        int ix = (int)GenMath.Clamp(Math.Floor(gx), 0, nx - 2), iy = (int)GenMath.Clamp(Math.Floor(gy), 0, ny - 2);
+        double fx = GenMath.Clamp(gx - ix, 0, 1), fy = GenMath.Clamp(gy - iy, 0, 1);
+        int i = iy * nx + ix;
+        return (f[i] * (1 - fx) + f[i + 1] * fx) * (1 - fy) + (f[i + nx] * (1 - fx) + f[i + nx + 1] * fx) * fy;
+    }
+
     /// <summary>Separable box blur of radius r in place, repeated; edges average only the cells inside.</summary>
     public static void BoxBlur(double[] f, int nx, int ny, int r, int passes)
     {

@@ -49,4 +49,8 @@ public sealed record IslandParams
     public double PaddockSize { get; init; } = 1;
     /// <summary>0 turns the transit lines off.</summary>
     public double Transit { get; init; } = 1;
+    /// <summary>How many lava tubes, shipwrecks and ruins to place.</summary>
+    public int Tubes { get; init; } = 5;
+    public int Wrecks { get; init; } = 10;
+    public int Ruins { get; init; } = 16;
 }

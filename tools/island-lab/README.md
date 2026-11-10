@@ -12,9 +12,10 @@ node tools/island-lab/golden-climate.js # stage 3: IslandClimateTests
 node tools/island-lab/golden-sites.js   # stage 4a: IslandWorksTests
 node tools/island-lab/golden-roads.js   # stage 4b: IslandRoadsTests
 node tools/island-lab/golden-transit.js # stage 4c: IslandTransitTests
+node tools/island-lab/golden-wild.js    # stage 4d: IslandWildTests
 ```
 
-`generate({ stopAfter: 'shape' | 'climate' | 'sites' | 'roads' | 'transit' })` returns the generator's internal state at the
+`generate({ stopAfter: 'shape' | 'climate' | 'sites' | 'roads' | 'transit' | 'works' })` returns the generator's internal state at the
 end of stage 2, stage 3, stage 4a (after the compounds are built) or stage 4b (after the roads), which is what the golden scripts hash. The test islands are listed
 in each script's CASES and in `TestIslands.cs`; keep the two in step.
 

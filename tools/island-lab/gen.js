@@ -1579,6 +1579,7 @@ var IslandGen = (function () {
       return { key: F.key, name: F.name, note: F.note, density: dens, population: D.round(pop) };
     });
     lap('wildlife');
+    if (p.stopAfter === 'works') return { stop: { caves, wrecks, ruins, fauna } };
 
     return { sites, paddocks, roads, power, caves, wrecks, ruins, leylines, walk, walkTransit, transit, objectives, labels, prims, fauna, roadKm, mainKm, bridges, tunnels, powerKm };
   }
