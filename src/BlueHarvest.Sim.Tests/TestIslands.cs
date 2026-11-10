@@ -17,20 +17,21 @@ internal static class TestIslands
         ["CoolWet"] = new IslandParams { Seed = 9, Scale = 60, SeaTemp = 21, CloudBase = 500, Wetlands = 1.5, Rain = 1.3 },
     };
 
-    private static readonly Dictionary<string, Lazy<IslandShape>> Shapes =
-        Cases.ToDictionary(kv => kv.Key, kv => new Lazy<IslandShape>(() => IslandShape.Generate(kv.Value)));
+    private static readonly Dictionary<string, Lazy<IslandWorld>> Worlds =
+        Cases.ToDictionary(kv => kv.Key, kv => new Lazy<IslandWorld>(() => IslandWorld.Generate(kv.Value)));
 
-    private static readonly Dictionary<string, Lazy<IslandClimate>> Climates =
-        Cases.ToDictionary(kv => kv.Key, kv => new Lazy<IslandClimate>(() => IslandClimate.Compute(Shape(kv.Key))));
+    private static readonly Dictionary<string, Lazy<IslandChunker>> Chunkers =
+        Cases.ToDictionary(kv => kv.Key, kv => new Lazy<IslandChunker>(() => new IslandChunker(World(kv.Key))));
 
-    private static readonly Dictionary<string, Lazy<IslandWorks>> WorksByName =
-        Cases.ToDictionary(kv => kv.Key, kv => new Lazy<IslandWorks>(() => IslandWorks.Compute(Shape(kv.Key), Climate(kv.Key))));
+    public static IslandWorld World(string name) => Worlds[name].Value;
 
-    public static IslandShape Shape(string name) => Shapes[name].Value;
+    public static IslandShape Shape(string name) => World(name).Shape;
 
-    public static IslandWorks Works(string name) => WorksByName[name].Value;
+    public static IslandClimate Climate(string name) => World(name).Climate;
 
-    public static IslandClimate Climate(string name) => Climates[name].Value;
+    public static IslandWorks Works(string name) => World(name).Works;
+
+    public static IslandChunker Chunker(string name) => Chunkers[name].Value;
 }
 
 /// <summary>StateHasher over generator output, matching the hasher in tools/island-lab/golden-*.js.</summary>

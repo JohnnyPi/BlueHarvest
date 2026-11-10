@@ -82,6 +82,29 @@ public static class IslandMapImage
         (400, (0xD9, 0xC0, 0x8A)), (1200, (0xB9, 0xC9, 0x8C)), (2200, (0x6F, 0xB3, 0x9A)), (3500, (0x3E, 0x86, 0xB0)), (6000, (0x2A, 0x3F, 0x8F)),
     ];
 
+    // background, and a brighter "ink" colour for built things so walls and doors read at a glance
+    private static readonly (byte R, byte G, byte B)[] CoverBg = CoverLegend.Looks.Select(l => Hex(l.Bg)).ToArray();
+    private static readonly (byte R, byte G, byte B)[] CoverFg = CoverLegend.Looks.Select(l => Hex(l.Fg)).ToArray();
+
+    private static bool DrawnInInk(Cover c) => c is Cover.Wall or Cover.BigWall or Cover.Door or Cover.Fence or Cover.Pylon or Cover.Mast or Cover.Ruin
+        or Cover.Rack or Cover.Console or Cover.Furniture or Cover.Tank or Cover.Rail or Cover.Elevator or Cover.Wreck;
+
+    /// <summary>A chunk as a picture, one pixel per 1 m tile: each tile's cover colour, shaded by the lie of the land.</summary>
+    public static byte[] RenderChunk(IslandChunk chunk)
+    {
+        int n = chunk.Size * chunk.Size;
+        var px = new byte[n * 4];
+        for (int i = 0; i < n; i++)
+        {
+            var cover = (Cover)chunk.Cover[i];
+            (byte R, byte G, byte B) col = DrawnInInk(cover) ? CoverFg[(int)cover] : CoverBg[(int)cover];
+            double shade = cover <= Cover.Reef || DrawnInInk(cover) ? 1 : chunk.Shade[i];
+            px[4 * i] = (byte)Math.Min(255, col.R * shade); px[4 * i + 1] = (byte)Math.Min(255, col.G * shade);
+            px[4 * i + 2] = (byte)Math.Min(255, col.B * shade); px[4 * i + 3] = 255;
+        }
+        return px;
+    }
+
     /// <summary>The picture for a layer. Every layer but the outline is shaded by the lie of the land.</summary>
     public static byte[] Render(IslandWorld world, MapLayer layer)
     {

@@ -18,7 +18,17 @@ public partial class IslandOverlay : Node2D
     private Font _font = null!;
     private float _zoom = 1f;
 
-    public bool Rivers = true, Roads = true, Sites = true, Paddocks = true, Power, Transit = true, Hidden = true, LeyLines;
+    public bool Rivers = true, Roads = true, Sites = true, Paddocks = true, Power, Transit = true, Relics = true, LeyLines;
+
+    private bool _tileView;
+
+    /// <summary>While the 1 m tiles are showing, facilities are outlined only, so their buildings stay visible.</summary>
+    public void SetTileView(bool on)
+    {
+        if (_tileView == on) return;
+        _tileView = on;
+        QueueRedraw();
+    }
 
     public void Bind(Font font) => _font = font;
 
@@ -117,7 +127,7 @@ public partial class IslandOverlay : Node2D
                 if (rd.Class == RoadClass.Main) Floats(rd.Xs, rd.Ys, MainRoad, 2.2f);
         }
 
-        if (Hidden)
+        if (Relics)
         {
             foreach (Cave c in k.Caves)
             {
@@ -167,7 +177,7 @@ public partial class IslandOverlay : Node2D
                 if (t.Runway is { } rw) DrawLine(P(rw.X1, rw.Y1), P(rw.X2, rw.Y2), HudTheme.Ink, 3f * px);
                 Vector2 at = P(t.X, t.Y);
                 float r = Mathf.Max(t.R / cell, 5f * px);
-                DrawCircle(at, r, new Color(0.05f, 0.06f, 0.06f, 0.75f));
+                if (!_tileView) DrawCircle(at, r, new Color(0.05f, 0.06f, 0.06f, 0.75f));
                 DrawCircle(at, r, t.Major ? HudTheme.Amber : HudTheme.Ink, false, 1.5f * px);
                 Caption(at, t.Name, t.Major ? HudTheme.Amber : HudTheme.Ink);
             }

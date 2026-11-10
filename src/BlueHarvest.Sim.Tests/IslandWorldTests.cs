@@ -26,7 +26,8 @@ public class IslandWorldTests
     public void Generate_MatchesTheStagesRunSeparately()
     {
         IslandWorld w = Small.Value;
-        IslandWorks separate = TestIslands.Works("SmallNoCliffs");
+        IslandShape shape = IslandShape.Generate(TestIslands.Cases["SmallNoCliffs"]);
+        IslandWorks separate = IslandWorks.Compute(shape, IslandClimate.Compute(shape));
         Assert.Equal(separate.Sites.Select(t => (t.Name, t.X, t.Y)), w.Works.Sites.Select(t => (t.Name, t.X, t.Y)));
         Assert.Equal(separate.RoadKm, w.Works.RoadKm);
     }

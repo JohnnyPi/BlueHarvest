@@ -13,6 +13,7 @@ node tools/island-lab/golden-sites.js   # stage 4a: IslandWorksTests
 node tools/island-lab/golden-roads.js   # stage 4b: IslandRoadsTests
 node tools/island-lab/golden-transit.js # stage 4c: IslandTransitTests
 node tools/island-lab/golden-wild.js    # stage 4d: IslandWildTests
+node tools/island-lab/golden-chunks.js  # stage 5: IslandChunkTests (1 m tiles)
 ```
 
 `generate({ stopAfter: 'shape' | 'climate' | 'sites' | 'roads' | 'transit' | 'works' })` returns the generator's internal state at the

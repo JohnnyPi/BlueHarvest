@@ -11,13 +11,17 @@ namespace BlueHarvest.Game.Island;
 /// <summary>
 /// Island generator and map. Type a seed (or roll one) and generate; drag to pan, wheel to zoom.
 /// Basic view shows only what a survivor knows on arrival: the island's outline, and later whatever
-/// they have unlocked. Debug view (F9) reveals the whole island: layers, roads, facilities and the rest.
+/// they have unlocked. Debug view (F9) reveals the whole island: layers, roads, facilities and the rest,
+/// and zoomed far enough in it streams the 1 m tiles: buildings, rooms, fences, river beds.
 /// Esc goes back to the menu.
 /// </summary>
 public partial class IslandExplorer : Node2D
 {
     private const float PanelWidth = 330f;
     private const float PanSpeed = 900f;
+    /// <summary>Screen pixels per grid cell at which the debug view starts streaming 1 m tiles (1.5 px per tile).</summary>
+    private const float TileZoom = 192f;
+    private const float MaxZoom = 128f * 16f;
 
     private IslandWorld? _world;
     private Task<IslandWorld>? _job;
@@ -26,6 +30,7 @@ public partial class IslandExplorer : Node2D
 
     private Sprite2D _sprite = null!;
     private IslandOverlay _overlay = null!;
+    private IslandTileLayer _tiles = null!;
     private Camera2D _camera = null!;
     private float _zoom = 1f;
 
@@ -58,6 +63,8 @@ public partial class IslandExplorer : Node2D
 
         _sprite = new Sprite2D { Centered = false, TextureFilter = TextureFilterEnum.Nearest };
         AddChild(_sprite);
+        _tiles = new IslandTileLayer();
+        AddChild(_tiles);
         _overlay = new IslandOverlay();
         _overlay.Bind(font);
         AddChild(_overlay);
@@ -148,7 +155,7 @@ public partial class IslandExplorer : Node2D
         AddToggle(grid, "Paddocks", () => _overlay.Paddocks, v => _overlay.Paddocks = v);
         AddToggle(grid, "Transit", () => _overlay.Transit, v => _overlay.Transit = v);
         AddToggle(grid, "Power lines", () => _overlay.Power, v => _overlay.Power = v);
-        AddToggle(grid, "Caves, wrecks, ruins", () => _overlay.Hidden, v => _overlay.Hidden = v);
+        AddToggle(grid, "Caves, wrecks, ruins", () => _overlay.Relics, v => _overlay.Relics = v);
         AddToggle(grid, "Ley lines", () => _overlay.LeyLines, v => _overlay.LeyLines = v);
         debug.AddChild(HudTheme.Heading("Island"));
         _facts = HudTheme.Rich(HudTheme.SmallSize);
@@ -160,7 +167,7 @@ public partial class IslandExplorer : Node2D
         column.AddChild(_hover);
 
         column.AddChild(new Control { SizeFlagsVertical = Control.SizeFlags.ExpandFill });
-        column.AddChild(HudTheme.Text("Drag to pan, wheel to zoom, Home to fit.", HudTheme.SmallSize, HudTheme.Muted));
+        column.AddChild(HudTheme.Text("Drag to pan, wheel to zoom, Home to fit. In the debug view, zoom far in to see the 1 m tiles.", HudTheme.SmallSize, HudTheme.Muted));
         Button back = HudTheme.PlainButton("Back to menu  (Esc)");
         back.Pressed += () => GetTree().ChangeSceneToFile(FrontMenu.MenuScene);
         column.AddChild(back);
@@ -213,6 +220,7 @@ public partial class IslandExplorer : Node2D
                     ShowPicture();
                     ShowFacts();
                     _overlay.SetWorld(_world);
+                    _tiles.SetWorld(_world);
                     FitView();
                 }
             }
@@ -229,6 +237,14 @@ public partial class IslandExplorer : Node2D
         }
         if (dir != Vector2.Zero) _camera.Position += dir * PanSpeed * (float)delta / _zoom;
 
+        bool tileView = DebugOn && _zoom >= TileZoom && _world != null;
+        _tiles.Visible = tileView;
+        _overlay.SetTileView(tileView);
+        if (tileView)
+        {
+            Vector2 view = GetViewportRect().Size;
+            _tiles.Stream(new Rect2(_camera.Position - view / 2f / _zoom, view / _zoom));
+        }
         UpdateHover();
     }
 
@@ -311,6 +327,19 @@ public partial class IslandExplorer : Node2D
             lines.Add($"{s.Rain[i]:0} mm rain, {c.Temperature[i]:0.0} °C, slope {c.SlopeDeg[i]:0}°");
             if (_world.Works.PaddockCell[i] >= 0) lines.Add(_world.Works.Paddocks[_world.Works.PaddockCell[i]].Name);
         }
+        if (_tiles.Visible)
+        {
+            if (_tiles.TryGetTile(xm, ym, out IslandChunk chunk, out int tile))
+            {
+                string cover = CoverLegend.Looks[chunk.Cover[tile]].Name;
+                float water = chunk.Water[tile];
+                lines.Add(float.IsNaN(water)
+                    ? $"[color={HudTheme.Hex(HudTheme.Safe)}]Tile:[/color] {cover}, {chunk.Height[tile]:0.0} m"
+                    : $"[color={HudTheme.Hex(HudTheme.Safe)}]Tile:[/color] {cover}, {water - chunk.Height[tile]:0.0} m deep");
+                if (chunk.Label[tile] >= 0) lines.Add(HudTheme.Escape(_world.Works.Labels[chunk.Label[tile]]));
+            }
+            else lines.Add($"Building tiles… ({_tiles.PendingCount} chunks on the way)");
+        }
         Site? near = null;
         double best = double.MaxValue;
         foreach (Site t in _world.Works.Sites)
@@ -329,7 +358,7 @@ public partial class IslandExplorer : Node2D
     // ---------- the view ----------
     private void SetZoom(float zoom)
     {
-        _zoom = Mathf.Clamp(zoom, 0.25f, 64f);
+        _zoom = Mathf.Clamp(zoom, 0.25f, MaxZoom);
         _camera.Zoom = new Vector2(_zoom, _zoom);
         _overlay.SetZoom(_zoom);
     }
