@@ -154,6 +154,7 @@ public partial class Main : Node2D
         if (_walk is not null)
             StepWalk(delta);
         UpdateHover();
+        UpdateEdgeMarkers();
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -501,7 +502,7 @@ public partial class Main : Node2D
     private void UpdateCamera(bool snap = false)
     {
         float zoom = _camera.Zoom.X;
-        _camera.Position = AsciiMapView.TileCenter(_playerActor.Position) + _pan
+        _camera.Position = _map.ActorCenter(_playerActor) + _pan
             + new Vector2(Sidebar.PanelWidth / 2f / zoom, 0f);
         if (snap)
             _camera.ResetSmoothing();

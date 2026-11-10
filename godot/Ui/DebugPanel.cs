@@ -72,6 +72,18 @@ public partial class DebugPanel : PanelContainer
         _hunt.Toggled += on => HuntToggled?.Invoke(on);
         grid.AddChild(_hunt);
 
+        // How the map is drawn: the chosen look, each part switchable for comparison.
+        column.AddChild(HudTheme.Heading("View"));
+        var view = new GridContainer { Columns = 3 };
+        view.AddThemeConstantOverride("h_separation", 16);
+        view.AddThemeConstantOverride("v_separation", 2);
+        column.AddChild(view);
+        Toggle(view, "Raised 3/4", Key.None, () => o.Raised, v => o.Raised = v);
+        Toggle(view, "Varied tiles", Key.None, () => o.Varied, v => o.Varied = v);
+        Toggle(view, "Fog of war", Key.None, () => o.Fog, v => o.Fog = v);
+        Toggle(view, "Roofs", Key.None, () => o.Roofs, v => o.Roofs = v);
+        Toggle(view, "Edge markers", Key.None, () => o.EdgeMarkers, v => o.EdgeMarkers = v);
+
         var weatherRow = new HBoxContainer();
         weatherRow.AddThemeConstantOverride("separation", 10);
         var weatherLabel = HudTheme.Text("Weather", HudTheme.SmallSize, HudTheme.Muted);
@@ -92,7 +104,7 @@ public partial class DebugPanel : PanelContainer
     /// <summary>Handles 1-8 and G while the panel is open. True if the key was one of them.</summary>
     public bool TryHotkey(Key key)
     {
-        if (!Visible)
+        if (!Visible || key == Key.None)
             return false;
         if (key == Key.G)
         {

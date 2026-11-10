@@ -113,10 +113,7 @@ public partial class Main
         TilePos? tile = null;
         if (!_playerActor.IsGone && MapScreenRect().HasPoint(mouse) && !OverPanel(mouse))
         {
-            var local = _map.GetLocalMousePosition();
-            var t = new TilePos(Mathf.FloorToInt(local.X / AsciiMapView.CellSize), Mathf.FloorToInt(local.Y / AsciiMapView.CellSize));
-            if (_sim.Map.InBounds(t))
-                tile = t;
+            tile = _map.TileAt(_map.GetLocalMousePosition());
         }
 
         if (tile != _hoverTile || _previewStale)
@@ -382,11 +379,11 @@ public partial class Main
         _sim.Actors.FirstOrDefault(a => a != _playerActor && !a.IsGone && a.Controller is HumanBrain
             && a.Position == tile && Shown(a));
 
-    /// <summary>Whether the map draws this actor (with "your view" on, only those you've spotted).</summary>
+    /// <summary>Whether the map draws this actor (with the fog or "your view" on, only those you've spotted).</summary>
     private bool Shown(Actor actor)
     {
         var o = _map.Overlays;
-        return actor == _playerActor || !o.PlayerView || o.PlayerSpottedActors.Contains(actor.Id);
+        return actor == _playerActor || !(o.Fog || o.PlayerView) || o.PlayerSpottedActors.Contains(actor.Id);
     }
 
     private string TileTitle(TilePos tile)
@@ -447,13 +444,55 @@ public partial class Main
 
     private string TooltipText(TilePos tile)
     {
-        var lines = new List<string> { $"[color={HudTheme.Hex(HudTheme.Amber)}]{HudTheme.Escape(TileTitle(tile))}[/color]" };
-        foreach (var (text, color) in TileFacts(tile))
+        var lines = new List<string> { $"[color={HudTheme.Hex(HudTheme.Amber)}]{HudTheme.Escape(FoggedTitle(tile))}[/color]" };
+        foreach (var (text, color) in FoggedFacts(tile))
             lines.Add(color is { } c ? $"[color={HudTheme.Hex(c)}]{HudTheme.Escape(text)}[/color]" : HudTheme.Escape(text));
         lines.Add($"[color={HudTheme.Hex(HudTheme.Muted)}]({tile.X}, {tile.Y})[/color]");
         return string.Join("\n", lines);
     }
 
     private string LookText(TilePos tile) =>
-        $"{TileTitle(tile)}: {string.Join("; ", TileFacts(tile).Select(f => f.Text))}.";
+        $"{FoggedTitle(tile)}: {string.Join("; ", FoggedFacts(tile).Select(f => f.Text))}.";
+
+    /// <summary>The tooltip's title under the fog: the plan's name for a tile you haven't seen, "Unknown" off the plan.</summary>
+    private string FoggedTitle(TilePos tile)
+    {
+        if (_sim.ExitAt(tile) is not null)
+            return TileTitle(tile);
+        if (_map.RoofShown(tile))
+            return "A building";
+        return _map.FogAt(tile) switch
+        {
+            FogState.Unknown => "Unknown",
+            FogState.Plan => Capitalize(Covers.Get(_map.Fog!.PlanCover(tile)).Name),
+            FogState.Remembered => Capitalize(Covers.Get(_map.Fog!.RememberedCover(tile)).Name),
+            _ => TileTitle(tile),
+        };
+    }
+
+    /// <summary>The tooltip's facts under the fog: only the plan, or what you remember, for tiles out of view.</summary>
+    private List<(string Text, Color? Color)> FoggedFacts(TilePos tile)
+    {
+        var state = _map.FogAt(tile);
+        if (_map.RoofShown(tile))
+        {
+            var facts = new List<(string Text, Color? Color)> { ("Under a roof: out of the Rex's reach", HudTheme.Safe) };
+            if (state == FogState.Plan)
+                facts.Add(("On the park plan; you haven't seen it yet.", HudTheme.Muted));
+            return facts;
+        }
+        switch (state)
+        {
+            case FogState.Unknown:
+                return new List<(string Text, Color? Color)> { ("You haven't seen this.", HudTheme.Muted) };
+            case FogState.Plan:
+                return new List<(string Text, Color? Color)> { ("On the park plan; you haven't seen it yet.", HudTheme.Muted) };
+            case FogState.Remembered:
+                var remembered = TileFacts(tile).Where(f => !f.Text.StartsWith("Light ", StringComparison.Ordinal)).ToList();
+                remembered.Insert(0, ($"Remembered from {Clock(_map.Fog!.SeenTick(tile))}", HudTheme.Amber));
+                return remembered;
+            default:
+                return TileFacts(tile);
+        }
+    }
 }

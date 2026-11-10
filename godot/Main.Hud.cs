@@ -30,6 +30,7 @@ public partial class Main
     private Label _prompt = null!;
     private Control _deathScreen = null!;
     private Label _deathText = null!;
+    private EdgeMarkers _edges = null!;
 
     /// <summary>Lines said before the log existed (loading the map).</summary>
     private readonly List<string> _pendingLog = new();
@@ -51,6 +52,13 @@ public partial class Main
             Theme = theme,
         };
         layer.AddChild(root);
+
+        // Off-screen arrows sit under every panel.
+        _edges = new EdgeMarkers
+        {
+            ToScreen = p => _map.GetGlobalTransformWithCanvas() * _map.CenterOf(p),
+        };
+        root.AddChild(_edges);
 
         _sidebar = new Sidebar();
         root.AddChild(_sidebar);
@@ -136,6 +144,57 @@ public partial class Main
         UiSettings.SaveLogCorner(corner);
     }
 
+    /// <summary>Keeps the off-screen arrows inside the map area and clear of the log; redrawn every frame as the camera moves.</summary>
+    private void UpdateEdgeMarkers()
+    {
+        _edges.Visible = _map.Overlays.EdgeMarkers && !_playerActor.IsGone;
+        if (!_edges.Visible)
+            return;
+        _edges.Bounds = MapScreenRect();
+        _edges.Avoid.Clear();
+        if (_log is { Visible: true } log)
+            _edges.Avoid.Add(log.GetGlobalRect());
+        _edges.QueueRedraw();
+    }
+
+    /// <summary>
+    /// What the edge arrows point at: every exit, and the Rex if you can see it; otherwise its tread if
+    /// you feel it, otherwise where you last saw it.
+    /// </summary>
+    private IReadOnlyList<EdgeTarget> EdgeTargets(Percepts mine)
+    {
+        var here = _playerActor.Position;
+        var targets = new List<EdgeTarget>();
+        foreach (var exit in _sim.Exits)
+        {
+            var (distance, _) = DistanceAndCompass(here, exit.Position);
+            targets.Add(new EdgeTarget(exit.Position, $"{exit.Name} {distance} m", HudTheme.Safe));
+        }
+        if (_rex is null || _rex.IsDead)
+            return targets;
+
+        if (mine.Detects(_rex))
+        {
+            var (distance, _) = DistanceAndCompass(here, _rex.Position);
+            targets.Add(new EdgeTarget(_rex.Position, $"Rex {distance} m", HudTheme.Danger));
+            return targets;
+        }
+        var felt = mine.Felt
+            .Where(f => f.Vibration.ActorId == _rex.Id)
+            .OrderByDescending(f => f.Perceived)
+            .FirstOrDefault();
+        if (felt is not null)
+        {
+            string words = felt.Perceived >= 25 ? "the ground shudders" : felt.Perceived >= 15 ? "heavy footfalls" : "a faint tremor";
+            targets.Add(new EdgeTarget(felt.Vibration.Position, words, HudTheme.Earth));
+        }
+        else if (_map.Overlays.Fog && _map.Fog is { } fog && fog.Ghosts.TryGetValue(_rex.Id, out var ghost))
+        {
+            targets.Add(new EdgeTarget(ghost.Tip, $"Rex, last seen {Clock(ghost.Tick)}", HudTheme.Muted));
+        }
+        return targets;
+    }
+
     /// <summary>m:ss on the game clock.</summary>
     private static string Clock(long ticks)
     {
@@ -148,12 +207,14 @@ public partial class Main
         _playerPercepts = PerceptionSystem.Perceive(_sim, _playerActor, _lastTurnTick);
         var rexPercepts = _rex is null ? null : PerceptionSystem.Perceive(_sim, _rex, _lastTurnTick);
         _rexSeesYou = rexPercepts?.Detects(_playerActor) ?? false;
+        _map.Fog?.Update(_sim, _playerActor, _playerPercepts);
 
         UpdateOverlays(_playerPercepts);
         _map.QueueRedraw();
         UpdateCamera(snapCamera);
 
         _sidebar.Display(BuildFacts(_playerPercepts, rexPercepts));
+        _edges.Targets = EdgeTargets(_playerPercepts);
         if (_debug.Visible)
         {
             _debug.Sync(_rexHunt is not null, WeatherPresetIndex());
