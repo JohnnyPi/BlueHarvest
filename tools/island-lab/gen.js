@@ -1862,6 +1862,7 @@ var IslandGen = (function () {
       paliDrop = Math.max(paliDrop, hi - lo);
     }
     lap('coast classes');
+    if (p.stopAfter === 'shape') return { A, nx, ny, cell, H, H0, oldW, lava, erod, pali, ocean, land, distLand, distSea, filled, T, rain, lake, lakes, Q, toSea, isRiver, heads, rivers, falls, coast, coastNX, coastNY, coastEx, sea, cliffMask, cutKm2, streamLen, seaCliffTop, seaCliffCells, paliCells, paliDrop };
 
     // ---------- stage 3: climate, biomes, regions ----------
     say('Working out the climate');
