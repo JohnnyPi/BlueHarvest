@@ -1185,6 +1185,7 @@ var IslandGen = (function () {
       t.gate = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'e' : 'w') : (dy > 0 ? 's' : 'n');
     }
     lap('roads');
+    if (p.stopAfter === 'roads') return { stop: { roads, roadCell, roadKm, mainKm, bridges, tunnels, gates: sites.map(t => t.gate) } };
 
     // ---------- power: straight lines from the generators to every site ----------
     say('Stringing power lines');

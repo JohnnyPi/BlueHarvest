@@ -10,10 +10,11 @@ node tools/island-lab/golden.js         # stage 1: GenerationCoreTests
 node tools/island-lab/golden-shape.js   # stage 2: IslandShapeTests (paste the printed table into Golden)
 node tools/island-lab/golden-climate.js # stage 3: IslandClimateTests
 node tools/island-lab/golden-sites.js   # stage 4a: IslandWorksTests
+node tools/island-lab/golden-roads.js   # stage 4b: IslandRoadsTests
 ```
 
-`generate({ stopAfter: 'shape' | 'climate' | 'sites' })` returns the generator's internal state at the end of
-stage 2, stage 3 or stage 4a (after the compounds are built), which is what the golden scripts hash. The test islands are listed
+`generate({ stopAfter: 'shape' | 'climate' | 'sites' | 'roads' })` returns the generator's internal state at the
+end of stage 2, stage 3, stage 4a (after the compounds are built) or stage 4b (after the roads), which is what the golden scripts hash. The test islands are listed
 in each script's CASES and in `TestIslands.cs`; keep the two in step.
 
 If `gen.js` changes on purpose, rerun `golden.js` and update the expected values in the tests.

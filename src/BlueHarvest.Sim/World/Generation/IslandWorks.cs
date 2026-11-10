@@ -27,6 +27,8 @@ public sealed class Site
     /// <summary>Docks: the outward coast normal.</summary>
     public (double X, double Y)? Dir { get; set; }
     public Runway? Runway { get; set; }
+    /// <summary>Which side of the compound fence faces the nearest road: 'n', 'e', 's' or 'w'.</summary>
+    public char Gate { get; set; } = 's';
 }
 
 public enum FenceKind : byte { Low, Standard, Heavy }
@@ -60,9 +62,25 @@ public sealed record PowerLine(double X1, double Y1, double X2, double Y2, strin
 
 public sealed record LeyLine(double X1, double Y1, double X2, double Y2);
 
+public enum RoadClass : byte { Track, Main }
+
+/// <summary>Road vertex flags.</summary>
+[Flags]
+public enum RoadFlags : byte { None = 0, Bridge = 1, Tunnel = 2 }
+
+/// <summary>A road, Chaikin-smoothed through cell centres. Hs is the road surface height (cut and fill, tunnels bored straight).</summary>
+public sealed class Road
+{
+    public required float[] Xs { get; init; }
+    public required float[] Ys { get; init; }
+    public required float[] Hs { get; init; }
+    public required RoadFlags[] Flags { get; init; }
+    public required RoadClass Class { get; init; }
+}
+
 /// <summary>
 /// Stage 4 of island generation: the works of people. Stage 4a: facilities, species paddocks,
-/// power lines and the compounds' buildings.
+/// power lines and the compounds' buildings. Stage 4b: roads.
 /// </summary>
 public sealed class IslandWorks
 {
@@ -127,6 +145,13 @@ public sealed class IslandWorks
     /// <summary>Names of buildings, rooms and features; primitives refer to them by index.</summary>
     public List<string> Labels { get; } = [];
     public PrimList Prims { get; } = new();
+    public List<Road> Roads { get; } = [];
+    /// <summary>Road on each cell: 0 none, 1 track, 2 main road.</summary>
+    public byte[] RoadCell { get; }
+    public double RoadKm { get; private set; }
+    public double MainKm { get; private set; }
+    public int Bridges { get; private set; }
+    public int Tunnels { get; private set; }
     /// <summary>Centre of the land, for compass names.</summary>
     public double CenterX { get; private set; }
     public double CenterY { get; private set; }
@@ -139,6 +164,12 @@ public sealed class IslandWorks
         PaddockCell = new short[_n];
         Array.Fill(PaddockCell, (short)-1);
         NearRiver = new byte[_n];
+        RoadCell = new byte[_n];
+        _heap = new GenHeap(_n * 3);
+        _g = new double[_n];
+        _seen = new int[_n];
+        _done = new int[_n];
+        _par = new int[_n];
         // facilities go on the main island only (islets are for wrecks, stacks and later set pieces)
         _lblM = new int[_n];
         List<int> sizes = GenGrid.Components(w.Land, _nx, _ny, _lblM);
@@ -150,6 +181,7 @@ public sealed class IslandWorks
         var works = new IslandWorks(w, c);
         works.PlaceFacilities();
         works.FencePaddocks();
+        works.RouteRoads();
         works.StringPower();
         works.BuildCompounds();
         return works;
@@ -591,6 +623,237 @@ public sealed class IslandWorks
         var flat = new double[ring.Count * 2];
         for (int i = 0; i < ring.Count; i++) { flat[2 * i] = ring[i].X; flat[2 * i + 1] = ring[i].Y; }
         return flat;
+    }
+
+    // ---------- roads ----------
+    private readonly GenHeap _heap;
+    private readonly double[] _g;
+    private readonly int[] _seen, _done, _par;
+    private int _stamp;
+
+    /// <summary>Cost of a road step from cell a to its neighbour b (direction k): grade, rivers, wet ground, paddocks; existing road is cheap.</summary>
+    private double StepCost(int a, int b, int k)
+    {
+        double[] h = _w.Height;
+        double d = GenGrid.DL[k] * _cell, gr = Math.Abs(h[b] - h[a]) / d;
+        double c = gr > 0.22 ? d * 30 : d * (1 + (gr / 0.07) * (gr / 0.07));
+        if (_w.IsRiver[b] != 0) c += 250 + 40 * Math.Min(10, _w.Flow[b]);
+        var bi = (Biome)_c.Biomes[b];
+        if (bi == Biome.Marsh) c += d;
+        else if (bi == Biome.Wet || bi == Biome.Moist || bi == Biome.Cloud) c += d * 0.3;
+        else if (bi == Biome.Cliff) c += d * 3;
+        if (PaddockCell[b] >= 0) c += d * 25;
+        return RoadCell[b] != 0 ? c * 0.35 : c;
+    }
+
+    /// <summary>A* over dry land cells from src to dst; null if unreachable. cost(a, b, k) defaults to <see cref="StepCost"/>.</summary>
+    private List<int>? Route(int src, int dst, Func<int, int, int, double>? cost = null)
+    {
+        cost ??= StepCost;
+        int nx = _nx, ny = _ny, n = _n;
+        double cell = _cell;
+        _stamp++;
+        _heap.Clear();
+        int stamp = _stamp, tx = dst % nx, ty = dst / nx;
+        double HCost(int j) => GenMath.Hyp(j % nx - tx, j / nx - ty) * cell * 0.35;
+        _g[src] = 0; _seen[src] = stamp; _par[src] = -1;
+        _heap.Push(HCost(src), src);
+        while (_heap.Count > 0)
+        {
+            int c = _heap.Pop();
+            if (c == dst) break;
+            if (_done[c] == stamp) continue;
+            _done[c] = stamp;
+            int x = c % nx, y = c / nx;
+            for (int k = 0; k < 8; k++)
+            {
+                int xx = x + GenGrid.DX[k], yy = y + GenGrid.DY[k];
+                if (xx < 0 || yy < 0 || xx >= nx || yy >= ny) continue;
+                int j = yy * nx + xx;
+                if (!Dry(j) || _done[j] == stamp) continue;
+                double ng = _g[c] + cost(c, j, k);
+                if (_seen[j] != stamp || ng < _g[j])
+                {
+                    _seen[j] = stamp; _g[j] = ng; _par[j] = c;
+                    if (_heap.Count < n * 3 - 1) _heap.Push(ng + HCost(j), j);
+                }
+            }
+        }
+        if (_seen[dst] != stamp) return null;
+        var path = new List<int>();
+        for (int c = dst; c >= 0; c = _par[c]) path.Add(c);
+        path.Reverse();
+        return path;
+    }
+
+    /// <summary>Adds the new runs of a routed path as roads, with one shared cell at each end so they join the network.</summary>
+    private void AddRoad(List<int> path, RoadClass cls)
+    {
+        int nx = _nx;
+        double cell = _cell;
+        double[] h = _w.Height;
+        byte[] isRiver = _w.IsRiver;
+        var run = new List<int>();
+        void Flush()
+        {
+            if (run.Count >= 2)
+            {
+                int len = run.Count;
+                var px = new double[len];
+                var py = new double[len];
+                var ph = new double[len];
+                var pf = new int[len];
+                for (int k = 0; k < len; k++)
+                {
+                    int i = run[k], prev = run[Math.Max(0, k - 1)];
+                    double d = GenMath.Hyp(i % nx - prev % nx, i / nx - prev / nx) * cell;
+                    if (d == 0) d = cell;
+                    bool tunnel = k > 0 && Math.Abs(h[i] - h[prev]) / d > 0.22;
+                    px[k] = CxOf(i); py[k] = CyOf(i); ph[k] = h[i];
+                    pf[k] = (isRiver[i] != 0 ? 1 : 0) | (tunnel ? 2 : 0);
+                }
+                // road surface: smoothed along the road, then tunnels bored straight between portals
+                var hs = new double[len];
+                for (int k = 0; k < len; k++)
+                {
+                    double a = 0;
+                    int c = 0;
+                    for (int m = Math.Max(0, k - 2); m <= Math.Min(len - 1, k + 2); m++) { a += ph[m]; c++; }
+                    hs[k] = a / c;
+                }
+                for (int k = 0; k < len; k++) ph[k] = Math.Max(1, hs[k]);
+                for (int k = 0; k < len;)
+                {
+                    if ((pf[k] & 2) == 0) { k++; continue; }
+                    int e = k;
+                    while (e < len && (pf[e] & 2) != 0) e++;
+                    int a = Math.Max(0, k - 1), b = Math.Min(len - 1, e);
+                    for (int m = a; m <= b; m++)
+                    {
+                        ph[m] = ph[a] + (ph[b] - ph[a]) * (m - a) / Math.Max(1, b - a);
+                        if (m > a && m < b) pf[m] |= 2;
+                    }
+                    k = e;
+                }
+                var pts = new List<PolyPoint>(len);
+                for (int k = 0; k < len; k++) pts.Add(new PolyPoint(px[k], py[k], ph[k], 0));
+                List<PolyPoint> sm = GenGrid.Chaikin(pts, 2);
+                int sl = sm.Count;
+                var xs = new float[sl];
+                var ys = new float[sl];
+                var hs2 = new float[sl];
+                var flags = new RoadFlags[sl];
+                for (int m = 0; m < sl; m++)
+                {
+                    xs[m] = (float)sm[m].X; ys[m] = (float)sm[m].Y; hs2[m] = (float)sm[m].Q;
+                    int fi = Math.Min(len - 1, (int)GenMath.Round(m * (len - 1) / (double)Math.Max(1, sl - 1)));
+                    flags[m] = (RoadFlags)pf[fi];
+                }
+                Roads.Add(new Road { Xs = xs, Ys = ys, Hs = hs2, Flags = flags, Class = cls });
+            }
+            run.Clear();
+        }
+        for (int k = 0; k < path.Count; k++)
+        {
+            int i = path[k];
+            if (RoadCell[i] == 0)
+            {
+                if (run.Count == 0 && k > 0) run.Add(path[k - 1]);
+                run.Add(i);
+            }
+            else if (run.Count > 0) { run.Add(i); Flush(); }
+        }
+        Flush();
+        foreach (int i in path) RoadCell[i] = cls == RoadClass.Main ? (byte)2 : Math.Max(RoadCell[i], (byte)1);
+    }
+
+    /// <summary>
+    /// The road network: a spanning tree over the sites (shortest links first), a few extra loops between
+    /// major sites, and a service track from the genetics complex to every paddock gate.
+    /// </summary>
+    private void RouteRoads()
+    {
+        List<Site> nodes = Sites;
+        int nn = nodes.Count;
+        var edges = new List<(int A, int B)>();
+        if (nn > 0)
+        {
+            var inTree = new bool[nn];
+            inTree[0] = true;
+            for (int added = 1; added < nn; added++)
+            {
+                int ba = -1, bb = -1;
+                double bd = 1e30;
+                for (int a = 0; a < nn; a++)
+                {
+                    if (!inTree[a]) continue;
+                    for (int b = 0; b < nn; b++)
+                    {
+                        if (inTree[b]) continue;
+                        double d = GenMath.Hyp(nodes[a].X - nodes[b].X, nodes[a].Y - nodes[b].Y);
+                        if (d < bd) { bd = d; ba = a; bb = b; }
+                    }
+                }
+                inTree[bb] = true;
+                edges.Add((ba, bb));
+            }
+            var extra = new List<(double D, int A, int B)>();
+            for (int a = 0; a < nn; a++)
+            {
+                for (int b = a + 1; b < nn; b++)
+                {
+                    if (!nodes[a].Major || !nodes[b].Major || edges.Exists(ed => (ed.A == a && ed.B == b) || (ed.A == b && ed.B == a))) continue;
+                    extra.Add((GenMath.Hyp(nodes[a].X - nodes[b].X, nodes[a].Y - nodes[b].Y), a, b));
+                }
+            }
+            foreach (var ex in extra.OrderBy(x => x.D).Take(3)) edges.Add((ex.A, ex.B));
+        }
+        bool MajorPair((int A, int B) pair) => nodes[pair.A].Major && nodes[pair.B].Major;
+        // main roads first (stable: otherwise in the order above)
+        foreach (var e in edges.OrderByDescending(pair => MajorPair(pair) ? 1 : 0).ToList())
+        {
+            List<int>? path = Route(Idx(nodes[e.A].X, nodes[e.A].Y), Idx(nodes[e.B].X, nodes[e.B].Y));
+            if (path != null) AddRoad(path, MajorPair(e) ? RoadClass.Main : RoadClass.Track);
+        }
+        Site? gen = Sites.Find(t => t.Kind == "genetics");
+        if (gen != null)
+        {
+            foreach (Paddock q in Paddocks)
+            {
+                // the gate is the fence vertex nearest the complex (see FencePaddocks)
+                List<int>? path = Route(Idx(gen.X, gen.Y), Idx(q.Gate.X, q.Gate.Y));
+                if (path != null) AddRoad(path, RoadClass.Track);
+            }
+        }
+        double roadKm = 0, mainKm = 0;
+        int bridges = 0, tunnels = 0;
+        foreach (Road rd in Roads)
+        {
+            for (int k = 1; k < rd.Xs.Length; k++)
+            {
+                double d = GenMath.Hyp((double)rd.Xs[k] - rd.Xs[k - 1], (double)rd.Ys[k] - rd.Ys[k - 1]) / 1000;
+                roadKm += d;
+                if (rd.Class == RoadClass.Main) mainKm += d;
+                if ((rd.Flags[k] & RoadFlags.Bridge) != 0 && (rd.Flags[k - 1] & RoadFlags.Bridge) == 0) bridges++;
+                if ((rd.Flags[k] & RoadFlags.Tunnel) != 0 && (rd.Flags[k - 1] & RoadFlags.Tunnel) == 0) tunnels++;
+            }
+        }
+        RoadKm = roadKm; MainKm = mainKm; Bridges = bridges; Tunnels = tunnels;
+        // gates in compound fences face the nearest road
+        foreach (Site t in Sites)
+        {
+            double bd = 1e30, gx = t.X, gy = t.Y + t.R;
+            foreach (Road rd in Roads)
+            {
+                for (int k = 0; k < rd.Xs.Length; k++)
+                {
+                    double d = GenMath.Hyp(rd.Xs[k] - t.X, rd.Ys[k] - t.Y);
+                    if (d > t.R * 1.5 && d < bd) { bd = d; gx = rd.Xs[k]; gy = rd.Ys[k]; }
+                }
+            }
+            double dx = gx - t.X, dy = gy - t.Y;
+            t.Gate = Math.Abs(dx) > Math.Abs(dy) ? (dx > 0 ? 'e' : 'w') : (dy > 0 ? 's' : 'n');
+        }
     }
 
     // ---------- power: a tree of straight lines from the generators to every site ----------
