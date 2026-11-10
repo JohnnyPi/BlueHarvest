@@ -167,7 +167,7 @@ public partial class IslandExplorer : Node2D
         column.AddChild(_hover);
 
         column.AddChild(new Control { SizeFlagsVertical = Control.SizeFlags.ExpandFill });
-        column.AddChild(HudTheme.Text("Drag to pan, wheel to zoom, Home to fit. In the debug view, zoom far in to see the 1 m tiles.", HudTheme.SmallSize, HudTheme.Muted));
+        column.AddChild(HudTheme.Text("Drag to pan, wheel to zoom, Home to fit. In the debug view, zoom far in to see the 1 m tiles; E saves the 320 m around the cursor as a .bhmap.", HudTheme.SmallSize, HudTheme.Muted));
         Button back = HudTheme.PlainButton("Back to menu  (Esc)");
         back.Pressed += () => GetTree().ChangeSceneToFile(FrontMenu.MenuScene);
         column.AddChild(back);
@@ -355,6 +355,29 @@ public partial class IslandExplorer : Node2D
         _hover.Text = string.Join("\n", lines);
     }
 
+    /// <summary>Debug view: writes the 320 m of island around the cursor as a game map (.bhmap) in the user folder.</summary>
+    private void ExportHere()
+    {
+        if (_world == null) return;
+        Vector2 at = MouseCell();
+        double xm = at.X * _world.Shape.Cell, ym = at.Y * _world.Shape.Cell;
+        if (xm < 0 || ym < 0 || xm >= _world.WidthM || ym >= _world.HeightM) return;
+        string path = $"user://island_{_world.Params.Seed}_{(int)xm}_{(int)ym}.bhmap";
+        try
+        {
+            string text = IslandWindow.ExportBhmap(_world, new IslandChunker(_world), xm, ym);
+            using FileAccess? file = FileAccess.Open(path, FileAccess.ModeFlags.Write);
+            if (file == null) { _status.Text = "Could not write " + path; return; }
+            file.StoreString(text);
+            _status.Text = "Saved " + ProjectSettings.GlobalizePath(path);
+        }
+        catch (Exception e)
+        {
+            _status.Text = "Export failed: " + e.Message;
+            GD.PushError(e.ToString());
+        }
+    }
+
     // ---------- the view ----------
     private void SetZoom(float zoom)
     {
@@ -394,6 +417,7 @@ public partial class IslandExplorer : Node2D
                 else if (key.Keycode == Key.F9) _debug.ButtonPressed = !_debug.ButtonPressed;
                 else if (key.Keycode == Key.G) StartGeneration();
                 else if (key.Keycode == Key.Home) FitView();
+                else if (key.Keycode == Key.E && DebugOn) ExportHere();
                 break;
         }
     }

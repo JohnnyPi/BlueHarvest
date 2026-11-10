@@ -88,6 +88,9 @@ public sealed class HeightMap
         return map;
     }
 
+    /// <summary>Moves every height by (−dx, −dy) tiles; tiles scrolled in from outside are 0. See WorldMap.Scroll.</summary>
+    internal void Scroll(int dx, int dy) => GridScroll.Scroll(_heights, Width, Height, dx, dy);
+
     private int Index(TilePos p)
     {
         if (!InBounds(p))

@@ -81,6 +81,15 @@ public sealed class StructureMap
 
     public void SetDoor(TilePos p, DoorState state) => _doors[Index(p)] = state;
 
+    /// <summary>Moves roofs, doors, decks and ladders by (−dx, −dy) tiles; what scrolls in is empty. See WorldMap.Scroll.</summary>
+    internal void Scroll(int dx, int dy)
+    {
+        GridScroll.Scroll(_roofDm, Width, Height, dx, dy);
+        GridScroll.Scroll(_doors, Width, Height, dx, dy);
+        GridScroll.Scroll(_deckDm, Width, Height, dx, dy);
+        GridScroll.Scroll(_ladders, Width, Height, dx, dy);
+    }
+
     private int Index(TilePos p)
     {
         if (p.X < 0 || p.Y < 0 || p.X >= Width || p.Y >= Height)

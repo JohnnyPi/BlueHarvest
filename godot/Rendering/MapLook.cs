@@ -29,6 +29,16 @@ public static class MapLook
         (new Color(0.30f, 0.22f, 0.14f), '|', new Color(0.85f, 0.65f, 0.40f)),        // Support post
         (new Color(0.26f, 0.24f, 0.22f), ':', new Color(0.65f, 0.60f, 0.55f, 0.7f)),  // Rubble
         (new Color(0.16f, 0.22f, 0.12f), '#', new Color(0.55f, 0.75f, 1f)),           // Sagging fence
+        (new Color(0.12f, 0.31f, 0.41f), '~', new Color(0.50f, 0.75f, 0.85f, 0.6f)),  // Shallow water
+        (new Color(0.06f, 0.16f, 0.25f), '≈', new Color(0.31f, 0.53f, 0.72f, 0.6f)),  // Deep water
+        (new Color(0.61f, 0.54f, 0.36f), '·', new Color(0.91f, 0.84f, 0.65f, 0.5f)),  // Sand
+        (new Color(0.29f, 0.24f, 0.16f), '∴', new Color(0.66f, 0.56f, 0.40f, 0.6f)),  // Mud
+        (new Color(0.33f, 0.38f, 0.17f), '"', new Color(0.79f, 0.81f, 0.45f, 0.7f)),  // Tall grass
+        (new Color(0.18f, 0.29f, 0.24f), '¦', new Color(0.62f, 0.77f, 0.63f, 0.8f)),  // Reeds
+        (new Color(0.13f, 0.25f, 0.16f), 'ψ', new Color(0.50f, 0.81f, 0.54f, 0.75f)), // Ferns
+        (new Color(0.33f, 0.32f, 0.30f), '^', new Color(0.72f, 0.70f, 0.65f, 0.5f)),  // Bare rock
+        (new Color(0.16f, 0.15f, 0.14f), '%', new Color(0.54f, 0.50f, 0.47f, 0.6f)),  // Old lava
+        (new Color(0.24f, 0.24f, 0.25f), '▐', new Color(0.62f, 0.71f, 0.78f)),        // Equipment
     };
 
     /// <summary>The roof over a building, seen from outside.</summary>

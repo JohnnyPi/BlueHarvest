@@ -18,6 +18,17 @@ public enum CoverType : byte
     Support,
     Rubble,
     WeakFence,
+    // Island ground (appended, so older maps and the editor palette keep their indexes).
+    ShallowWater,
+    DeepWater,
+    Sand,
+    Mud,
+    TallGrass,
+    Reeds,
+    Ferns,
+    BareRock,
+    Lava,
+    Equipment,
 }
 
 /// <summary>
@@ -87,6 +98,21 @@ public static class Covers
         // snaps it (strength 20 = the Rex's bite damage). Sparks markers on it crackle and flicker.
         new CoverInfo(CoverType.WeakFence, 'w', "a sagging fence", 100, true, SightHeightDm: 40, SightOpacityPercent: 10,
             BreakStrength: 20, BrokenInto: CoverType.BrokenFence, BiteSound: Perception.NoiseKinds.SnappingWire),
+        // Island ground. First guesses, like the rest: wading is slow and loud, deep water stops everyone
+        // (nobody swims yet), soft ground damps footfalls, rock and old lava carry them.
+        new CoverInfo(CoverType.ShallowWater, 'a', "shallow water", 200, false, NoiseModifier: 6, VibrationPercent: 60),
+        new CoverInfo(CoverType.DeepWater, 'd', "deep water", 100, true, VibrationPercent: 40),
+        new CoverInfo(CoverType.Sand, 's', "sand", 120, false, NoiseModifier: -1, VibrationPercent: 70, SoftGround: true),
+        new CoverInfo(CoverType.Mud, 'm', "mud", 160, false, NoiseModifier: 3, VibrationPercent: 60, SoftGround: true),
+        new CoverInfo(CoverType.TallGrass, 't', "tall grass", 115, false, SightHeightDm: 12, SightOpacityPercent: 30, NoiseModifier: 3,
+            BreakStrength: 5, BrokenInto: CoverType.Grass, VibrationPercent: 95, SoftGround: true),
+        new CoverInfo(CoverType.Reeds, 'e', "reeds", 150, false, SightHeightDm: 20, SightOpacityPercent: 40, NoiseModifier: 5,
+            BreakStrength: 5, BrokenInto: CoverType.Mud, VibrationPercent: 70, SoftGround: true),
+        new CoverInfo(CoverType.Ferns, 'n', "ferns", 120, false, SightHeightDm: 10, SightOpacityPercent: 30, NoiseModifier: 2,
+            BreakStrength: 5, BrokenInto: CoverType.Grass, VibrationPercent: 90, SoftGround: true),
+        new CoverInfo(CoverType.BareRock, 'o', "bare rock", 100, false, VibrationPercent: 140),
+        new CoverInfo(CoverType.Lava, 'l', "old lava", 140, false, NoiseModifier: 2, VibrationPercent: 130),
+        new CoverInfo(CoverType.Equipment, 'q', "equipment", 100, true, SightHeightDm: 12, SightOpacityPercent: 30),
     };
 
     public static CoverInfo Get(CoverType type) => All[(int)type];
@@ -135,6 +161,9 @@ public sealed class CoverMap
         get => _cover[Index(p)];
         set => _cover[Index(p)] = value;
     }
+
+    /// <summary>Moves every tile by (−dx, −dy); tiles scrolled in from outside are grass. See WorldMap.Scroll.</summary>
+    internal void Scroll(int dx, int dy) => GridScroll.Scroll(_cover, Width, Height, dx, dy);
 
     private int Index(TilePos p)
     {

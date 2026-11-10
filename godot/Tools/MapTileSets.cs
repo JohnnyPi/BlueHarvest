@@ -54,6 +54,16 @@ public static class MapTileSets
             new Color(0.62f, 0.45f, 0.28f),     // Support post
             new Color(0.48f, 0.44f, 0.40f),     // Rubble
             new Color(0.55f, 0.75f, 1f),        // Sagging fence (sparks go on it)
+            new Color(0.25f, 0.55f, 0.70f),     // Shallow water
+            new Color(0.08f, 0.22f, 0.40f),     // Deep water
+            new Color(0.85f, 0.78f, 0.55f),     // Sand
+            new Color(0.40f, 0.32f, 0.22f),     // Mud
+            new Color(0.60f, 0.66f, 0.30f),     // Tall grass
+            new Color(0.35f, 0.52f, 0.42f),     // Reeds
+            new Color(0.28f, 0.55f, 0.35f),     // Ferns
+            new Color(0.58f, 0.56f, 0.52f),     // Bare rock
+            new Color(0.22f, 0.20f, 0.19f),     // Old lava
+            new Color(0.45f, 0.52f, 0.60f),     // Equipment
         };
 
         int count = Covers.All.Count;
