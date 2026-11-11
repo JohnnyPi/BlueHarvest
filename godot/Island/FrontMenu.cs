@@ -39,7 +39,11 @@ public partial class FrontMenu : Control
         column.AddChild(sub);
         column.AddChild(new Control { CustomMinimumSize = new Vector2(0, 8) });
 
-        Button first = AddButton(column, "Play the testbed", "The T-Rex fence-breach map", () => GetTree().ChangeSceneToFile(TestbedScene));
+        Button first = AddButton(column, "Play the testbed", "The T-Rex fence-breach map", () =>
+        {
+            IslandLaunch.PlayTestbed();
+            GetTree().ChangeSceneToFile(TestbedScene);
+        });
         AddButton(column, "Island generator", "Generate an island and look around it", () => GetTree().ChangeSceneToFile(IslandScene));
         AddButton(column, "Quit", "", () => GetTree().Quit());
         first.GrabFocus();

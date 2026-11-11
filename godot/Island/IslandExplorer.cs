@@ -19,6 +19,7 @@ public partial class IslandExplorer : Node2D
 {
     private const float PanelWidth = 330f;
     private const float PanSpeed = 900f;
+    private const string PlayScene = "res://Main.tscn";
     /// <summary>Screen pixels per grid cell at which the debug view starts streaming 1 m tiles (1.5 px per tile).</summary>
     private const float TileZoom = 192f;
     private const float MaxZoom = 128f * 16f;
@@ -76,7 +77,37 @@ public partial class IslandExplorer : Node2D
         AddChild(layer);
         BuildPanel(layer, font);
         ApplyMode();
-        StartGeneration();
+        if (IslandLaunch.World is { } kept)
+        {
+            // back from a walk: show the island we had
+            _world = kept;
+            _seed.Value = kept.Params.Seed;
+            int size = Array.FindIndex(Sizes, s => s.Scale == kept.Params.Scale);
+            if (size >= 0) _size.Selected = size;
+            _status.Text = $"Seed {kept.Params.Seed}";
+            ShowPicture();
+            ShowFacts();
+            _overlay.SetWorld(_world);
+            _tiles.SetWorld(_world);
+            Callable.From(FitView).CallDeferred();
+        }
+        else StartGeneration();
+    }
+
+    /// <summary>Starts the game on foot at the cursor (or the middle of the view), on the nearest ground you can stand on.</summary>
+    private void WalkHere()
+    {
+        if (_world == null || _job != null) return;
+        Vector2 at = MouseCell();
+        double xm = at.X * _world.Shape.Cell, ym = at.Y * _world.Shape.Cell;
+        if (xm < 0 || ym < 0 || xm >= _world.WidthM || ym >= _world.HeightM)
+        {
+            _status.Text = "Point at the island first.";
+            return;
+        }
+        _status.Text = "Building the ground…";
+        IslandLaunch.WalkAt(_world, xm, ym);
+        GetTree().ChangeSceneToFile(PlayScene);
     }
 
     // ---------- the panel ----------
@@ -168,6 +199,7 @@ public partial class IslandExplorer : Node2D
 
         column.AddChild(new Control { SizeFlagsVertical = Control.SizeFlags.ExpandFill });
         column.AddChild(HudTheme.Text("Drag to pan, wheel to zoom, Home to fit. In the debug view, zoom far in to see the 1 m tiles; E saves the 320 m around the cursor as a .bhmap.", HudTheme.SmallSize, HudTheme.Muted));
+        column.AddChild(HudTheme.Text("Point at a spot and press Enter to walk there.", HudTheme.SmallSize, HudTheme.Amber));
         Button back = HudTheme.PlainButton("Back to menu  (Esc)");
         back.Pressed += () => GetTree().ChangeSceneToFile(FrontMenu.MenuScene);
         column.AddChild(back);
@@ -216,6 +248,7 @@ public partial class IslandExplorer : Node2D
                 else
                 {
                     _world = job.Result;
+                    IslandLaunch.Remember(_world);
                     _status.Text = $"Seed {_world.Params.Seed} generated in {(Time.GetTicksMsec() - _jobStarted) / 1000.0:0.0} s";
                     ShowPicture();
                     ShowFacts();
@@ -418,6 +451,7 @@ public partial class IslandExplorer : Node2D
                 else if (key.Keycode == Key.G) StartGeneration();
                 else if (key.Keycode == Key.Home) FitView();
                 else if (key.Keycode == Key.E && DebugOn) ExportHere();
+                else if (key.Keycode == Key.Enter || key.Keycode == Key.KpEnter) WalkHere();
                 break;
         }
     }

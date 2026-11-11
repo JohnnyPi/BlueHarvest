@@ -12,6 +12,7 @@ using BlueHarvest.Sim.Navigation;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.Scenarios;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Sim.World.Generation;
 using Godot;
 using Direction = BlueHarvest.Sim.World.Direction;
 
@@ -44,6 +45,10 @@ public partial class Main : Node2D
     private PlayerController _player = null!;
     private Actor _playerActor = null!;
     private Actor? _rex;
+
+    /// <summary>On the island: the streamed map the simulation runs on. Null on the testbed.</summary>
+    private IslandWindow? _island;
+    private bool _windowShifted;
     private CreatureBrain? _rexBrain;
     private readonly Director _director = new();
     private AsciiMapView _map = null!;
@@ -87,7 +92,8 @@ public partial class Main : Node2D
         SubscribeToEvents();
 
         _map = new AsciiMapView();
-        _map.Bind(_sim, font, MovementProfile.Human.MaxStepUpDm);
+        _map.Bind(_sim, font, MovementProfile.Human.MaxStepUpDm, plan: _island is null);
+        _sim.WindowShifted += OnWindowShifted;
         var overlays = _map.Overlays;
         overlays.PlayerId = _playerActor.Id;
         // The Rex's path, memory, noise and vibration rings are debug views now (F9).
@@ -267,9 +273,13 @@ public partial class Main : Node2D
         _lastTurnTick = _sim.CurrentTick;
         _player.Pending = action;
         _sim.RunUntilInputNeeded();
+        // on the island the map follows the player: near an edge it scrolls and new ground streams in
+        _windowShifted = false;
+        if (_island is not null && !_playerActor.IsGone)
+            _island.Follow(_sim, _playerActor);
         _director.Update(_sim, _playerActor);
         _pan = Vector2.Zero;
-        Refresh(snapCamera: false);
+        Refresh(snapCamera: _windowShifted);
         ShowEndScreen();
     }
 
@@ -414,8 +424,45 @@ public partial class Main : Node2D
     };
 
     /// <summary>Builds the simulation from the testbed file, or the demo map if that fails.</summary>
+    /// <summary>The streamed map scrolled under the simulation: move what this scene remembers by tile.</summary>
+    private void OnWindowShifted(int dx, int dy)
+    {
+        _windowShifted = true;
+        _map.MapScrolled(dx, dy);
+        _cursor = Clamp(new TilePos(_cursor.X - dx, _cursor.Y - dy));
+        _hoverTile = null;
+        _previewStale = true;
+    }
+
+    /// <summary>Starts on the generated island where the explorer said, in daylight, alone.</summary>
+    private void LoadIsland(IslandWorld world, IslandChunker chunker)
+    {
+        _island = new IslandWindow(world, chunker, Island.IslandLaunch.X, Island.IslandLaunch.Y, chunksAcross: 3);
+        _sim = new Simulation(_island.Map, Seed) { AmbientLightPercent = 100 };
+        TilePos start = _island.NearestStandable(_island.ToLocal(Island.IslandLaunch.X, Island.IslandLaunch.Y));
+        _sim.AddActor("Survivor", '@', start, Species.Human, _player, loadout: Loadout.TestbedSurvivor);
+        Say($"Island {world.Params.Seed}. You are on foot; the map follows you. F10 for the menu.");
+    }
+
     private void LoadSimulation()
     {
+        if (Island.IslandLaunch.Walk && Island.IslandLaunch.World is { } world && Island.IslandLaunch.Chunker is { } chunker)
+        {
+            try
+            {
+                LoadIsland(world, chunker);
+                return;
+            }
+            catch (Exception e)
+            {
+                GD.PushError($"Could not start on the island: {e}");
+                _island = null;
+                _player = new PlayerController();
+                Island.IslandLaunch.PlayTestbed();
+                Say($"Could not start on the island ({e.Message}); loading the testbed.");
+            }
+        }
+
         if (!Godot.FileAccess.FileExists(MapPath))
         {
             UseDemo($"{MapPath} not found; showing the demo map.");

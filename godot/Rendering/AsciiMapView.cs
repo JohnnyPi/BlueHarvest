@@ -163,13 +163,31 @@ public partial class AsciiMapView : Node2D
     /// Connects the view to a simulation. In the flat view a height step bigger than
     /// <paramref name="cliffThresholdDm"/> between neighbours is drawn as a cliff edge.
     /// </summary>
-    public void Bind(Simulation sim, Font font, int cliffThresholdDm)
+    /// <param name="plan">Whether the player starts with the site plan; see <see cref="FogOfWar"/>.</param>
+    public void Bind(Simulation sim, Font font, int cliffThresholdDm, bool plan = true)
     {
         _sim = sim;
         _font = font;
         _cliffThresholdDm = cliffThresholdDm;
-        Fog = new FogOfWar(sim);
+        Fog = new FogOfWar(sim, plan);
+        MeasureTerrain(sim);
+        QueueRedraw();
+    }
 
+    /// <summary>
+    /// The streamed map scrolled by (dx, dy) tiles: moves the player's map memory with it and measures
+    /// the new terrain (height range and hillshade).
+    /// </summary>
+    public void MapScrolled(int dx, int dy)
+    {
+        if (_sim is null) return;
+        Fog?.Shift(dx, dy, _sim);
+        MeasureTerrain(_sim);
+        QueueRedraw();
+    }
+
+    private void MeasureTerrain(Simulation sim)
+    {
         var terrain = sim.Terrain;
         int min = int.MaxValue, max = int.MinValue;
         for (int y = 0; y < terrain.Height; y++)
@@ -184,8 +202,6 @@ public partial class AsciiMapView : Node2D
         _minHeightDm = min;
         _heightRangeDm = Math.Max(1, max - min);
         _hillshade = Hillshade(sim);
-
-        QueueRedraw();
     }
 
     // ---- Where things are drawn ------------------------------------------------------------

@@ -56,8 +56,15 @@ public sealed class FogOfWar
     private long[] _roofSeenTick = Array.Empty<long>();
     private readonly Dictionary<int, Ghost> _ghosts = new();
 
-    public FogOfWar(Simulation sim)
+    private readonly bool _usePlan;
+
+    /// <param name="plan">
+    /// Whether the player starts with the site plan (walls, fences, tracks drawn faintly before they are seen).
+    /// False on the island, where nothing is known until it is seen.
+    /// </param>
+    public FogOfWar(Simulation sim, bool plan = true)
     {
+        _usePlan = plan;
         var map = sim.Map;
         _width = map.Width;
         _height = map.Height;
@@ -75,9 +82,53 @@ public sealed class FogOfWar
             for (int x = 0; x < _width; x++)
             {
                 var p = new TilePos(x, y);
-                _plan[y * _width + x] = sim.Cover[p];
+                _plan[y * _width + x] = plan ? sim.Cover[p] : CoverType.Grass;
             }
         FindBuildings(map);
+    }
+
+    /// <summary>
+    /// The streamed map scrolled by (dx, dy) tiles: what was at (x, y) is now at (x − dx, y − dy).
+    /// What the player has seen moves with it; tiles that scroll in are unknown. Buildings are found
+    /// again on the new map (so which roofs have been seen is forgotten), and ghosts move or are dropped.
+    /// </summary>
+    public void Shift(int dx, int dy, Simulation sim)
+    {
+        Scroll(_visible, dx, dy, false);
+        Scroll(_seenTick, dx, dy, -1L);
+        Scroll(_rememberedCover, dx, dy, CoverType.Grass);
+        Scroll(_rememberedDoor, dx, dy, DoorState.Open);
+        for (int y = 0; y < _height; y++)
+            for (int x = 0; x < _width; x++)
+                _plan[y * _width + x] = _usePlan ? sim.Cover[new TilePos(x, y)] : CoverType.Grass;
+        Array.Fill(_roofGroup, -1);
+        _roofBorders.Clear();
+        FindBuildings(sim.Map);
+        PlayerRoofGroup = -1;
+        foreach (int id in _ghosts.Keys.ToList())
+        {
+            Ghost g = _ghosts[id];
+            var body = g.Body.Select(b => new BodyTile(new TilePos(b.Position.X - dx, b.Position.Y - dy), b.Part)).ToList();
+            var tip = new TilePos(g.Tip.X - dx, g.Tip.Y - dy);
+            if (sim.Map.InBounds(tip) && body.All(b => sim.Map.InBounds(b.Position))) _ghosts[id] = g with { Body = body, Tip = tip };
+            else _ghosts.Remove(id);
+        }
+    }
+
+    private void Scroll<T>(T[] cells, int dx, int dy, T blank)
+    {
+        // walk so that every source cell is read before it is overwritten
+        int yStart = dy >= 0 ? 0 : _height - 1, yStep = dy >= 0 ? 1 : -1;
+        int xStart = dx >= 0 ? 0 : _width - 1, xStep = dx >= 0 ? 1 : -1;
+        for (int n = 0, y = yStart; n < _height; n++, y += yStep)
+        {
+            int sy = y + dy;
+            for (int m = 0, x = xStart; m < _width; m++, x += xStep)
+            {
+                int sx = x + dx;
+                cells[y * _width + x] = sx >= 0 && sy >= 0 && sx < _width && sy < _height ? cells[sy * _width + sx] : blank;
+            }
+        }
     }
 
     /// <summary>The roof group (one per building) the player is under, or -1 outdoors.</summary>
