@@ -153,6 +153,36 @@ public partial class AsciiMapView : Node2D
 
     public OverlayState Overlays { get; } = new();
 
+    // ---- Culling: which tiles get drawn -------------------------------------------------------
+
+    /// <summary>How many tiles beyond the view are drawn, so small camera moves need no redraw.</summary>
+    private const int CullMargin = 10;
+
+    /// <summary>The tiles drawn by the last redraw request. Everything, until <see cref="SetView"/> is called.</summary>
+    private Rect2I _drawn = new(0, 0, int.MaxValue / 2, int.MaxValue / 2);
+    private int _x0, _y0, _x1, _y1;
+
+    /// <summary>How many tiles the last draw covered: for the debug readout.</summary>
+    public int DrawnTiles => (_x1 - _x0 + 1) * (_y1 - _y0 + 1);
+
+    /// <summary>
+    /// Tells the view what part of it is on screen (in this node's pixels), so it draws only those
+    /// tiles plus a margin. Call it every frame; it asks for a redraw only when the screen has moved
+    /// past what was drawn last time. In the raised view, ground south of the screen can be lifted
+    /// into it, so the drawn area reaches further south by the tallest lift on the map.
+    /// </summary>
+    public void SetView(Rect2 onScreen)
+    {
+        if (_sim is null) return;
+        float lift = Overlays.Raised ? _heightRangeDm * LiftPerDm + CellSize : 0f;
+        int x0 = Mathf.FloorToInt(onScreen.Position.X / CellSize) - 1, y0 = Mathf.FloorToInt(onScreen.Position.Y / CellSize) - 1;
+        int x1 = Mathf.CeilToInt(onScreen.End.X / CellSize) + 1, y1 = Mathf.CeilToInt((onScreen.End.Y + lift) / CellSize) + 1;
+        var needed = new Rect2I(x0, y0, x1 - x0, y1 - y0);
+        if (_drawn.Encloses(needed)) return;
+        _drawn = needed.Grow(CullMargin);
+        QueueRedraw();
+    }
+
     /// <summary>The player's map memory. Null until <see cref="Bind"/>.</summary>
     public FogOfWar? Fog { get; private set; }
 
@@ -334,22 +364,27 @@ public partial class AsciiMapView : Node2D
             }
         }
 
+        // only the tiles in (and a little around) the view are drawn; see SetView
+        _x0 = Math.Clamp(_drawn.Position.X, 0, width - 1);
+        _y0 = Math.Clamp(_drawn.Position.Y, 0, height - 1);
+        _x1 = Math.Clamp(_drawn.End.X - 1, _x0, width - 1);
+        _y1 = Math.Clamp(_drawn.End.Y - 1, _y0, height - 1);
         if (o.Raised)
         {
-            for (int y = 0; y < height; y++)
+            for (int y = _y0; y <= _y1; y++)
             {
-                for (int x = 0; x < width; x++)
+                for (int x = _x0; x <= _x1; x++)
                     DrawGround(new TilePos(x, y));
                 DrawRow(y, bodyRows);
             }
         }
         else
         {
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
+            for (int y = _y0; y <= _y1; y++)
+                for (int x = _x0; x <= _x1; x++)
                     DrawGround(new TilePos(x, y));
             DrawFlatCliffs();
-            for (int y = 0; y < height; y++)
+            for (int y = _y0; y <= _y1; y++)
                 DrawRow(y, bodyRows);
         }
 
@@ -484,7 +519,7 @@ public partial class AsciiMapView : Node2D
                 DrawCircle(CenterOf(spot.Position) + new Vector2(3f, 4f), 2.5f, BloodColor);
         }
 
-        for (int x = 0; x < map.Width; x++)
+        for (int x = _x0; x <= _x1; x++)
         {
             var p = new TilePos(x, y);
             if (map.Structures.HasDeck(p) && FogAt(p) is FogState.Visible or FogState.Remembered)
@@ -637,9 +672,9 @@ public partial class AsciiMapView : Node2D
     private void DrawFlatCliffs()
     {
         var terrain = _sim!.Terrain;
-        for (int y = 0; y < terrain.Height; y++)
+        for (int y = _y0; y <= _y1; y++)
         {
-            for (int x = 0; x < terrain.Width; x++)
+            for (int x = _x0; x <= _x1; x++)
             {
                 var p = new TilePos(x, y);
                 if (FogAt(p) is FogState.Unknown or FogState.Plan)

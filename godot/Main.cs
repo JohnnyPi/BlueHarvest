@@ -157,6 +157,10 @@ public partial class Main : Node2D
             }
         }
 
+        // draw only what is on screen (plus a margin); the view redraws itself when the camera leaves that
+        Vector2 viewSize = GetViewportRect().Size / _camera.Zoom;
+        _map.SetView(new Rect2(_camera.GetScreenCenterPosition() - viewSize / 2f, viewSize));
+
         if (_walk is not null)
             StepWalk(delta);
         UpdateHover();
