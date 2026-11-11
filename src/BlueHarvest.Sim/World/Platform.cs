@@ -25,4 +25,11 @@ public sealed class Platform
     public int InitialSupports { get; }
 
     public bool Collapsed { get; internal set; }
+
+    /// <summary>The map scrolled: moves the deck's tiles by (−dx, −dy) and forgets the ones now outside it.</summary>
+    internal void Shift(int dx, int dy, WorldMap map)
+    {
+        for (int i = 0; i < _tiles.Count; i++) _tiles[i] = new TilePos(_tiles[i].X - dx, _tiles[i].Y - dy);
+        _tiles.RemoveAll(t => !map.InBounds(t));
+    }
 }

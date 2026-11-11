@@ -26,7 +26,7 @@ public sealed class SparkingFence
         LightIndex = lightIndex;
     }
 
-    public TilePos Position { get; }
+    public TilePos Position { get; internal set; }
 
     /// <summary>Its flickering light in Simulation.Lights (turned off, never removed, when it dies).</summary>
     public int LightIndex { get; }

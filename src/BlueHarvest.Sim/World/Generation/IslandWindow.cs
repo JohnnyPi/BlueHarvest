@@ -172,6 +172,22 @@ public sealed class IslandWindow
         return (dx, dy);
     }
 
+    /// <summary>
+    /// Keeps a simulation running on this window's map centred on an actor (the player): when they come
+    /// within <see cref="Margin"/> of the edge, scrolls the map, builds the new chunks and shifts
+    /// everything in the simulation by the same amount. Call it after each of the player's turns.
+    /// Returns whether the window moved.
+    /// </summary>
+    public bool Follow(Simulation sim, Actors.Actor actor)
+    {
+        if (!ReferenceEquals(sim.Map, Map)) throw new ArgumentException("The simulation is not running on this window's map.", nameof(sim));
+        if (!NearEdge(actor.Position)) return false;
+        (int dx, int dy) = Recenter(actor.Position);
+        if (dx == 0 && dy == 0) return false;
+        sim.ShiftWindow(dx, dy);
+        return true;
+    }
+
     /// <summary>The window as a stand-alone map with the player at a tile: what the .bhmap export writes.</summary>
     public MapData ToMapData(TilePos player, string playerName = "Survivor") =>
         new(Map, [new MapMarker(MarkerKind.Player, player, playerName)]);

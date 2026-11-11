@@ -21,6 +21,21 @@ public sealed class ContactMemory
     /// <summary>Everything remembered, oldest first.</summary>
     public IReadOnlyList<Contact> All => _contacts;
 
+    /// <summary>
+    /// The map scrolled by (dx, dy) tiles: moves every remembered position with it, kept inside the map.
+    /// Sounds are forgotten, because a sound contact is keyed by the tile it came from.
+    /// </summary>
+    internal void Shift(int dx, int dy, WorldMap map)
+    {
+        _contacts.RemoveAll(c => c.Key.Source == ContactSource.Sound);
+        foreach (var contact in _contacts)
+        {
+            contact.Estimate = new TilePos(
+                Math.Clamp(contact.Estimate.X - dx, 0, map.Width - 1),
+                Math.Clamp(contact.Estimate.Y - dy, 0, map.Height - 1));
+        }
+    }
+
     public Contact? Find(ContactKey key)
     {
         foreach (var contact in _contacts)

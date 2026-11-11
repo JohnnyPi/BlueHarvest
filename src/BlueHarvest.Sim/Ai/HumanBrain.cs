@@ -47,7 +47,7 @@ public enum Mood : byte
 /// otherwise wait. They never read the world beyond their senses, except for things in plain sight
 /// up close (an ally they're looking at is visibly bleeding; which tiles are cover).
 /// </summary>
-public sealed class HumanBrain : IActorController
+public sealed class HumanBrain : IActorController, IWindowShiftListener
 {
     /// <summary>Threats this far away (tiles) add nothing to fear.</summary>
     public const int FearRange = 40;
@@ -91,6 +91,21 @@ public sealed class HumanBrain : IActorController
     private TilePos? _shelter;
 
     /// <param name="rng">Its own stream, for screams and anything else left to chance.</param>
+    /// <summary>The streamed map scrolled: what they remember and where they were heading move with it.</summary>
+    public void OnWindowShifted(int dx, int dy, WorldMap map)
+    {
+        TilePos Moved(TilePos p) => new(Math.Clamp(p.X - dx, 0, map.Width - 1), Math.Clamp(p.Y - dy, 0, map.Height - 1));
+        Memory.Shift(dx, dy, map);
+        _shelterGoal = Moved(_shelterGoal);
+        _personGoal = Moved(_personGoal);
+        if (_shelter is { } shelter)
+        {
+            var moved = new TilePos(shelter.X - dx, shelter.Y - dy);
+            _shelter = map.InBounds(moved) ? moved : null; // a shelter left behind is forgotten
+            if (_shelter is null) _shelterPlannedTick = NeverPlanned;
+        }
+    }
+
     public HumanBrain(Traits traits, AiProfile profile, Rng rng)
     {
         Traits = traits;

@@ -12,7 +12,7 @@ namespace BlueHarvest.Sim;
 /// The whole game state and its rules. Contains no Godot code, so it runs in tests,
 /// the headless runner and the game alike.
 /// </summary>
-public sealed class Simulation
+public sealed partial class Simulation
 {
     /// <summary>Time lost walking into something you can't pass.</summary>
     public const int BumpTicks = 10;

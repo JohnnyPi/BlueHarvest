@@ -32,7 +32,7 @@ public enum Activity : byte
 /// and what the bite felt reclassifies them.
 /// It never reads the world beyond its percepts and its own bites, so hiding works.
 /// </summary>
-public sealed class CreatureBrain : IActorController
+public sealed class CreatureBrain : IActorController, IWindowShiftListener
 {
     private readonly RandomWalker _wander;
     private GoToController? _goTo;
@@ -52,6 +52,13 @@ public sealed class CreatureBrain : IActorController
     }
 
     public ContactMemory Memory { get; }
+
+    /// <summary>The streamed map scrolled: what it remembers and where it was heading move with it.</summary>
+    public void OnWindowShifted(int dx, int dy, WorldMap map)
+    {
+        Memory.Shift(dx, dy, map);
+        _goal = new TilePos(Math.Clamp(_goal.X - dx, 0, map.Width - 1), Math.Clamp(_goal.Y - dy, 0, map.Height - 1));
+    }
 
     public AiProfile Profile => Memory.Profile;
 

@@ -46,6 +46,9 @@ public sealed class Vehicle
     /// <summary>Its first tile (top row, leftmost); how maps refer to it.</summary>
     public TilePos Anchor => _tiles[0];
 
+    /// <summary>On a streamed map: the map moved on without this vehicle. It keeps its id but is on no tile.</summary>
+    public bool LeftBehind { get; internal set; }
+
     internal void MoveBy(int dx, int dy, Dictionary<TilePos, CoverType> newUnder)
     {
         for (int i = 0; i < _tiles.Count; i++)

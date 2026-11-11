@@ -67,7 +67,13 @@ public sealed class Actor
     public bool HasEscaped => EscapedVia is not null;
 
     /// <summary>Dead or escaped: off the map as far as everyone else is concerned (no turns, not perceived).</summary>
-    public bool IsGone => IsDead || HasEscaped;
+    /// <summary>
+    /// On a streamed map: the map moved on and this actor was left outside it. They take no more
+    /// turns and occupy no tile. (Bringing them back when the map returns is not implemented yet.)
+    /// </summary>
+    public bool LeftBehind { get; internal set; }
+
+    public bool IsGone => IsDead || HasEscaped || LeftBehind;
 
     public Skills Skills { get; internal set; } = Skills.None;
 
