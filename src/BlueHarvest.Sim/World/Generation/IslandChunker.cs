@@ -19,6 +19,12 @@ public sealed class IslandChunk
     public required byte[] Biome { get; init; }
     /// <summary>Index into the works' labels (room and feature names), −1 for none.</summary>
     public required short[] Label { get; init; }
+    /// <summary>
+    /// Which way river water runs on each tile and how fast: east and south components in decimetres
+    /// per second. Zero on dry ground, lakes and the sea.
+    /// </summary>
+    public required sbyte[] FlowX { get; init; }
+    public required sbyte[] FlowY { get; init; }
 }
 
 /// <summary>
@@ -296,9 +302,13 @@ public sealed class IslandChunker
         return GenMath.Hyp(ax + dx * t - x, ay + dy * t - y);
     }
 
-    private void NearestRiver(double x, double y, out double dist, out double q, out double h)
+    /// <summary>
+    /// The nearest river reach: how far away, its discharge and water height there, the unit vector
+    /// pointing downstream along it (rivers are traced from their heads), and how steeply it falls (m per m).
+    /// </summary>
+    private void NearestRiver(double x, double y, out double dist, out double q, out double h, out double ux, out double uy, out double drop)
     {
-        dist = 1e9; q = 0; h = 0;
+        dist = 1e9; q = 0; h = 0; ux = 0; uy = 0; drop = 0;
         long bx = Floor(x / Bin), by = Floor(y / Bin);
         for (long yy = by - 1; yy <= by + 1; yy++)
         {
@@ -313,10 +323,26 @@ public sealed class IslandChunker
                     double t = ((x - ax) * dx + (y - ay) * dy) / l2;
                     t = t < 0 ? 0 : t > 1 ? 1 : t;
                     double d = GenMath.Hyp(ax + dx * t - x, ay + dy * t - y);
-                    if (d < dist) { dist = d; q = qs[k] + (qs[k + 1] - qs[k]) * t; h = hs[k] + (hs[k + 1] - hs[k]) * t; }
+                    if (d < dist)
+                    {
+                        dist = d; q = qs[k] + (qs[k + 1] - qs[k]) * t; h = hs[k] + (hs[k + 1] - hs[k]) * t;
+                        double len = Math.Sqrt(l2);
+                        ux = dx / len; uy = dy / len; drop = (hs[k] - hs[k + 1]) / len;
+                    }
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// How fast a river runs, in m/s: its discharge over its cross-section, faster on steep reaches.
+    /// A first guess for tuning; nothing in the terrain depends on it.
+    /// </summary>
+    public static double RiverSpeed(double q, double drop)
+    {
+        double flat = q / (RiverWidth(q) * RiverDepth(q));
+        double steep = GenMath.Clamp(0.5 + 6 * Math.Sqrt(Math.Max(0, drop)), 0.5, 2.5);
+        return GenMath.Clamp(flat * steep, 0.2, 6);
     }
 
     private static byte Mk(Cover c) => (byte)((int)c + 1); // tile marks are a cover plus one; 0 is "no mark"
@@ -341,6 +367,8 @@ public sealed class IslandChunker
         var riverD = new float[m2 * m2];
         Array.Fill(water, float.NaN);
         Array.Fill(riverD, 1e9f);
+        var flowX = new sbyte[m2 * m2];
+        var flowY = new sbyte[m2 * m2];
         var kind = new sbyte[m2 * m2]; // 0 land, 1 sea, 2 river, 3 lake
         var mark = new byte[m2 * m2];
         var lab = new short[m2 * m2];
@@ -379,11 +407,16 @@ public sealed class IslandChunker
                     z = z + (zc - z) * wgt;
                 }
                 if (z < 0) { kind[k] = 1; water[k] = 0; }
-                NearestRiver(x, y, out double rvD, out double rvQ, out double rvH);
+                NearestRiver(x, y, out double rvD, out double rvQ, out double rvH, out double rvUx, out double rvUy, out double rvDrop);
                 if (rvD < 60)
                 {
                     double w = RiverWidth(rvQ), dep = RiverDepth(rvQ), half = w / 2, bank = 2 + w * 0.6;
-                    if (rvD < half) { z = Math.Min(z, rvH - dep); kind[k] = 2; water[k] = (float)rvH; }
+                    if (rvD < half)
+                    {
+                        z = Math.Min(z, rvH - dep); kind[k] = 2; water[k] = (float)rvH;
+                        double dms = RiverSpeed(rvQ, rvDrop) * 10;
+                        flowX[k] = (sbyte)GenMath.Round(rvUx * dms); flowY[k] = (sbyte)GenMath.Round(rvUy * dms);
+                    }
                     else if (rvD < half + bank * 3) z = Math.Min(z, rvH + (rvD - half) * 0.45);
                     riverD[k] = (float)(rvD - half);
                 }
@@ -425,6 +458,8 @@ public sealed class IslandChunker
         var lvl = new float[size * size];
         var shade = new float[size * size];
         var tBiome = new byte[size * size];
+        var outFlowX = new sbyte[size * size];
+        var outFlowY = new sbyte[size * size];
         double seaT = _world.Params.SeaTemp;
         for (int j = 0; j < size; j++)
         {
@@ -450,6 +485,7 @@ public sealed class IslandChunker
                     z = step + (f < 0.7 ? 0 : (f - 0.7) / 0.3 * 2);
                 }
                 outH[o2] = (float)z; lvl[o2] = water[k];
+                if (kind[k] == 2) { outFlowX[o2] = flowX[k]; outFlowY[o2] = flowY[k]; } // a lake or the works may have taken the tile since
                 {
                     // hillshade, light from the north-west; uses the margin so chunk edges match
                     double sx = ((double)h[k + 1] - h[k - 1]) / 2, sy = ((double)h[k + m2] - h[k - m2]) / 2;
@@ -498,7 +534,7 @@ public sealed class IslandChunker
                 cover[o2] = (byte)c; label[o2] = lab[k];
             }
         }
-        return new IslandChunk { Size = size, X0 = ccx * ChunkSize, Y0 = ccy * ChunkSize, Height = outH, Cover = cover, Water = lvl, Shade = shade, Biome = tBiome, Label = label };
+        return new IslandChunk { Size = size, X0 = ccx * ChunkSize, Y0 = ccy * ChunkSize, Height = outH, Cover = cover, Water = lvl, Shade = shade, Biome = tBiome, Label = label, FlowX = outFlowX, FlowY = outFlowY };
     }
 
     /// <summary>Applies the works to one tile; returns the tile's new height.</summary>

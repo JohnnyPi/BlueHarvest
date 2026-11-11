@@ -33,6 +33,9 @@ public sealed class OverlayState
     /// <summary>Arrows at the screen edge for off-screen exits and the Rex (drawn by the HUD).</summary>
     public bool EdgeMarkers = true;
 
+    /// <summary>Water that moves on its own: glints, river streaks, surf (drawn by the AmbientView).</summary>
+    public bool Animation = true;
+
     /// <summary>[1] Darken tiles by the simulation's light grid.</summary>
     public bool Lighting = true;
 
@@ -174,7 +177,7 @@ public partial class AsciiMapView : Node2D
     public void SetView(Rect2 onScreen)
     {
         if (_sim is null) return;
-        float lift = Overlays.Raised ? _heightRangeDm * LiftPerDm + CellSize : 0f;
+        float lift = MaxLift;
         int x0 = Mathf.FloorToInt(onScreen.Position.X / CellSize) - 1, y0 = Mathf.FloorToInt(onScreen.Position.Y / CellSize) - 1;
         int x1 = Mathf.CeilToInt(onScreen.End.X / CellSize) + 1, y1 = Mathf.CeilToInt((onScreen.End.Y + lift) / CellSize) + 1;
         var needed = new Rect2I(x0, y0, x1 - x0, y1 - y0);
@@ -182,6 +185,12 @@ public partial class AsciiMapView : Node2D
         _drawn = needed.Grow(CullMargin);
         QueueRedraw();
     }
+
+    /// <summary>
+    /// The furthest any ground is drawn above its flat position, in pixels (0 in the flat view): how
+    /// far south of the screen a tile can be and still show on it.
+    /// </summary>
+    public float MaxLift => Overlays.Raised ? _heightRangeDm * LiftPerDm + CellSize : 0f;
 
     /// <summary>The player's map memory. Null until <see cref="Bind"/>.</summary>
     public FogOfWar? Fog { get; private set; }

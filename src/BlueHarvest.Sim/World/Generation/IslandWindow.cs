@@ -2,7 +2,7 @@ namespace BlueHarvest.Sim.World.Generation;
 
 /// <summary>
 /// Turns the island's 1 m tiles into the game's map tiles: cover types with rules, heights in 0.5 m
-/// levels, roofs over building interiors and closed doors.
+/// levels, roofs over building interiors, closed doors and the current in the rivers.
 /// </summary>
 public sealed class IslandTiles
 {
@@ -80,6 +80,10 @@ public sealed class IslandTiles
                 map.Structures.SetDoor(p, type == CoverType.Door ? DoorState.Closed : DoorState.Open);
                 map.Structures.SetDeck(p, 0);
                 map.Structures.SetLadder(p, false);
+                // only open water runs: a bridge or a pier over the river has no current on its deck
+                map.Flow[p] = type is CoverType.ShallowWater or CoverType.DeepWater
+                    ? new WaterFlow(chunk.FlowX[k], chunk.FlowY[k])
+                    : WaterFlow.None;
             }
         }
     }

@@ -35,6 +35,7 @@ public class IslandWindowTests
                 Assert.Equal(b.Map.Heights[pb], a.Map.Heights[pa]);
                 Assert.Equal(b.Map.Structures.RoofDm(pb), a.Map.Structures.RoofDm(pa));
                 Assert.Equal(b.Map.Structures.DoorAt(pb), a.Map.Structures.DoorAt(pa));
+                Assert.Equal(b.Map.Flow[pb], a.Map.Flow[pa]);
             }
         }
     }
@@ -165,13 +166,69 @@ public class IslandWindowTests
     }
 
     [Fact]
+    public void Rivers_RunDownstreamAndOnlyWaterHasACurrent()
+    {
+        // a window on the middle of the island's longest river
+        River river = TestIslands.Shape(Island).Rivers.OrderByDescending(r => r.Xs.Length).First();
+        int mid = river.Xs.Length / 2;
+        IslandWindow w = WindowAt(river.Xs[mid], river.Ys[mid]);
+        int running = 0, checkedPairs = 0, rises = 0;
+        for (int y = 0; y < w.Size; y++)
+        {
+            for (int x = 0; x < w.Size; x++)
+            {
+                var p = new TilePos(x, y);
+                WaterFlow flow = w.Map.Flow[p];
+                if (flow.IsNone) continue;
+                running++;
+                Assert.True(w.Map.Cover[p] is CoverType.ShallowWater or CoverType.DeepWater, $"{w.Map.Cover[p]} at {p} has a current");
+                Assert.InRange(flow.SpeedDm, 1, 61);
+                // six metres on along the current, the water is no higher (rivers never rise downstream)
+                double speed = Math.Sqrt(flow.X * flow.X + flow.Y * flow.Y);
+                var on = new TilePos(x + (int)Math.Round(flow.X / speed * 6), y + (int)Math.Round(flow.Y / speed * 6));
+                if (!w.Map.InBounds(on) || w.Map.Flow[on].IsNone) continue;
+                checkedPairs++;
+                if (w.Map.Heights[on] > w.Map.Heights[p]) rises++;
+            }
+        }
+        Assert.True(running > 50, $"only {running} tiles of running water around the river");
+        Assert.True(checkedPairs > 20, $"only {checkedPairs} pairs to compare");
+        // where a tributary joins, half-metre rounding can put the main river a step higher: allow a few
+        Assert.True(rises * 20 <= checkedPairs, $"{rises} of {checkedPairs} tiles run uphill");
+    }
+
+    [Fact]
+    public void TheOpenSea_HasNoCurrent()
+    {
+        IslandWindow w = WindowAt(200, 200, 2);
+        for (int y = 0; y < w.Size; y++)
+            for (int x = 0; x < w.Size; x++)
+                Assert.True(w.Map.Flow[new TilePos(x, y)].IsNone);
+    }
+
+    [Theory]
+    [InlineData(0.5, 0)]
+    [InlineData(5, 0.01)]
+    [InlineData(40, 0.2)]
+    public void RiverSpeed_IsFasterOnSteeperReaches(double q, double drop)
+    {
+        double flat = IslandChunker.RiverSpeed(q, 0), here = IslandChunker.RiverSpeed(q, drop), steeper = IslandChunker.RiverSpeed(q, drop + 0.05);
+        Assert.InRange(here, 0.2, 6);
+        Assert.True(here >= flat);
+        Assert.True(steeper >= here);
+    }
+
+    [Fact]
     public void Scroll_MovesEveryLayerAndBlanksWhatComesIn()
     {
         var map = new WorldMap(4, 3);
         var p = new TilePos(2, 1);
         map.Heights[p] = 35; map.Cover[p] = CoverType.Wall; map.Structures.SetRoof(p, 30); map.Structures.SetDoor(p, DoorState.Locked); map.Structures.SetLadder(p, true);
+        map.Flow[p] = new WaterFlow(12, -5);
         map.Scroll(1, -1);
         var q = new TilePos(1, 2);
+        Assert.Equal(new WaterFlow(12, -5), map.Flow[q]);
+        Assert.Equal(WaterFlow.None, map.Flow[p]);
         Assert.Equal(35, map.Heights[q]);
         Assert.Equal(CoverType.Wall, map.Cover[q]);
         Assert.Equal(30, map.Structures.RoofDm(q));

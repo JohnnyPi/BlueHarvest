@@ -1,6 +1,6 @@
 namespace BlueHarvest.Sim.World;
 
-/// <summary>All per-tile layers of a map: terrain heights, ground cover and structures.</summary>
+/// <summary>All per-tile layers of a map: terrain heights, ground cover, structures and water currents.</summary>
 public sealed class WorldMap
 {
     public WorldMap(int width, int height)
@@ -18,11 +18,15 @@ public sealed class WorldMap
         Heights = heights;
         Cover = cover;
         Structures = structures;
+        Flow = new FlowMap(heights.Width, heights.Height);
     }
 
     public HeightMap Heights { get; }
     public CoverMap Cover { get; }
     public StructureMap Structures { get; }
+
+    /// <summary>Which way running water moves on each tile; none unless a generator filled it in.</summary>
+    public FlowMap Flow { get; }
     public int Width => Heights.Width;
     public int Height => Heights.Height;
 
@@ -30,7 +34,7 @@ public sealed class WorldMap
 
     /// <summary>
     /// Scrolls every layer: what was at (x, y) is now at (x − dx, y − dy), and the tiles that scroll in
-    /// from outside are blank (height 0, grass, no structures) until something fills them.
+    /// from outside are blank (height 0, grass, no structures, no current) until something fills them.
     /// A streamed map uses this to follow the player; see Generation.IslandWindow.
     /// </summary>
     public void Scroll(int dx, int dy)
@@ -38,6 +42,7 @@ public sealed class WorldMap
         Heights.Scroll(dx, dy);
         Cover.Scroll(dx, dy);
         Structures.Scroll(dx, dy);
+        Flow.Scroll(dx, dy);
     }
 
     /// <summary>Absolute height of the deck surface on a tile (ground plus deck), in decimeters.</summary>

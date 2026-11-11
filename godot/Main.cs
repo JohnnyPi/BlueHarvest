@@ -52,6 +52,7 @@ public partial class Main : Node2D
     private CreatureBrain? _rexBrain;
     private readonly Director _director = new();
     private AsciiMapView _map = null!;
+    private AmbientView _ambient = null!;
     private WeatherView _weather = null!;
     private Camera2D _camera = null!;
     private ColorRect _flash = null!;
@@ -102,6 +103,11 @@ public partial class Main : Node2D
         overlays.RexMemory = false;
         overlays.Vibration = false;
         AddChild(_map);
+
+        // water that moves on its own, over the ground and under the rain
+        _ambient = new AmbientView();
+        _ambient.Bind(_sim, _map);
+        AddChild(_ambient);
 
         _weather = new WeatherView();
         _weather.Bind(_sim);
@@ -159,7 +165,9 @@ public partial class Main : Node2D
 
         // draw only what is on screen (plus a margin); the view redraws itself when the camera leaves that
         Vector2 viewSize = GetViewportRect().Size / _camera.Zoom;
-        _map.SetView(new Rect2(_camera.GetScreenCenterPosition() - viewSize / 2f, viewSize));
+        var onScreen = new Rect2(_camera.GetScreenCenterPosition() - viewSize / 2f, viewSize);
+        _map.SetView(onScreen);
+        _ambient.SetView(onScreen);
 
         if (_walk is not null)
             StepWalk(delta);
@@ -433,6 +441,7 @@ public partial class Main : Node2D
     {
         _windowShifted = true;
         _map.MapScrolled(dx, dy);
+        _ambient.MapChanged();
         _cursor = Clamp(new TilePos(_cursor.X - dx, _cursor.Y - dy));
         _hoverTile = null;
         _previewStale = true;
