@@ -89,6 +89,7 @@ public sealed partial class Simulation
     private readonly int[] _platformAt; // platform id + 1 for each deck tile, 0 if none
     private LightGrid? _lightGrid;
     private int _ambientLight = 100;
+    private readonly int _moonStartPhase;
 
     /// <summary>
     /// Starts a simulation on a map. Every connected patch of vehicle cover becomes a Vehicle and
@@ -99,6 +100,7 @@ public sealed partial class Simulation
         Map = map;
         Rng = new Rng(seed);
         Weather = new Weather(Rng.Fork("weather").NextULong());
+        _moonStartPhase = (int)(Rng.Fork("sky").NextULong() % Sky.MoonCycle);
         _injuryRng = Rng.Fork("injuries");
         _gearRng = Rng.Fork("gear");
         _occupant = new int[map.Width * map.Height];
@@ -264,17 +266,61 @@ public sealed partial class Simulation
     /// <summary>Rain, wind, fog and storm, and what they do to the senses now.</summary>
     public Weather Weather { get; }
 
-    /// <summary>Ambient light now: the set level, or lightning's while a flash lasts.</summary>
-    public int EffectiveAmbientPercent =>
-        Weather.Flash(CurrentTick) ? Math.Max(_ambientLight, Weather.FlashAmbientPercent) : _ambientLight;
+    /// <summary>Ambient light now: the sky's (or the set level), or lightning's while a flash lasts.</summary>
+    public int EffectiveAmbientPercent
+    {
+        get
+        {
+            int ambient = AmbientLightPercent;
+            return Weather.Flash(CurrentTick) ? Math.Max(ambient, Weather.FlashAmbientPercent) : ambient;
+        }
+    }
+
+    /// <summary>
+    /// The time of day, on maps that have one (the island). Null on maps lit at a fixed level (the
+    /// testbed's night): start it with <see cref="SetTimeOfDay"/>.
+    /// </summary>
+    public WorldClock? Clock { get; private set; }
+
+    /// <summary>Where the moon is in its cycle now (see <see cref="Sky.MoonPhase"/>); its phase at the start of day 1 comes from the seed.</summary>
+    public int MoonPhase => Sky.MoonPhase(Clock?.TotalMinutes(CurrentTick) ?? 0, _moonStartPhase);
+
+    /// <summary>
+    /// Starts the clock, or moves it on: from now it reads this time of day, and outdoor light follows
+    /// the sun, the moon and the weather instead of a fixed level. Time only goes forward: a time
+    /// earlier than the clock's reading means that time tomorrow. For scenario setup and the debug
+    /// panel; not recorded in replays.
+    /// </summary>
+    public void SetTimeOfDay(int hour, int minute = 0)
+    {
+        int target = WorldClock.StartingAt(hour, minute).MinuteOfDay(0);
+        if (Clock is { } clock)
+        {
+            int ahead = (target - clock.MinuteOfDay(CurrentTick) + WorldClock.MinutesPerDay) % WorldClock.MinutesPerDay;
+            Clock = new WorldClock(clock.StartMinute + ahead);
+        }
+        else
+        {
+            // day 1, reading this time now (not at tick 0)
+            long elapsed = CurrentTick / WorldClock.TicksPerGameMinute % WorldClock.MinutesPerDay;
+            Clock = new WorldClock((target - elapsed + WorldClock.MinutesPerDay) % WorldClock.MinutesPerDay);
+        }
+        _lightGrid = null;
+    }
 
     /// <summary>Noises from the last <see cref="NoiseMemoryTicks"/> ticks, oldest first.</summary>
     public IReadOnlyList<NoiseEvent> RecentNoises => _noises;
 
-    /// <summary>Light everywhere outdoors before any lights are added: 100 is daylight, about 5 a stormy night.</summary>
+    /// <summary>
+    /// Light everywhere outdoors before any lights are added: 100 is daylight, about 5 a stormy night.
+    /// With a <see cref="Clock"/> running it is the sky's light now and setting it does nothing;
+    /// without one it is the level set here.
+    /// </summary>
     public int AmbientLightPercent
     {
-        get => _ambientLight;
+        get => Clock is { } clock
+            ? Sky.AmbientPercent(clock.MinuteOfDay(CurrentTick), MoonPhase, Weather.Settings)
+            : _ambientLight;
         set
         {
             _ambientLight = Math.Clamp(value, 0, 100);

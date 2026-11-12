@@ -36,6 +36,9 @@ public sealed class OverlayState
     /// <summary>Water that moves on its own: glints, river streaks, surf (drawn by the AmbientView).</summary>
     public bool Animation = true;
 
+    /// <summary>The colour of the daylight (or the night) now, multiplied into everything lit. White for none.</summary>
+    public Color SkyTint = new(1f, 1f, 1f);
+
     /// <summary>[1] Darken tiles by the simulation's light grid.</summary>
     public bool Lighting = true;
 
@@ -880,7 +883,8 @@ public partial class AsciiMapView : Node2D
             f *= 0.12f + 0.88f * light / 100f;
         if (dimmed)
             f *= 0.25f;
-        return new Color(c.R * f, c.G * f, c.B * f, c.A);
+        Color sky = Overlays.Lighting ? Overlays.SkyTint : new Color(1f, 1f, 1f);
+        return new Color(c.R * f * sky.R, c.G * f * sky.G, c.B * f * sky.B, c.A);
     }
 
     /// <summary>

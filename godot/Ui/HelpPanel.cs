@@ -10,6 +10,7 @@ public partial class HelpPanel : PanelContainer
         "[color=#e9b04c]Move[/color]            arrows · numpad · hjkl yubn\n" +
         "[color=#e9b04c]Sprint[/color]          hold Shift while moving or clicking\n" +
         "[color=#e9b04c]Wait[/color]            .  numpad 5  Space\n" +
+        "[color=#e9b04c]Wait for light[/color]  z  until dawn or dusk (any key or click stops)\n" +
         "[color=#e9b04c]Pan the map[/color]     W A S D   ·   Home recentres\n" +
         "[color=#e9b04c]Zoom[/color]            mouse wheel  ·  + −\n" +
         "\n" +

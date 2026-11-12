@@ -33,6 +33,22 @@ public partial class Main : Node2D
     private const float PanSpeed = 900f;
 
     /// <summary>What the debug panel's weather list holds, in order.</summary>
+    /// <summary>The time of day a walk on the island starts at.</summary>
+    private const int IslandStartHour = 8;
+
+    /// <summary>Times the debug panel can skip the clock forward to.</summary>
+    private static readonly (string Name, int Hour, int Minute)[] TimePresets =
+    {
+        ("First light 05:30", 5, 30),
+        ("Sunrise 06:00", 6, 0),
+        ("Morning 08:00", 8, 0),
+        ("Noon 12:00", 12, 0),
+        ("Late afternoon 17:00", 17, 0),
+        ("Sunset 18:00", 18, 0),
+        ("Night 21:00", 21, 0),
+        ("Midnight 00:00", 0, 0),
+    };
+
     private static readonly (string Name, WeatherSettings Settings)[] WeatherPresets =
     {
         ("clear", WeatherSettings.Clear),
@@ -171,6 +187,8 @@ public partial class Main : Node2D
 
         if (_walk is not null)
             StepWalk(delta);
+        else if (_rest is not null)
+            StepRest();
         UpdateHover();
         UpdateEdgeMarkers();
     }
@@ -192,6 +210,13 @@ public partial class Main : Node2D
         {
             viewport.SetInputAsHandled();
             StopWalk("You stop.");
+            return;
+        }
+        // The same for waiting out the day or the night.
+        if (_rest is not null && !key.Echo && !IsModifier(key.Keycode))
+        {
+            viewport.SetInputAsHandled();
+            StopRest("You get up.");
             return;
         }
 
@@ -258,6 +283,13 @@ public partial class Main : Node2D
         // W A S D are polled in _Process for panning.
         if (key.Keycode is Key.W or Key.A or Key.S or Key.D)
             return;
+
+        if (!key.Echo && key.Keycode == Key.Z)
+        {
+            viewport.SetInputAsHandled();
+            StartRest();
+            return;
+        }
 
         if (!key.Echo && TryStartMode(key.Keycode))
         {
@@ -447,11 +479,12 @@ public partial class Main : Node2D
         _previewStale = true;
     }
 
-    /// <summary>Starts on the generated island where the explorer said, in daylight, alone.</summary>
+    /// <summary>Starts on the generated island where the explorer said, at eight in the morning of day 1, alone.</summary>
     private void LoadIsland(IslandWorld world, IslandChunker chunker)
     {
         _island = new IslandWindow(world, chunker, Island.IslandLaunch.X, Island.IslandLaunch.Y, chunksAcross: 3);
-        _sim = new Simulation(_island.Map, Seed) { AmbientLightPercent = 100 };
+        _sim = new Simulation(_island.Map, Seed);
+        _sim.SetTimeOfDay(IslandStartHour);
         TilePos start = _island.NearestStandable(_island.ToLocal(Island.IslandLaunch.X, Island.IslandLaunch.Y));
         _sim.AddActor("Survivor", '@', start, Species.Human, _player, loadout: Loadout.TestbedSurvivor);
         Say($"Island {world.Params.Seed}. You are on foot; the map follows you. F10 for the menu.");
@@ -608,6 +641,20 @@ public partial class Main : Node2D
         var (name, settings) = WeatherPresets[index];
         _sim.SetWeather(settings);
         Say($"DEBUG: weather set to {name} ({_sim.Weather.Settings.Describe()}).");
+    }
+
+    private void SkipToTime(int index)
+    {
+        if (index < 0 || index >= TimePresets.Length)
+            return;
+        if (_sim.Clock is null)
+        {
+            Say("DEBUG: this map has no clock (it is lit at a fixed level).");
+            return;
+        }
+        var (name, hour, minute) = TimePresets[index];
+        _sim.SetTimeOfDay(hour, minute);
+        Say($"DEBUG: clock skipped to {name}: {_sim.Clock.Describe(_sim.CurrentTick, 1)}, light {_sim.AmbientLightPercent}%.");
     }
 
     private int WeatherPresetIndex() => Array.FindIndex(WeatherPresets, p => p.Settings == _sim.Weather.Settings);

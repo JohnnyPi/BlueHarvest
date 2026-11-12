@@ -70,6 +70,11 @@ public partial class Main
             return;
 
         viewport.SetInputAsHandled();
+        if (_rest is not null)
+        {
+            StopRest("You get up.");
+            return;
+        }
         if (_walk is not null)
         {
             StopWalk("You stop.");

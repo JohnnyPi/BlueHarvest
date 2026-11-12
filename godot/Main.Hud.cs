@@ -14,6 +14,7 @@ using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 using Godot;
 using Direction = BlueHarvest.Sim.World.Direction;
+using Sky = BlueHarvest.Sim.World.Sky; // Godot has a Sky of its own
 
 namespace BlueHarvest.Game;
 
@@ -87,7 +88,7 @@ public partial class Main
         root.AddChild(_promptBox);
 
         _debug = new DebugPanel { OffsetTop = 60f, OffsetBottom = 60f };
-        _debug.Bind(_map.Overlays, WeatherPresets.Select(p => p.Name).ToList());
+        _debug.Bind(_map.Overlays, WeatherPresets.Select(p => p.Name).ToList(), TimePresets.Select(p => p.Name).ToList());
         _debug.OverlaysChanged += () => Refresh(snapCamera: false);
         _debug.HuntToggled += on =>
         {
@@ -97,6 +98,11 @@ public partial class Main
         _debug.WeatherChosen += index =>
         {
             SetWeatherPreset(index);
+            Refresh(snapCamera: false);
+        };
+        _debug.TimeChosen += index =>
+        {
+            SkipToTime(index);
             Refresh(snapCamera: false);
         };
         root.AddChild(_debug);
@@ -209,6 +215,10 @@ public partial class Main
         _rexSeesYou = rexPercepts?.Detects(_playerActor) ?? false;
         _map.Fog?.Update(_sim, _playerActor, _playerPercepts);
 
+        // the colour of the light goes with the hour, where there is a clock
+        _map.Overlays.SkyTint = _sim.Clock is { } skyClock
+            ? SkyLook.Tint(skyClock.MinuteOfDay(_sim.CurrentTick))
+            : new Color(1f, 1f, 1f);
         UpdateOverlays(_playerPercepts);
         _map.QueueRedraw();
         UpdateCamera(snapCamera);
@@ -237,13 +247,33 @@ public partial class Main
             : weather.Settings.RainPercent > 0 ? "rain"
             : weather.Settings.FogPercent > 0 ? "fog"
             : "";
-        if (_sim.AmbientLightPercent <= 20)
+        // with a clock: the part of the day, and the moon when it matters; without: night if it's dark
+        string moon = "";
+        if (_sim.Clock is { } clock)
+        {
+            int minute = clock.MinuteOfDay(now);
+            string part = Sky.PartOf(minute) switch
+            {
+                PartOfDay.Night => "night",
+                PartOfDay.Dawn => "dawn",
+                PartOfDay.Dusk => "dusk",
+                _ => "",
+            };
+            if (part.Length > 0)
+                badge = badge.Length == 0 ? part : $"{part} · {badge}";
+            if (Sky.PartOf(minute) != PartOfDay.Day)
+                moon = $" {Capitalize(Sky.MoonName(_sim.MoonPhase))}, {(Sky.MoonUp(_sim.MoonPhase, minute) ? "up" : "not up")}.";
+        }
+        else if (_sim.AmbientLightPercent <= 20)
+        {
             badge = badge.Length == 0 ? "night" : $"night · {badge}";
+        }
         int mask = weather.HearingMask(now);
         string weatherText = Capitalize(weather.Settings.Describe())
             + (weather.Gust(now) >= 70 ? ", gusting" : "") + "."
             + (mask > 0 ? $" Sounds −{mask}." : "")
-            + (weather.SightRangePercent < 100 ? $" Sight {weather.SightRangePercent}%." : "");
+            + (weather.SightRangePercent < 100 ? $" Sight {weather.SightRangePercent}%." : "")
+            + moon;
 
         // How close the Rex is to spotting you.
         int light = _sim.Light.LevelAt(here);
@@ -280,7 +310,7 @@ public partial class Main
         }
 
         return new HudFacts(
-            Clock: Clock(now),
+            Clock: _sim.Clock is { } worldClock ? worldClock.Describe(now) : Clock(now),
             WeatherBadge: badge,
             Weather: weatherText,
             SightScore: score,
@@ -456,6 +486,11 @@ public partial class Main
             $"Blue Harvest {SimInfo.Version}   time {Ticks.Format(_sim.CurrentTick)}   seed {Seed}   turn {_turn}   drawing {_map.DrawnTiles} tiles, {_ambient.DrawnTiles} moving\n" +
             $"You at {here}   ground {Units.FormatMeters(_sim.Terrain[here])}   light {_sim.Light.LevelAt(here)}%   " +
             $"{(moving ? "moving" : "still")}\n" +
+            (_sim.Clock is { } readoutClock
+                ? $"{readoutClock.Describe(_sim.CurrentTick, 1)}   sky light {_sim.AmbientLightPercent}%   " +
+                  $"{Sky.MoonName(_sim.MoonPhase)} ({Sky.MoonLitPercent(_sim.MoonPhase)}% lit, " +
+                  $"{(Sky.MoonUp(_sim.MoonPhase, readoutClock.MinuteOfDay(_sim.CurrentTick)) ? "up" : "down")})\n"
+                : "") +
             (_island is { } island
                 ? $"Away from here: {island.Changes.TileCount} changed tiles kept in {island.Changes.ChunkCount} chunks, " +
                   $"{_sim.Actors.Count(a => a.LeftBehind)} left behind\n"
@@ -593,6 +628,7 @@ public partial class Main
         if (!_playerActor.IsGone || _deathScreen.Visible)
             return;
         StopWalk(null);
+        StopRest(null);
         _tooltip.Visible = false;
         if (_playerActor.HasEscaped)
         {

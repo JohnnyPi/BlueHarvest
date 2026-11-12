@@ -18,6 +18,7 @@ public partial class DebugPanel : PanelContainer
     private readonly List<(CheckBox Box, Key Hotkey, Func<bool> Get, Action<bool> Set)> _toggles = new();
     private CheckBox _hunt = null!;
     private OptionButton _weather = null!;
+    private OptionButton _time = null!;
     private RichTextLabel _readout = null!;
 
     /// <summary>An overlay was switched on or off.</summary>
@@ -28,6 +29,9 @@ public partial class DebugPanel : PanelContainer
 
     /// <summary>A weather preset was picked, by index.</summary>
     public event Action<int>? WeatherChosen;
+
+    /// <summary>A time of day was picked, by index.</summary>
+    public event Action<int>? TimeChosen;
 
     public DebugPanel()
     {
@@ -45,8 +49,8 @@ public partial class DebugPanel : PanelContainer
         AddThemeStyleboxOverride("panel", HudTheme.Box(HudTheme.Panel, HudTheme.Amber, 4, 12));
     }
 
-    /// <summary>Builds the controls for these overlays and weather presets. Call once.</summary>
-    public void Bind(OverlayState overlays, IReadOnlyList<string> weatherNames)
+    /// <summary>Builds the controls for these overlays, weather presets and times of day. Call once.</summary>
+    public void Bind(OverlayState overlays, IReadOnlyList<string> weatherNames, IReadOnlyList<string> timeNames)
     {
         var column = HudTheme.Column(8);
         AddChild(column);
@@ -96,6 +100,24 @@ public partial class DebugPanel : PanelContainer
         _weather.ItemSelected += index => WeatherChosen?.Invoke((int)index);
         weatherRow.AddChild(weatherLabel);
         weatherRow.AddChild(_weather);
+
+        // jump the clock forward to a time of day (maps with a clock only)
+        var timeLabel = HudTheme.Text("Skip to", HudTheme.SmallSize, HudTheme.Muted);
+        timeLabel.AutowrapMode = TextServer.AutowrapMode.Off;
+        timeLabel.SizeFlagsVertical = SizeFlags.ShrinkCenter;
+        _time = new OptionButton { FocusMode = FocusModeEnum.None };
+        for (int i = 0; i < timeNames.Count; i++)
+            _time.AddItem(timeNames[i], i);
+        _time.Select(-1);
+        _time.Text = "time of day";
+        _time.ItemSelected += index =>
+        {
+            TimeChosen?.Invoke((int)index);
+            _time.Select(-1); // a button to press again, not a setting
+            _time.Text = "time of day";
+        };
+        weatherRow.AddChild(timeLabel);
+        weatherRow.AddChild(_time);
         column.AddChild(weatherRow);
 
         _readout = HudTheme.Rich(HudTheme.SmallSize);
