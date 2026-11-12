@@ -361,7 +361,7 @@ public partial class AsciiMapView : Node2D
         var bodyRows = new Dictionary<int, List<(BodyTile Tile, Actor Actor)>>();
         foreach (var actor in sim.Actors)
         {
-            if (!actor.IsLarge || !Shown(actor))
+            if (!actor.IsLarge || actor.LeftBehind || !Shown(actor))
                 continue;
             foreach (var tile in actor.Body)
             {
@@ -576,7 +576,7 @@ public partial class AsciiMapView : Node2D
         {
             foreach (var actor in sim.Actors)
             {
-                if (actor.IsLarge || actor.HasEscaped || actor.OnDeck != onDeck || actor.Position.Y != y)
+                if (actor.IsLarge || actor.HasEscaped || actor.LeftBehind || actor.OnDeck != onDeck || actor.Position.Y != y)
                     continue;
                 var p = actor.Position;
                 var center = ActorCenter(actor);

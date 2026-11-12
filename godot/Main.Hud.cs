@@ -456,6 +456,10 @@ public partial class Main
             $"Blue Harvest {SimInfo.Version}   time {Ticks.Format(_sim.CurrentTick)}   seed {Seed}   turn {_turn}   drawing {_map.DrawnTiles} tiles, {_ambient.DrawnTiles} moving\n" +
             $"You at {here}   ground {Units.FormatMeters(_sim.Terrain[here])}   light {_sim.Light.LevelAt(here)}%   " +
             $"{(moving ? "moving" : "still")}\n" +
+            (_island is { } island
+                ? $"Away from here: {island.Changes.TileCount} changed tiles kept in {island.Changes.ChunkCount} chunks, " +
+                  $"{_sim.Actors.Count(a => a.LeftBehind)} left behind\n"
+                : "") +
             RexLine(rex) + "\n" +
             MindLine();
         return HudTheme.Escape(text);

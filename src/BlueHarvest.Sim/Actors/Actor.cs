@@ -66,13 +66,27 @@ public sealed class Actor
 
     public bool HasEscaped => EscapedVia is not null;
 
-    /// <summary>Dead or escaped: off the map as far as everyone else is concerned (no turns, not perceived).</summary>
     /// <summary>
-    /// On a streamed map: the map moved on and this actor was left outside it. They take no more
-    /// turns and occupy no tile. (Bringing them back when the map returns is not implemented yet.)
+    /// On a streamed map: the map moved on and this actor (or its body) was left outside it. They wait
+    /// at <see cref="ParkedAt"/>, taking no turns and occupying no tile, and nothing happens to them
+    /// until the map comes back over that spot (see Simulation.ShiftWindow).
     /// </summary>
     public bool LeftBehind { get; internal set; }
 
+    /// <summary>
+    /// Where a left-behind actor is waiting, in tiles from where the map's corner was when the
+    /// simulation started (map position plus Simulation.WindowOrigin). Only meaningful while
+    /// <see cref="LeftBehind"/>.
+    /// </summary>
+    public TilePos ParkedAt { get; internal set; }
+
+    /// <summary>Whether the flashlight it carries was on when it was left behind, to switch back on when it returns.</summary>
+    internal bool ParkedLightOn { get; set; }
+
+    /// <summary>Whether the scheduler still holds a turn for it. The gone are dropped from the schedule when their turn comes up.</summary>
+    internal bool Scheduled { get; set; }
+
+    /// <summary>Dead, escaped or left behind: off the map as far as everyone else is concerned (no turns, not perceived).</summary>
     public bool IsGone => IsDead || HasEscaped || LeftBehind;
 
     public Skills Skills { get; internal set; } = Skills.None;

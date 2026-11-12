@@ -54,6 +54,63 @@ public class SimulationWindowTests
     }
 
     [Fact]
+    public void TheLeftBehind_ComeBackWhenTheMapReturns()
+    {
+        Simulation sim = Field();
+        Actor near = sim.AddActor("Near", 'n', new TilePos(10, 10), Species.Human, new HoldStillController());
+        Actor far = sim.AddActor("Far", 'f', new TilePos(2, 10), Species.Human, new HoldStillController());
+        Shift(sim, 5, 0);
+        Assert.True(far.LeftBehind);
+        Assert.Equal(new TilePos(2, 10), far.ParkedAt);
+        Assert.Equal(new TilePos(5, 0), sim.WindowOrigin);
+        sim.RunUntil(sim.CurrentTick + 500); // long enough for the schedule to drop Far
+
+        Shift(sim, -5, 0);
+        Assert.False(far.LeftBehind);
+        Assert.False(far.IsGone);
+        Assert.Equal(new TilePos(2, 10), far.Position);
+        Assert.Same(far, sim.ActorAt(new TilePos(2, 10)));
+        Assert.Equal(new TilePos(10, 10), near.Position);
+        Assert.Equal(new TilePos(0, 0), sim.WindowOrigin);
+
+        // Far takes turns again, at the usual rate: two people waiting a step at a time
+        long before = sim.ActionsResolved;
+        int step = far.Movement.StepTicks;
+        sim.RunUntil(sim.CurrentTick + step * 10);
+        Assert.InRange(sim.ActionsResolved - before, 19, 23);
+    }
+
+    [Fact]
+    public void TheLeftBehind_ComeBackAtOnce_WithoutASecondTurn()
+    {
+        // gone and back before the schedule noticed: Far must not end up with two turns queued
+        Simulation sim = Field();
+        sim.AddActor("Near", 'n', new TilePos(10, 10), Species.Human, new HoldStillController());
+        Actor far = sim.AddActor("Far", 'f', new TilePos(2, 10), Species.Human, new HoldStillController());
+        Shift(sim, 5, 0);
+        Shift(sim, -5, 0);
+        Assert.False(far.LeftBehind);
+        long before = sim.ActionsResolved;
+        sim.RunUntil(sim.CurrentTick + far.Movement.StepTicks * 10);
+        Assert.InRange(sim.ActionsResolved - before, 19, 23);
+    }
+
+    [Fact]
+    public void TheLeftBehind_StayAwayUntilTheMapCoversThem()
+    {
+        Simulation sim = Field();
+        sim.AddActor("Near", 'n', new TilePos(12, 10), Species.Human, new HoldStillController());
+        Actor far = sim.AddActor("Far", 'f', new TilePos(2, 10), Species.Human, new HoldStillController());
+        Shift(sim, 6, 0);
+        Assert.True(far.LeftBehind);
+        Shift(sim, -2, 0); // Far's spot is still 2 tiles off the west edge
+        Assert.True(far.LeftBehind);
+        Shift(sim, -2, 0); // now it is the map's first column
+        Assert.False(far.LeftBehind);
+        Assert.Equal(new TilePos(0, 10), far.Position);
+    }
+
+    [Fact]
     public void LightsExitsAndNoises_MoveOrAreDropped()
     {
         Simulation sim = Field();

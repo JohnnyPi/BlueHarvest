@@ -93,7 +93,8 @@ public sealed class IslandTiles
 /// A square game map that follows the player across the island: the island streamed as chunks.
 /// The map's tile (0, 0) is at (OriginX, OriginY) metres on the island. When the player nears an
 /// edge, <see cref="Recenter"/> scrolls the map by whole chunks and builds the chunks that come into
-/// view; what stays in view keeps any changes made to it (smashed fences, opened doors).
+/// view; what stays in view keeps any changes made to it (smashed fences, opened doors). Changes to
+/// chunks that scroll out are kept in <see cref="Changes"/> and put back when they scroll in again.
 /// </summary>
 public sealed class IslandWindow
 {
@@ -102,9 +103,13 @@ public sealed class IslandWindow
     private readonly IslandChunker _chunker;
     private readonly IslandTiles _tiles;
 
+    /// <summary>The window's tiles exactly as the generator made them: what <see cref="Map"/> is compared with to find changes.</summary>
+    private readonly WorldMap _pristine;
+
     /// <param name="chunksAcross">Window size in 64 m chunks: 5 gives a 320 × 320 m map.</param>
     /// <param name="centerX">Where to centre the window, in island metres.</param>
-    public IslandWindow(IslandWorld world, IslandChunker chunker, double centerX, double centerY, int chunksAcross = 5)
+    /// <param name="changes">What has been done to the island so far (a loaded game); nothing if left out.</param>
+    public IslandWindow(IslandWorld world, IslandChunker chunker, double centerX, double centerY, int chunksAcross = 5, ChunkChanges? changes = null)
     {
         if (chunksAcross < 2) throw new ArgumentOutOfRangeException(nameof(chunksAcross), "A window needs at least 2 chunks a side.");
         World = world;
@@ -112,6 +117,8 @@ public sealed class IslandWindow
         _tiles = new IslandTiles(world);
         ChunksAcross = chunksAcross;
         Map = new WorldMap(chunksAcross * Chunk, chunksAcross * Chunk);
+        _pristine = new WorldMap(chunksAcross * Chunk, chunksAcross * Chunk);
+        Changes = changes ?? new ChunkChanges();
         (int cx, int cy) = OriginChunkFor(centerX, centerY);
         OriginX = cx * Chunk; OriginY = cy * Chunk;
         for (int y = 0; y < chunksAcross; y++)
@@ -120,6 +127,13 @@ public sealed class IslandWindow
 
     public IslandWorld World { get; }
     public WorldMap Map { get; }
+
+    /// <summary>
+    /// Changes to chunks that are outside the window now. A chunk's changes are taken out when it
+    /// scrolls in (the map then holds them) and put back when it scrolls out. For everything changed
+    /// on the island, the window included, use <see cref="AllChanges"/>.
+    /// </summary>
+    public ChunkChanges Changes { get; }
     public int ChunksAcross { get; }
     public int Size => ChunksAcross * Chunk;
     /// <summary>Island position of the map's first tile, in metres; always a multiple of 64.</summary>
@@ -143,8 +157,57 @@ public sealed class IslandWindow
 
     private void Fill(int chunkX, int chunkY)
     {
-        IslandChunk chunk = _chunker.Build(OriginX / Chunk + chunkX, OriginY / Chunk + chunkY);
-        _tiles.Write(chunk, Map, chunkX * Chunk, chunkY * Chunk);
+        int cx = OriginX / Chunk + chunkX, cy = OriginY / Chunk + chunkY;
+        int left = chunkX * Chunk, top = chunkY * Chunk;
+        IslandChunk chunk = _chunker.Build(cx, cy);
+        _tiles.Write(chunk, _pristine, left, top);
+        _tiles.Write(chunk, Map, left, top);
+        // then whatever was done here before the chunk last scrolled out
+        foreach (TileChange change in Changes.For(cx, cy))
+        {
+            var p = new TilePos(left + change.Index % Chunk, top + change.Index / Chunk);
+            Map.Cover[p] = change.Cover;
+            Map.Structures.SetRoof(p, change.RoofDm);
+            Map.Structures.SetDoor(p, change.Door);
+            Map.Structures.SetDeck(p, change.DeckDm);
+            Map.Structures.SetLadder(p, change.Ladder);
+        }
+        Changes.Remove(cx, cy);
+    }
+
+    /// <summary>The tiles of one of the window's chunks that are no longer as the generator made them.</summary>
+    private List<TileChange> ChangedTiles(int chunkX, int chunkY)
+    {
+        var changed = new List<TileChange>();
+        int left = chunkX * Chunk, top = chunkY * Chunk;
+        for (int j = 0; j < Chunk; j++)
+        {
+            for (int i = 0; i < Chunk; i++)
+            {
+                var p = new TilePos(left + i, top + j);
+                // a vehicle is a thing standing on the ground, not a change to it
+                CoverType cover = Map.Cover[p] == CoverType.Vehicle ? _pristine.Cover[p] : Map.Cover[p];
+                StructureMap now = Map.Structures, was = _pristine.Structures;
+                if (cover == _pristine.Cover[p] && now.RoofDm(p) == was.RoofDm(p) && now.DoorAt(p) == was.DoorAt(p)
+                    && now.DeckDm(p) == was.DeckDm(p) && now.HasLadder(p) == was.HasLadder(p)) continue;
+                changed.Add(new TileChange((ushort)(j * Chunk + i), cover, (short)now.RoofDm(p), now.DoorAt(p), (short)now.DeckDm(p), now.HasLadder(p)));
+            }
+        }
+        return changed;
+    }
+
+    /// <summary>
+    /// Everything changed on the island so far: the changes kept for chunks outside the window, plus
+    /// the changed tiles of the chunks in it now. A copy; this is what a saved game will write.
+    /// </summary>
+    public ChunkChanges AllChanges()
+    {
+        var all = new ChunkChanges();
+        foreach ((int cx, int cy) in Changes.Chunks) all.Set(cx, cy, Changes.For(cx, cy));
+        for (int y = 0; y < ChunksAcross; y++)
+            for (int x = 0; x < ChunksAcross; x++)
+                all.Set(OriginX / Chunk + x, OriginY / Chunk + y, ChangedTiles(x, y));
+        return all;
     }
 
     /// <summary>Whether a position is within <see cref="Margin"/> of the window's edge.</summary>
@@ -161,9 +224,20 @@ public sealed class IslandWindow
         (int cx, int cy) = OriginChunkFor(wx, wy);
         int dx = cx * Chunk - OriginX, dy = cy * Chunk - OriginY;
         if (dx == 0 && dy == 0) return (0, 0);
-        Map.Scroll(dx, dy);
-        OriginX += dx; OriginY += dy;
         int sx = dx / Chunk, sy = dy / Chunk;
+        // the chunks about to scroll out: keep what was done to them
+        for (int y = 0; y < ChunksAcross; y++)
+        {
+            for (int x = 0; x < ChunksAcross; x++)
+            {
+                int newX = x - sx, newY = y - sy;
+                if (newX >= 0 && newY >= 0 && newX < ChunksAcross && newY < ChunksAcross) continue;
+                Changes.Set(OriginX / Chunk + x, OriginY / Chunk + y, ChangedTiles(x, y));
+            }
+        }
+        Map.Scroll(dx, dy);
+        _pristine.Scroll(dx, dy);
+        OriginX += dx; OriginY += dy;
         for (int y = 0; y < ChunksAcross; y++)
         {
             for (int x = 0; x < ChunksAcross; x++)

@@ -414,7 +414,7 @@ public partial class Main
             facts.Add(("You", HudTheme.Ink));
         else if (_rex is not null && !_rex.IsDead && Shown(_rex) && _rex.Body.Any(b => b.Position == tile))
             facts.Add(("The Rex", HudTheme.Danger));
-        else if (_sim.Actors.FirstOrDefault(a => a != me && a.Position == tile && !a.HasEscaped && !a.IsLarge && Shown(a)) is { } other)
+        else if (_sim.Actors.FirstOrDefault(a => a != me && a.Position == tile && !a.HasEscaped && !a.LeftBehind && !a.IsLarge && Shown(a)) is { } other)
             facts.Add((other.IsDead ? $"{other.Name}, dead"
                 : other.Controller is HumanBrain brain ? $"{other.Name}, {brain.Describe()}"
                 : other.Name, other.IsDead ? HudTheme.Danger : HudTheme.Ink));

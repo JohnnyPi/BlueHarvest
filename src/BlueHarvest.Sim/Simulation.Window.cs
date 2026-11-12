@@ -25,11 +25,18 @@ public sealed partial class Simulation
     public int WindowShifts { get; private set; }
 
     /// <summary>
+    /// How far the map has scrolled in all since the simulation started, in tiles. A map position plus
+    /// this is a position that stays put when the map scrolls: it is how the left behind are found again.
+    /// </summary>
+    public TilePos WindowOrigin { get; private set; }
+
+    /// <summary>
     /// Tells the simulation that its map has just been scrolled by (dx, dy) tiles (see WorldMap.Scroll and
     /// Generation.IslandWindow.Recenter): whatever was at (x, y) is now at (x − dx, y − dy). Everything
     /// the simulation holds by position moves with it. What ends up outside the map is dropped: scent,
-    /// blood, noises, ropes and exits are forgotten, lights are switched off, and actors (other than
-    /// the dead, who just stop being drawn) are marked <see cref="Actor.LeftBehind"/>.
+    /// blood, noises, ropes and exits are forgotten and lights are switched off. Actors and bodies that
+    /// end up outside are <see cref="Actor.LeftBehind"/>: they wait where they were, frozen, and are
+    /// put back when a later shift brings the map over them again.
     /// Call it between turns, not while an action is being resolved.
     /// </summary>
     public void ShiftWindow(int dx, int dy)
@@ -43,10 +50,10 @@ public sealed partial class Simulation
         var leaving = new List<Actor>();
         foreach (Actor actor in _actors)
         {
-            if (actor.IsGone) continue;
+            if (actor.HasEscaped || actor.LeftBehind) continue;
             bool stays = CoreTiles(actor.Body).All(t => map.InBounds(Moved(t)));
             if (stays) continue;
-            Vacate(actor);
+            if (!actor.IsDead) Vacate(actor); // a body holds no tile, and someone may be standing over it
             leaving.Add(actor);
         }
         GridScroll.Scroll(_occupant, map.Width, map.Height, dx, dy);
@@ -57,6 +64,8 @@ public sealed partial class Simulation
             if (leaving.Contains(actor))
             {
                 actor.LeftBehind = true;
+                actor.ParkedAt = new TilePos(actor.Position.X + WindowOrigin.X, actor.Position.Y + WindowOrigin.Y);
+                actor.ParkedLightOn = actor.CarriedLight is { } held && _lights[held].On;
                 if (actor.CarriedLight is { } carried && _lights[carried].On) SetLightOn(carried, false);
             }
             // the gone keep a position inside the map so nothing that looks at it can fall off the edge
@@ -119,6 +128,13 @@ public sealed partial class Simulation
         for (int i = 0; i < _exits.Count; i++) _exits[i] = _exits[i] with { Position = Moved(_exits[i].Position) };
         _exits.RemoveAll(e => !map.InBounds(e.Position));
 
+        // ---- the left behind: back on the map if it has come back over them ----
+        WindowOrigin = new TilePos(WindowOrigin.X + dx, WindowOrigin.Y + dy);
+        foreach (Actor actor in _actors)
+        {
+            if (actor.LeftBehind && !actor.HasEscaped) TryReturn(actor);
+        }
+
         _lightGrid = null;
 
         // ---- minds ----
@@ -129,5 +145,46 @@ public sealed partial class Simulation
 
         WindowShifts++;
         WindowShifted?.Invoke(dx, dy);
+    }
+
+    /// <summary>
+    /// Puts a left-behind actor back where it was waiting, if that spot is on the map again and free.
+    /// Nothing happened to it while it was away: its wounds have not bled and its next turn is now.
+    /// A body just lies there again.
+    /// </summary>
+    private bool TryReturn(Actor actor)
+    {
+        WorldMap map = Map;
+        var home = new TilePos(actor.ParkedAt.X - WindowOrigin.X, actor.ParkedAt.Y - WindowOrigin.Y);
+        IReadOnlyList<BodyTile> body = actor.Species.Body.Footprint(home, Compass16.Of(actor.Facing));
+        if (!CoreTiles(body).All(map.InBounds)) return false;
+        if (actor.IsDead)
+        {
+            actor.LeftBehind = false;
+            actor.Position = home;
+            actor.Body = body;
+            return true;
+        }
+        bool onDeck = actor.OnDeck && map.Structures.HasDeck(home);
+        if (CoreTiles(body).Any(t => ActorAt(t, onDeck) is not null)) return false; // someone is standing there: wait for the next shift
+
+        actor.LeftBehind = false;
+        actor.OnDeck = onDeck;
+        actor.Position = home;
+        actor.Body = body;
+        Occupy(actor);
+        actor.Health.LastUpdatedTick = CurrentTick;
+        actor.NextActTick = CurrentTick;
+        if (!actor.Scheduled)
+        {
+            _scheduler.Schedule(actor.Id, actor.NextActTick);
+            actor.Scheduled = true;
+        }
+        if (actor.CarriedLight is { } carried)
+        {
+            _lights[carried] = _lights[carried] with { Position = home, Facing = actor.Facing };
+            if (actor.ParkedLightOn) SetLightOn(carried, true);
+        }
+        return true;
     }
 }

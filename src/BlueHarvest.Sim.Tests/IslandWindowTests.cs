@@ -166,6 +166,76 @@ public class IslandWindowTests
     }
 
     [Fact]
+    public void Changes_ComeBackWhenTheWindowReturns()
+    {
+        (double x, double y) = Genetics();
+        IslandWindow w = WindowAt(x, y);
+        TilePos p = w.ToLocal(x, y);
+        w.Map.Cover[p] = CoverType.Rubble;
+        w.Map.Structures.SetDoor(p, DoorState.Locked);
+        Assert.Equal(0, w.Changes.TileCount); // still in the window: the map holds it
+        Assert.Equal(1, w.AllChanges().TileCount);
+
+        // walk right away: every chunk of the window scrolls out
+        (int dx, int dy) = w.Recenter(new TilePos(p.X + 640, p.Y));
+        Assert.Equal((640, 0), (dx, dy));
+        Assert.Equal(1, w.Changes.ChunkCount);
+        Assert.Equal(1, w.Changes.TileCount);
+        (int cx, int cy) = w.Changes.Chunks[0];
+        Assert.Equal(((int)Math.Floor(x / 64), (int)Math.Floor(y / 64)), (cx, cy));
+        TileChange kept = Assert.Single(w.Changes.For(cx, cy));
+        Assert.Equal(CoverType.Rubble, kept.Cover);
+        Assert.Equal(DoorState.Locked, kept.Door);
+        Assert.Equal(1, w.AllChanges().TileCount);
+
+        // and back: the tile is as it was left, and the map holds it again
+        w.Recenter(w.ToLocal(x, y));
+        TilePos back = w.ToLocal(x, y);
+        Assert.Equal(p, back);
+        Assert.Equal(CoverType.Rubble, w.Map.Cover[back]);
+        Assert.Equal(DoorState.Locked, w.Map.Structures.DoorAt(back));
+        Assert.Equal(0, w.Changes.TileCount);
+        Assert.Equal(1, w.AllChanges().TileCount);
+    }
+
+    [Fact]
+    public void UntouchedChunks_KeepNothing()
+    {
+        (double x, double y) = Genetics();
+        IslandWindow w = WindowAt(x, y);
+        TilePos p = w.ToLocal(x, y);
+        w.Recenter(new TilePos(p.X + 640, p.Y));
+        Assert.Equal(0, w.Changes.ChunkCount);
+        Assert.Equal(0, w.AllChanges().TileCount);
+    }
+
+    [Fact]
+    public void ATileChangedBack_IsNotAChange()
+    {
+        (double x, double y) = Genetics();
+        IslandWindow w = WindowAt(x, y);
+        TilePos p = w.ToLocal(x, y);
+        CoverType made = w.Map.Cover[p];
+        w.Map.Cover[p] = CoverType.Rubble;
+        w.Map.Cover[p] = made;
+        w.Recenter(new TilePos(p.X + 640, p.Y));
+        Assert.Equal(0, w.Changes.TileCount);
+    }
+
+    [Fact]
+    public void AWindowStartedWithChanges_ShowsThem()
+    {
+        // a loaded game: the same island, with what was done to it
+        (double x, double y) = Genetics();
+        IslandWindow first = WindowAt(x, y);
+        TilePos p = first.ToLocal(x, y);
+        first.Map.Cover[p] = CoverType.Rubble;
+        var loaded = new IslandWindow(TestIslands.World(Island), TestIslands.Chunker(Island), x, y, 4, first.AllChanges());
+        Assert.Equal(CoverType.Rubble, loaded.Map.Cover[p]);
+        Assert.Equal(1, loaded.AllChanges().TileCount);
+    }
+
+    [Fact]
     public void Rivers_RunDownstreamAndOnlyWaterHasACurrent()
     {
         // a window on the middle of the island's longest river

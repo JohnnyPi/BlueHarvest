@@ -336,6 +336,7 @@ public sealed partial class Simulation
         _actors.Add(actor);
         Occupy(actor);
         _scheduler.Schedule(actor.Id, actor.NextActTick);
+        actor.Scheduled = true;
         return actor;
     }
 
@@ -918,6 +919,7 @@ public sealed partial class Simulation
         if (actor.IsGone)
         {
             _scheduler.TryDequeue(out _, out _);
+            actor.Scheduled = false;
             return StepResult.Acted;
         }
         if (CurrentTick - actor.LastScentTick >= ScentRules.IdleMarkTicks)
@@ -952,6 +954,7 @@ public sealed partial class Simulation
             if (!_actors[id].IsGone)
                 return true;
             _scheduler.TryDequeue(out _, out _);
+            _actors[id].Scheduled = false;
         }
         return false;
     }
