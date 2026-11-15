@@ -14,6 +14,7 @@ public partial class HelpPanel : PanelContainer
         "[color=#e9b04c]Power[/color]           right-click in a switch room, generator room,\n" +
         "                battery room or control room, or by the fuel tanks\n" +
         "[color=#e9b04c]Ride[/color]            right-click in a station's elevator or cabin hall\n" +
+        "[color=#e9b04c]Start a fire[/color]    right-click your tile or the next one: set it alight with a flare\n" +
         "[color=#e9b04c]Pan the map[/color]     W A S D   ·   Home recentres\n" +
         "[color=#e9b04c]Zoom[/color]            mouse wheel  ·  + −\n" +
         "\n" +

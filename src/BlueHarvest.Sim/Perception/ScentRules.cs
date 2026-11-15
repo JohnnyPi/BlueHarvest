@@ -36,6 +36,9 @@ public static class ScentRules
     /// <summary>Rain takes this much off every scent at 100% (heavy rain, 70%: 14), on top of washing marks out faster.</summary>
     public const int RainPenaltyAtFull = 20;
 
+    /// <summary>Smoke at the nose takes this much off every scent at full thickness (100): thick smoke, 60, takes 18.</summary>
+    public const int SmokePenaltyAtFull = 30;
+
     /// <summary>Each wall or other solid tile between the nose and the scent takes this much off.</summary>
     public const int SolidTilePenalty = 10;
 

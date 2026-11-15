@@ -169,7 +169,8 @@ public static class PerceptionSystem
     /// How strong scent of <paramref name="strengthNow"/> lying at <paramref name="source"/> is at the
     /// observer's nose (its head, for large bodies). Still air takes 3 per tile. Wind carries it: up
     /// to 2 less per tile straight downwind of the source and 2 more upwind, at 10 m/s or more. Rain
-    /// takes some off everywhere; walls and roofs between take more. Out of scent range it's 0.
+    /// takes some off everywhere, and smoke at the nose drowns it; walls and roofs between take more.
+    /// Out of scent range it's 0.
     /// </summary>
     public static int ScentLevel(Simulation sim, Actor observer, TilePos source, int strengthNow) =>
         ScentLevel(sim, observer, sim.SensesOf(observer), source, strengthNow);
@@ -196,7 +197,8 @@ public static class PerceptionSystem
             costPer10 -= windEffect * along / 1000;
         }
         int level = strengthNow - distance * costPer10 / 10
-            - weather.Settings.RainPercent * ScentRules.RainPenaltyAtFull / 100;
+            - weather.Settings.RainPercent * ScentRules.RainPenaltyAtFull / 100
+            - sim.Map.Smoke[nose] * ScentRules.SmokePenaltyAtFull / 100;
         if (level < senses.ScentThreshold || distance == 0)
             return level;
 

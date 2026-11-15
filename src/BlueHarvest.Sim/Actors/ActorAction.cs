@@ -60,3 +60,6 @@ public sealed record RappelAction(Direction Direction) : ActorAction;
 /// breaker for line operations. What can be done is listed by PowerGrid.Choices.
 /// </summary>
 public sealed record OperateAction(int DeviceId, PowerOp Op, int Arg = -1) : ActorAction;
+
+/// <summary>Holds a lit flare to the tile that way (or the actor's own, with no direction) to set it alight. Uses up a flare.</summary>
+public sealed record IgniteAction(Direction? Direction = null) : ActorAction;

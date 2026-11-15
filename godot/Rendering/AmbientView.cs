@@ -8,8 +8,8 @@ namespace BlueHarvest.Game.Rendering;
 
 /// <summary>
 /// Everything on the map that moves on its own: water (glints on lakes and the open sea, streaks
-/// running down rivers, wave lines coming in to the shore, rings where rain hits water) and the
-/// sparks crawling along live paddock fences.
+/// running down rivers, wave lines coming in to the shore, rings where rain hits water), the
+/// sparks crawling along live paddock fences, and fire: flames, embers and drifting smoke.
 /// It runs on real time, so it keeps moving while the game waits for your turn, like the rain.
 /// Purely for looks: it reads the map and never changes it, and nothing in the simulation reads it.
 /// Add it after the AsciiMapView (so it draws on top of the ground) and before the WeatherView.
@@ -49,6 +49,11 @@ public partial class AmbientView : Node2D
     private static readonly Color Foam = new(1f, 1f, 1f, 0.70f);
     private static readonly Color RainRing = new(0.80f, 0.88f, 1f, 0.45f);
     private static readonly Color Spark = new(0.75f, 0.92f, 1f, 0.95f);
+    private static readonly Color FlameGlow = new(1f, 0.45f, 0.10f, 0.45f);
+    private static readonly Color FlameCore = new(1f, 0.85f, 0.35f, 0.95f);
+    private static readonly Color FlameEdge = new(1f, 0.35f, 0.08f, 0.9f);
+    private static readonly Color Ember = new(1f, 0.6f, 0.2f, 0.9f);
+    private static readonly Color SmokePuff = new(0.55f, 0.55f, 0.55f, 1f);
 
     private Simulation? _sim;
     private AsciiMapView? _map;
@@ -173,7 +178,7 @@ public partial class AmbientView : Node2D
         _sinceDraw += delta;
         if (_sim is null || _map is null)
             return;
-        bool on = _map.Overlays.Animation && (_animated > 0 || _sim.LiveFenceTiles.Count > 0);
+        bool on = _map.Overlays.Animation && (_animated > 0 || _sim.LiveFenceTiles.Count > 0 || _sim.Fires.Count > 0);
         // one more redraw after it's switched off (or the water scrolls away) clears what was drawn
         if ((on || _drewSomething) && _sinceDraw >= 1.0 / FramesPerSecond)
         {
@@ -191,6 +196,7 @@ public partial class AmbientView : Node2D
         var sim = _sim;
         var map = _map;
         DrawFenceSparks(sim, map, (float)(_time % 3600.0));
+        DrawFire(sim, map, (float)(_time % 3600.0));
         if (_animated == 0)
             return;
         if (sim.Map.Width != _width || sim.Map.Height != _height)
@@ -294,6 +300,65 @@ public partial class AmbientView : Node2D
             DrawLine(p0, p1, ink, 1.5f);
             DrawLine(p1, p2, ink, 1.5f);
             DrawLine(p2, p3, ink, 1.5f);
+            _drewSomething = true;
+        }
+    }
+
+    /// <summary>
+    /// Fire: a glow and flickering tongues of flame on every burning tile in view (taller the hotter),
+    /// embers lifting off it, and smoke puffs drifting downwind over the tiles the smoke lies on.
+    /// </summary>
+    private void DrawFire(Simulation sim, AsciiMapView map, float time)
+    {
+        if (sim.Fires.Count == 0)
+            return;
+        var (wx, wy) = sim.Weather.Downwind;
+        var drift = new Vector2(wx, wy) / 1000f;
+
+        // smoke first, under the flames: only over the part of the map on screen
+        int x0 = Math.Max(0, Mathf.FloorToInt(_onScreen.Position.X / Cell)), x1 = Math.Min(sim.Map.Width - 1, Mathf.FloorToInt(_onScreen.End.X / Cell));
+        int y0 = Math.Max(0, Mathf.FloorToInt(_onScreen.Position.Y / Cell)), y1 = Math.Min(sim.Map.Height - 1, Mathf.FloorToInt(_onScreen.End.Y / Cell) + 2);
+        for (int y = y0; y <= y1; y++)
+        {
+            for (int x = x0; x <= x1; x++)
+            {
+                var p = new TilePos(x, y);
+                int smoke = sim.Map.Smoke[p];
+                if (smoke <= 0 || map.FogAt(p) != FogState.Visible)
+                    continue;
+                float u = Frac(time / (3f + 2f * Unit(x, y, 51)) + Unit(x, y, 52));
+                var c = map.CenterOf(p) + (drift * u + new Vector2(0f, -0.4f * u)) * Cell;
+                DrawCircle(c, Cell * (0.35f + 0.35f * u), Faded(SmokePuff, smoke / 100f * 0.55f * (1f - u * 0.6f)));
+                _drewSomething = true;
+            }
+        }
+
+        foreach (Fire fire in sim.Fires)
+        {
+            TilePos p = fire.Position;
+            if (map.FogAt(p) != FogState.Visible)
+                continue;
+            var c = map.CenterOf(p);
+            if (!_onScreen.Grow(Cell).HasPoint(c))
+                continue;
+            float heat = fire.Intensity / 100f;
+            float flicker = 0.75f + 0.25f * Mathf.Sin(time * 11f + 7f * Unit(p.X, p.Y, 53));
+            DrawRect(new Rect2(c - new Vector2(Cell / 2f, Cell / 2f), new Vector2(Cell, Cell)), Faded(FlameGlow, (0.3f + 0.7f * heat) * flicker));
+            for (int k = 0; k < 3; k++)
+            {
+                float jitter = Mathf.Sin(time * (9f + 3f * k) + 13f * Unit(p.X, p.Y, 54 + k));
+                float tall = Cell * (0.35f + 0.65f * heat) * (0.7f + 0.3f * jitter);
+                var foot = c + new Vector2((k - 1) * Cell * 0.28f, Cell * 0.4f);
+                var tip = foot + new Vector2(jitter * Cell * 0.12f + drift.X * Cell * 0.2f, -tall);
+                DrawLine(foot, tip, Faded(k == 1 ? FlameCore : FlameEdge, 0.6f + 0.4f * heat), k == 1 ? 2.5f : 1.8f);
+            }
+            // an ember rising off it now and then
+            float e = Frac(time / 1.4f + Unit(p.X, p.Y, 58));
+            if (e < 0.6f && heat > 0.3f)
+            {
+                var ember = c + new Vector2((Unit(p.X, p.Y, 59) - 0.5f) * Cell + drift.X * e * Cell, -e * Cell * 1.6f + drift.Y * e * Cell);
+                DrawRect(new Rect2(ember, new Vector2(1.5f, 1.5f)), Faded(Ember, 1f - e / 0.6f));
+            }
             _drewSomething = true;
         }
     }

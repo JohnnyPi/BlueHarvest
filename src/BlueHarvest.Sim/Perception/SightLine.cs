@@ -21,6 +21,7 @@ public static class SightLine
     /// <summary>
     /// Traces from one point to another. Tiles between the ends are checked against the line's
     /// height there: ground above the line blocks it; cover taller than the line thins it by its opacity.
+    /// Smoke thins it by its thickness on every tile between.
     /// Roofs block a line that crosses into or out of a roofed tile above the roof line, so a building
     /// is only seen into through its doorways (and over its walls, never through its roof).
     /// With <paramref name="includeTargetCover"/>, cover on the target's own tile that stands taller than
@@ -72,6 +73,10 @@ public static class SightLine
                 if (cover.SightOpacityPercent >= 100)
                     solid++;
             }
+            // smoke hangs high: it thins every line through it
+            int smoke = map.Smoke[tile];
+            if (smoke > 0)
+                visibility = visibility * (100 - Math.Min(100, smoke)) / 100;
         }
 
         if (steps > 0 && CrossesRoof(map, previous, previousZ, to, toZ))

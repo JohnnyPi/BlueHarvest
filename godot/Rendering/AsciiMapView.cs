@@ -120,6 +120,9 @@ public partial class AsciiMapView : Node2D
 
     /// <summary>A red emergency light's own glyph.</summary>
     private static readonly Color EmergencyGlyph = new(1f, 0.3f, 0.25f);
+
+    /// <summary>A burning tile's glyph (the animation layer draws the flames over it when it's on).</summary>
+    private static readonly Color FireInk = new(1f, 0.55f, 0.15f);
     private static readonly Color RememberedLamp = new(0.67f, 0.6f, 0.45f, 0.5f);
     private static readonly Color RexSeen = new(1f, 0.15f, 0.1f, 0.45f);
     private static readonly Color RexGlimpse = new(1f, 0.15f, 0.1f, 0.14f);
@@ -919,6 +922,8 @@ public partial class AsciiMapView : Node2D
                 _ => ('+', LockedInk),
             };
         }
+        if (state == FogState.Visible && sim.FireAt(p) is not null)
+            return ('^', FireInk);
         if (cover == CoverType.Fence && state == FogState.Visible && sim.IsLiveFence(p))
             return (Overlays.Varied ? MapLook.VariedGlyph(cover, p.X, p.Y, CoverAt) : glyph, LiveFenceInk);
         if (cover == CoverType.Vehicle && state == FogState.Visible && sim.VehicleAt(p) is { } vehicle)

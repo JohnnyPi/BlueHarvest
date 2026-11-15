@@ -42,6 +42,12 @@ public partial class Main
         _sim.WaterMoved += OnWaterMoved;
         _sim.WaterChanged += OnWaterChanged;
         _sim.Swept += OnSwept;
+        _sim.FireStarted += OnFireStarted;
+        _sim.FiresOut += OnFiresOut;
+        _sim.Burned += OnBurned;
+        _sim.Kindled += OnKindled;
+        _sim.TanksBurst += OnTanksBurst;
+        _sim.LightningHitGround += OnLightningHitGround;
         // what the weather is at the start, without saying so
         _weatherQuiet = true;
         OnWeatherChanged(_sim.Weather.Settings);

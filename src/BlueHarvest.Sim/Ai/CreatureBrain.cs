@@ -23,6 +23,9 @@ public enum Activity : byte
 
     /// <summary>Its focus is up on a platform out of reach: knocking out the posts holding it up.</summary>
     Smashing,
+
+    /// <summary>Backing away from a fire: the heat and the smell of it are more than any prey is worth.</summary>
+    Fleeing,
 }
 
 /// <summary>
@@ -85,6 +88,13 @@ public sealed class CreatureBrain : IActorController, IWindowShiftListener
         Memory.Observe(sim, self, PerceptionSystem.Perceive(sim, self, since));
         Memory.Forget(now);
 
+        // fire first: it feels the heat and smells the smoke, and nothing else matters until it's clear
+        if (sim.FleeFire(self, self.IsLarge ? Simulation.FireFearLarge : Simulation.FireFearSmall) is { } flee)
+        {
+            Activity = Activity.Fleeing;
+            return flee;
+        }
+
         var focus = ChooseFocus(self, now);
         if (focus?.Key != _focusKey)
             _stuckTurns = 0;
@@ -103,6 +113,8 @@ public sealed class CreatureBrain : IActorController, IWindowShiftListener
     /// <summary>A one-line account of what it's doing, for the HUD and the runner. Names are debug knowledge.</summary>
     public string Describe(Simulation sim)
     {
+        if (Activity == Activity.Fleeing)
+            return "backing away from the fire";
         if (Focus is not { } focus)
             return "wandering";
 

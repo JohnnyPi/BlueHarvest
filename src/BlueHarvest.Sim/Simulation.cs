@@ -579,7 +579,10 @@ public sealed partial class Simulation
     private void RaiseStrikes(long fromExclusive, long toInclusive)
     {
         foreach (var strike in Weather.StrikesBetween(fromExclusive, toInclusive))
+        {
             LightningStruck?.Invoke(strike);
+            StrikeGround(strike);
+        }
     }
 
     /// <summary>
@@ -1070,6 +1073,7 @@ public sealed partial class Simulation
         AdvanceWeather();
         AdvanceSparks();
         AdvanceMachinery();
+        AdvanceFire();
         var actor = _actors[id];
         UpdateHealth(actor);
         if (actor.IsGone)
@@ -1129,6 +1133,7 @@ public sealed partial class Simulation
         AdvanceWeather();
         AdvanceSparks();
         AdvanceMachinery();
+        AdvanceFire();
     }
 
     /// <summary>
@@ -1180,6 +1185,9 @@ public sealed partial class Simulation
             hasher.Add(light.Position.X).Add(light.Position.Y).Add(light.On ? 1 : 0);
         Weather.AddTo(hasher);
         Power?.AddTo(hasher);
+        hasher.Add(TilesBurnt).Add(_fires.Count).Add(_fuel.Count);
+        foreach (Fire fire in _fires.Values.OrderBy(f => f.Position.Y).ThenBy(f => f.Position.X))
+            hasher.Add(fire.Position.X).Add(fire.Position.Y).Add(fire.Intensity).Add(fire.FuelSteps);
         foreach (var actor in _actors)
             hasher.Add(actor.EscapedTick ?? -1);
         foreach (var sparks in _sparks)
@@ -1254,6 +1262,7 @@ public sealed partial class Simulation
         ToggleLightAction => ToggleLight(actor),
         RappelAction rappel => Rappel(actor, rappel.Direction),
         OperateAction operate => Operate(actor, operate.DeviceId, operate.Op, operate.Arg),
+        IgniteAction ignite => Ignite(actor, ignite.Direction),
         _ => throw new ArgumentOutOfRangeException(nameof(action), $"Unknown action {action}."),
     };
 
@@ -1361,6 +1370,7 @@ public sealed partial class Simulation
         _lightExpiry.Add((_lights.Count - 1, CurrentTick + GearRules.FlareBurnTicks));
         _lightGrid = null;
         EmitNoise(land, GearRules.FlareLoudness, NoiseKinds.Flare); // no actor: it's the flare that hisses
+        FlareLanded(land); // and it may set what it lands in alight
         ItemThrown?.Invoke(actor, item, land);
         return GearRules.ThrowTicks;
     }

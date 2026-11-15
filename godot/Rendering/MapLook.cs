@@ -39,6 +39,7 @@ public static class MapLook
         (new Color(0.33f, 0.32f, 0.30f), '^', new Color(0.72f, 0.70f, 0.65f, 0.5f)),  // Bare rock
         (new Color(0.16f, 0.15f, 0.14f), '%', new Color(0.54f, 0.50f, 0.47f, 0.6f)),  // Old lava
         (new Color(0.24f, 0.24f, 0.25f), '▐', new Color(0.62f, 0.71f, 0.78f)),        // Equipment
+        (new Color(0.12f, 0.11f, 0.10f), '·', new Color(0.45f, 0.42f, 0.38f, 0.6f)),  // Burnt ground
     };
 
     /// <summary>The roof over a building, seen from outside.</summary>

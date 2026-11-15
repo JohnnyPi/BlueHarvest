@@ -29,6 +29,8 @@ public enum CoverType : byte
     BareRock,
     Lava,
     Equipment,
+    /// <summary>Ground a fire has been over: ash and charred stubble (appended).</summary>
+    Ash,
 }
 
 /// <summary>
@@ -113,6 +115,7 @@ public static class Covers
         new CoverInfo(CoverType.BareRock, 'o', "bare rock", 100, false, VibrationPercent: 140),
         new CoverInfo(CoverType.Lava, 'l', "old lava", 140, false, NoiseModifier: 2, VibrationPercent: 130),
         new CoverInfo(CoverType.Equipment, 'q', "equipment", 100, true, SightHeightDm: 12, SightOpacityPercent: 30),
+        new CoverInfo(CoverType.Ash, 'b', "burnt ground", 105, false, NoiseModifier: 1, VibrationPercent: 90, SoftGround: true),
     };
 
     public static CoverInfo Get(CoverType type) => All[(int)type];

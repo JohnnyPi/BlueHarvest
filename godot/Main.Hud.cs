@@ -499,6 +499,7 @@ public partial class Main
                 : "") +
             PowerReadout() +
             WaterReadout() +
+            FireReadout() +
             (_island is { } island
                 ? $"Away from here: {island.Changes.TileCount} changed tiles kept in {island.Changes.ChunkCount} chunks, " +
                   $"{_sim.Actors.Count(a => a.LeftBehind)} left behind\n"

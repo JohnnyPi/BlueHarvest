@@ -375,6 +375,7 @@ public partial class Main
         }
 
         AddPowerChoices(choices, tile);
+        AddFireChoices(choices, tile, reach);
         choices.Add(new MenuChoice("Look", () => Say(LookText(tile))));
         _tooltip.Visible = false;
         _menu.Open(at, GetViewportRect().Size, $"{TileTitle(tile)}  ({tile.X}, {tile.Y})", choices);
@@ -447,6 +448,7 @@ public partial class Main
             facts.Add(($"Can't step here: {why}", HudTheme.Danger));
         AddPowerFacts(facts, tile);
         AddWaterFacts(facts, tile);
+        AddFireFacts(facts, tile);
         return facts;
     }
 

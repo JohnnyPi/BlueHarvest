@@ -142,6 +142,10 @@ public sealed class HumanBrain : IActorController, IWindowShiftListener
         Memory.Forget(now);
         UpdateFear(self, now);
 
+        // whatever else is going on, nobody stands in a fire
+        if (sim.FleeFire(self, Simulation.FireFearHuman) is { } away)
+            return away;
+
         if (Panicking)
             return Panic(self, sim);
 

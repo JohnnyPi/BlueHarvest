@@ -20,6 +20,8 @@ public sealed class WorldMap
         Structures = structures;
         Flow = new FlowMap(heights.Width, heights.Height);
         Water = new WaterMap(heights.Width, heights.Height);
+        Damp = new ByteMap(heights.Width, heights.Height);
+        Smoke = new ByteMap(heights.Width, heights.Height);
     }
 
     public HeightMap Heights { get; }
@@ -31,6 +33,15 @@ public sealed class WorldMap
 
     /// <summary>Where the tide and the rivers can come and go; nothing unless a generator filled it in.</summary>
     public WaterMap Water { get; }
+
+    /// <summary>
+    /// How damp each tile is by its climate, 0 (dry country) to 100 (cloud forest): it makes ground
+    /// harder to set alight. The island fills it from its rainfall; maps from files are dry (0).
+    /// </summary>
+    public ByteMap Damp { get; }
+
+    /// <summary>How thick the smoke is on each tile, 0–100: what percentage of a sight line through it is lost. The simulation keeps it.</summary>
+    public ByteMap Smoke { get; }
     public int Width => Heights.Width;
     public int Height => Heights.Height;
 
@@ -48,6 +59,8 @@ public sealed class WorldMap
         Structures.Scroll(dx, dy);
         Flow.Scroll(dx, dy);
         Water.Scroll(dx, dy);
+        Damp.Scroll(dx, dy);
+        Smoke.Scroll(dx, dy);
     }
 
     /// <summary>Absolute height of the deck surface on a tile (ground plus deck), in decimeters.</summary>

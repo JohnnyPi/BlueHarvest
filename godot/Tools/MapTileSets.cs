@@ -64,6 +64,7 @@ public static class MapTileSets
             new Color(0.58f, 0.56f, 0.52f),     // Bare rock
             new Color(0.22f, 0.20f, 0.19f),     // Old lava
             new Color(0.45f, 0.52f, 0.60f),     // Equipment
+            new Color(0.17f, 0.15f, 0.14f),     // Burnt ground
         };
 
         int count = Covers.All.Count;

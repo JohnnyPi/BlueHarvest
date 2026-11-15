@@ -104,6 +104,7 @@ public sealed class IslandTiles
                     ? new WaterFlow(chunk.FlowX[k], chunk.FlowY[k])
                     : WaterFlow.None;
                 map.Water[p] = WaterFor(chunk, k, cover, type);
+                map.Damp[p] = DampAt(chunk.X0 + i + 0.5, chunk.Y0 + j + 0.5);
             }
         }
     }
@@ -134,6 +135,17 @@ public sealed class IslandTiles
         if (!FloodableCovers.Contains(type) || rel > FloodHighestDm)
             return WaterTile.None;
         return new WaterTile(WaterKind.River, (short)Math.Max(1, rel), type, (short)river, null);
+    }
+
+    /// <summary>
+    /// How damp the ground is by climate, 0–100, from the annual rain of its coarse cell: none below
+    /// 500 mm a year, a third at 2500 mm, all but soaked from 6500 mm (cloud forest).
+    /// </summary>
+    private int DampAt(double x, double y)
+    {
+        IslandShape s = _shape;
+        int cx = Math.Clamp((int)Math.Floor(x / s.Cell), 0, s.Nx - 1), cy = Math.Clamp((int)Math.Floor(y / s.Cell), 0, s.Ny - 1);
+        return Math.Clamp((int)((s.Rain[cy * s.Nx + cx] - 500) / 60), 0, 100);
     }
 
     /// <summary>
