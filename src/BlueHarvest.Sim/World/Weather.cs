@@ -10,12 +10,14 @@ namespace BlueHarvest.Sim.World;
 /// <param name="WindSpeed">Metres per second, 0 calm to 20 a gale. Carries scent downwind; gusts mask quiet sounds.</param>
 /// <param name="FogPercent">0 clear, 100 thick fog. Shortens sight; sound is unaffected.</param>
 /// <param name="Storm">Lightning and thunder: flashes light everything for a moment, thunder masks even loud noises.</param>
+/// <param name="CloudPercent">How much of the sky is cloud, 0 clear to 100 overcast. Only dims the daylight and the moon.</param>
 public sealed record WeatherSettings(
     int RainPercent = 0,
     Direction WindFrom = Direction.East,
     int WindSpeed = 0,
     int FogPercent = 0,
-    bool Storm = false)
+    bool Storm = false,
+    int CloudPercent = 0)
 {
     public const int MaxWindSpeed = 20;
 
@@ -31,6 +33,7 @@ public sealed record WeatherSettings(
         RainPercent = Math.Clamp(RainPercent, 0, 100),
         WindSpeed = Math.Clamp(WindSpeed, 0, MaxWindSpeed),
         FogPercent = Math.Clamp(FogPercent, 0, 100),
+        CloudPercent = Math.Clamp(CloudPercent, 0, 100),
     };
 
     /// <summary>Plain words for the HUD and the runner: "heavy rain, wind from E 8 m/s, fog 0%, thunderstorm".</summary>
@@ -47,6 +50,8 @@ public sealed record WeatherSettings(
             },
             WindSpeed == 0 ? "calm" : $"wind from {WindFrom.Compass()} {WindSpeed} m/s",
         };
+        if (RainPercent == 0 && CloudPercent >= 40)
+            parts.Insert(1, CloudPercent >= 80 ? "overcast" : "cloudy");
         if (FogPercent > 0)
             parts.Add($"fog {FogPercent}%");
         if (Storm)
@@ -226,7 +231,7 @@ public sealed class Weather
     /// <summary>Fingerprint of the settings and the scent clock, for the simulation's state hash.</summary>
     internal void AddTo(StateHasher hasher) =>
         hasher.Add(Settings.RainPercent).Add((int)Settings.WindFrom).Add(Settings.WindSpeed)
-            .Add(Settings.FogPercent).Add(Settings.Storm ? 1 : 0).Add(_washBase).Add(_washSince);
+            .Add(Settings.FogPercent).Add(Settings.Storm ? 1 : 0).Add(Settings.CloudPercent).Add(_washBase).Add(_washSince);
 
     /// <summary>A well-mixed 64-bit roll for one stream and one time window.</summary>
     private ulong Roll(string stream, long window)

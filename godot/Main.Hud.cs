@@ -88,7 +88,7 @@ public partial class Main
         root.AddChild(_promptBox);
 
         _debug = new DebugPanel { OffsetTop = 60f, OffsetBottom = 60f };
-        _debug.Bind(_map.Overlays, WeatherPresets.Select(p => p.Name).ToList(), TimePresets.Select(p => p.Name).ToList());
+        _debug.Bind(_map.Overlays, WeatherChoices(), TimePresets.Select(p => p.Name).ToList());
         _debug.OverlaysChanged += () => Refresh(snapCamera: false);
         _debug.HuntToggled += on =>
         {
@@ -246,6 +246,7 @@ public partial class Main
             : weather.Settings.Storm ? "storm"
             : weather.Settings.RainPercent > 0 ? "rain"
             : weather.Settings.FogPercent > 0 ? "fog"
+            : weather.Settings.CloudPercent >= 80 ? "overcast"
             : "";
         // with a clock: the part of the day, and the moon when it matters; without: night if it's dark
         string moon = "";
@@ -490,6 +491,11 @@ public partial class Main
                 ? $"{readoutClock.Describe(_sim.CurrentTick, 1)}   sky light {_sim.AmbientLightPercent}%   " +
                   $"{Sky.MoonName(_sim.MoonPhase)} ({Sky.MoonLitPercent(_sim.MoonPhase)}% lit, " +
                   $"{(Sky.MoonUp(_sim.MoonPhase, readoutClock.MinuteOfDay(_sim.CurrentTick)) ? "up" : "down")})\n"
+                : "") +
+            (_sim.WeatherSource is not null && _sim.Forecast(60) is { } inAnHour
+                ? $"Weather {(_sim.FollowingWeatherSource ? "live" : "fixed (debug preset)")} at island " +
+                  $"({_sim.WeatherPlace.X}, {_sim.WeatherPlace.Y}) m, cloud {_sim.Weather.Settings.CloudPercent}%   " +
+                  $"in an hour: {inAnHour.Describe()}\n"
                 : "") +
             (_island is { } island
                 ? $"Away from here: {island.Changes.TileCount} changed tiles kept in {island.Changes.ChunkCount} chunks, " +

@@ -33,7 +33,72 @@ public partial class Main
         _sim.LightningStruck += OnLightningStruck;
         _sim.ActorEscaped += OnActorEscaped;
         _sim.SparksDied += OnSparksDied;
+        _sim.WeatherChanged += OnWeatherChanged;
+        // what the weather is at the start, without saying so
+        _weatherQuiet = true;
+        OnWeatherChanged(_sim.Weather.Settings);
+        _weatherQuiet = false;
     }
+
+    // The weather as last told to the player: rain in bands (none, drizzle, rain, downpour), in the
+    // cloud or not, thunder, where the wind comes from. Bands change with a little slack, so rain
+    // hovering at an edge doesn't say "the rain eases" and "the rain gets heavier" by turns.
+    private static readonly int[] RainBandUp = { 1, 30, 70 };
+    private static readonly int[] RainBandDown = { 0, 1, 25, 60 };
+    private const int CloudClosesAt = 35, CloudLiftsBelow = 25;
+    private int _rainBand;
+    private bool _inCloud, _thunder;
+    private Direction _windFrom;
+    private bool _weatherQuiet;
+
+    /// <summary>
+    /// The log notices the island's weather turning: rain starting, stopping, getting heavier or
+    /// easing, cloud closing in or lifting, thunder, the wind swinging round. Quiet for weather set
+    /// by hand (debug presets) and while <see cref="_weatherQuiet"/> is set.
+    /// </summary>
+    private void OnWeatherChanged(WeatherSettings now)
+    {
+        bool announce = _sim.FollowingWeatherSource && !_weatherQuiet;
+
+        int was = _rainBand, band = _rainBand;
+        while (band < 3 && now.RainPercent >= RainBandUp[band])
+            band++;
+        while (band > 0 && now.RainPercent < RainBandDown[band])
+            band--;
+        _rainBand = band;
+        if (announce && band != was)
+        {
+            Say(band == 0 ? "The rain stops."
+                : was == 0 ? (band == 1 ? "A light drizzle starts." : "It starts to rain.")
+                : band > was ? (band == 3 ? "The rain turns to a downpour." : "The rain gets heavier.")
+                : "The rain eases.");
+        }
+
+        bool inCloud = _inCloud ? now.FogPercent >= CloudLiftsBelow : now.FogPercent >= CloudClosesAt;
+        if (announce && inCloud != _inCloud)
+            Say(inCloud ? "Cloud closes in around you." : "The cloud lifts.");
+        _inCloud = inCloud;
+
+        if (announce && now.Storm != _thunder)
+            Say(now.Storm ? "Thunder rumbles somewhere off." : "The thunder moves away.");
+        _thunder = now.Storm;
+
+        if (announce && now.WindFrom != _windFrom && now.WindSpeed > 0)
+            Say($"The wind swings round; it comes from the {WindName(now.WindFrom)} now.");
+        _windFrom = now.WindFrom;
+    }
+
+    private static string WindName(Direction from) => from switch
+    {
+        Direction.North => "north",
+        Direction.NorthEast => "north-east",
+        Direction.East => "east",
+        Direction.SouthEast => "south-east",
+        Direction.South => "south",
+        Direction.SouthWest => "south-west",
+        Direction.West => "west",
+        _ => "north-west",
+    };
 
     private void OnLightningStruck(LightningStrike strike)
     {

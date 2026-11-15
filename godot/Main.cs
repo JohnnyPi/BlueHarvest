@@ -32,7 +32,6 @@ public partial class Main : Node2D
     /// <summary>WASD panning speed in screen pixels per second.</summary>
     private const float PanSpeed = 900f;
 
-    /// <summary>What the debug panel's weather list holds, in order.</summary>
     /// <summary>The time of day a walk on the island starts at.</summary>
     private const int IslandStartHour = 8;
 
@@ -49,6 +48,10 @@ public partial class Main : Node2D
         ("Midnight 00:00", 0, 0),
     };
 
+    /// <summary>
+    /// What the debug panel's weather list holds after its first entry, which goes back to the
+    /// island's own weather (see <see cref="WeatherChoices"/>).
+    /// </summary>
     private static readonly (string Name, WeatherSettings Settings)[] WeatherPresets =
     {
         ("clear", WeatherSettings.Clear),
@@ -485,6 +488,8 @@ public partial class Main : Node2D
         _island = new IslandWindow(world, chunker, Island.IslandLaunch.X, Island.IslandLaunch.Y, chunksAcross: 3);
         _sim = new Simulation(_island.Map, Seed);
         _sim.SetTimeOfDay(IslandStartHour);
+        // showers drift in on the trade wind and differ from place to place; each run has its own
+        _sim.FollowWeather(IslandWeather.For(world, Seed), _island.OriginX, _island.OriginY);
         TilePos start = _island.NearestStandable(_island.ToLocal(Island.IslandLaunch.X, Island.IslandLaunch.Y));
         _sim.AddActor("Survivor", '@', start, Species.Human, _player, loadout: Loadout.TestbedSurvivor);
         Say($"Island {world.Params.Seed}. You are on foot; the map follows you. F10 for the menu.");
@@ -633,12 +638,33 @@ public partial class Main : Node2D
         }
     }
 
-    /// <summary>Debug: sets one of the weather presets. Not recorded in replays.</summary>
+    /// <summary>The debug panel's weather list: the island's own weather first, then the fixed presets.</summary>
+    private static List<string> WeatherChoices() =>
+        new[] { "island (live)" }.Concat(WeatherPresets.Select(p => p.Name)).ToList();
+
+    /// <summary>
+    /// Debug: 0 goes back to the island's own weather; anything else sets a fixed preset, which stops
+    /// following the island's until 0 is picked again. Not recorded in replays.
+    /// </summary>
     private void SetWeatherPreset(int index)
     {
-        if (index < 0 || index >= WeatherPresets.Length)
+        if (index == 0)
+        {
+            if (_sim.WeatherSource is null)
+            {
+                Say("DEBUG: this map has no weather of its own; pick a preset.");
+                return;
+            }
+            _weatherQuiet = true; // no "it starts to rain" for a change the debug panel made
+            _sim.ResumeWeatherSource();
+            OnWeatherChanged(_sim.Weather.Settings);
+            _weatherQuiet = false;
+            Say($"DEBUG: back to the island's weather ({_sim.Weather.Settings.Describe()}).");
             return;
-        var (name, settings) = WeatherPresets[index];
+        }
+        if (index < 1 || index > WeatherPresets.Length)
+            return;
+        var (name, settings) = WeatherPresets[index - 1];
         _sim.SetWeather(settings);
         Say($"DEBUG: weather set to {name} ({_sim.Weather.Settings.Describe()}).");
     }
@@ -657,5 +683,12 @@ public partial class Main : Node2D
         Say($"DEBUG: clock skipped to {name}: {_sim.Clock.Describe(_sim.CurrentTick, 1)}, light {_sim.AmbientLightPercent}%.");
     }
 
-    private int WeatherPresetIndex() => Array.FindIndex(WeatherPresets, p => p.Settings == _sim.Weather.Settings);
+    /// <summary>Which entry of <see cref="WeatherChoices"/> matches the weather now, or −1.</summary>
+    private int WeatherPresetIndex()
+    {
+        if (_sim.FollowingWeatherSource)
+            return 0;
+        int preset = Array.FindIndex(WeatherPresets, p => p.Settings == _sim.Weather.Settings);
+        return preset < 0 ? -1 : preset + 1;
+    }
 }

@@ -90,6 +90,8 @@ public sealed partial class Simulation
     private LightGrid? _lightGrid;
     private int _ambientLight = 100;
     private readonly int _moonStartPhase;
+    private bool _followWeather;
+    private long _weatherOriginX, _weatherOriginY;
 
     /// <summary>
     /// Starts a simulation on a map. Every connected patch of vehicle cover becomes a Vehicle and
@@ -306,6 +308,70 @@ public sealed partial class Simulation
             Clock = new WorldClock((target - elapsed + WorldClock.MinutesPerDay) % WorldClock.MinutesPerDay);
         }
         _lightGrid = null;
+        if (FollowingWeatherSource)
+            ApplySourceWeather(CurrentTick); // the weather of the new hour, not the old one
+    }
+
+    /// <summary>How often weather that differs by place is looked up again: every game minute.</summary>
+    public const int WeatherStepTicks = WorldClock.TicksPerGameMinute;
+
+    /// <summary>Where the weather comes from on maps with places (the island); null for a fixed weather.</summary>
+    public IWeatherSource? WeatherSource { get; private set; }
+
+    /// <summary>Whether the weather is being taken from <see cref="WeatherSource"/> (until it is set by hand).</summary>
+    public bool FollowingWeatherSource => WeatherSource is not null && _followWeather;
+
+    /// <summary>
+    /// From now on, takes the weather from a source that differs by place: every game minute it is
+    /// looked up for the middle of the map (<see cref="WeatherPlace"/>), so the senses, the light and
+    /// the scent clock follow the showers as they come and go and as the map moves across the island.
+    /// </summary>
+    /// <param name="islandX">Where the map's tile (0, 0) is now, in the source's metres (east).</param>
+    /// <param name="islandY">The same, south.</param>
+    public void FollowWeather(IWeatherSource source, long islandX, long islandY)
+    {
+        WeatherSource = source;
+        _weatherOriginX = islandX - WindowOrigin.X;
+        _weatherOriginY = islandY - WindowOrigin.Y;
+        _followWeather = true;
+        ApplySourceWeather(CurrentTick);
+    }
+
+    /// <summary>Goes back to the source's weather after it was set by hand. Does nothing without a source.</summary>
+    public void ResumeWeatherSource()
+    {
+        if (WeatherSource is null)
+            return;
+        _followWeather = true;
+        ApplySourceWeather(CurrentTick);
+    }
+
+    /// <summary>The spot the map's weather is taken from: the middle of the map, in the source's metres.</summary>
+    public (long X, long Y) WeatherPlace =>
+        (_weatherOriginX + WindowOrigin.X + Map.Width / 2, _weatherOriginY + WindowOrigin.Y + Map.Height / 2);
+
+    /// <summary>Game minutes at a tick: the clock's reading, or minutes since tick 0 on a map without a clock.</summary>
+    public long GameMinute(long tick) => Clock?.TotalMinutes(tick) ?? tick / WorldClock.TicksPerGameMinute;
+
+    /// <summary>What the source says the weather here will be this many game minutes from now; null without a source.</summary>
+    public WeatherSettings? Forecast(int minutesAhead)
+    {
+        if (WeatherSource is not { } source)
+            return null;
+        var (x, y) = WeatherPlace;
+        return source.At(x, y, GameMinute(CurrentTick) + minutesAhead).Clamped();
+    }
+
+    /// <summary>Looks the weather up for <see cref="WeatherPlace"/> at a tick and switches to it if it changed.</summary>
+    private void ApplySourceWeather(long tick)
+    {
+        var (x, y) = WeatherPlace;
+        WeatherSettings next = WeatherSource!.At(x, y, GameMinute(tick)).Clamped();
+        if (next == Weather.Settings)
+            return;
+        Weather.Set(next, tick);
+        _lightGrid = null;
+        WeatherChanged?.Invoke(Weather.Settings);
     }
 
     /// <summary>Noises from the last <see cref="NoiseMemoryTicks"/> ticks, oldest first.</summary>
@@ -347,9 +413,13 @@ public sealed partial class Simulation
         }
     }
 
-    /// <summary>Sets the weather from now on (scenario setup, debug keys; not recorded in replays).</summary>
+    /// <summary>
+    /// Sets the weather from now on (scenario setup, debug keys; not recorded in replays). With a
+    /// <see cref="WeatherSource"/> this stops following it until <see cref="ResumeWeatherSource"/>.
+    /// </summary>
     public void SetWeather(WeatherSettings settings)
     {
+        _followWeather = false;
         Weather.Set(settings, CurrentTick);
         _lightGrid = null; // a storm may start or stop mid-flash
         WeatherChanged?.Invoke(Weather.Settings);
@@ -471,7 +541,23 @@ public sealed partial class Simulation
             return;
         long from = _weatherTick;
         _weatherTick = CurrentTick;
-        foreach (var strike in Weather.StrikesBetween(from, CurrentTick))
+        if (FollowingWeatherSource)
+        {
+            // look the weather up again at every game minute passed, in order, so lightning in each
+            // stretch goes by the weather of that stretch and the scent clock changes speed on time
+            for (long b = (Math.Max(0, from) / WeatherStepTicks + 1) * WeatherStepTicks; b <= CurrentTick; b += WeatherStepTicks)
+            {
+                RaiseStrikes(from, b - 1);
+                from = b - 1;
+                ApplySourceWeather(b);
+            }
+        }
+        RaiseStrikes(from, CurrentTick);
+    }
+
+    private void RaiseStrikes(long fromExclusive, long toInclusive)
+    {
+        foreach (var strike in Weather.StrikesBetween(fromExclusive, toInclusive))
             LightningStruck?.Invoke(strike);
     }
 

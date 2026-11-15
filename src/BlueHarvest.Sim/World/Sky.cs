@@ -87,9 +87,13 @@ public static class Sky
             ? ((FullMoonPercent - StarlightPercent) * MoonLitPercent(phase) + 50) / 100
             : 0);
 
-    /// <summary>How much of the sky's light the weather takes away, 0–60: heavy rain about 40, thick fog 50, a storm 60.</summary>
+    /// <summary>
+    /// How much of the sky's light the weather takes away, 0–60: an overcast sky 30, heavy rain about
+    /// 40, thick fog 50, a storm 60.
+    /// </summary>
     public static int CloudPercent(WeatherSettings weather) =>
-        Math.Clamp(Math.Max(Math.Max(weather.RainPercent * 6 / 10, weather.FogPercent / 2), weather.Storm ? 60 : 0), 0, 60);
+        Math.Clamp(Math.Max(Math.Max(Math.Max(weather.RainPercent * 6 / 10, weather.FogPercent / 2), weather.Storm ? 60 : 0),
+            weather.CloudPercent * 3 / 10), 0, 60);
 
     /// <summary>
     /// Light outdoors before any lamps: the sun or the night sky, whichever is brighter, dimmed by the
