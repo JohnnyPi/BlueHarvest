@@ -1,0 +1,225 @@
+namespace BlueHarvest.Sim.Power;
+
+/// <summary>Where a site's power is coming from right now.</summary>
+public enum PowerSource : byte { None, Grid, Generator, Solar, Battery }
+
+public enum GeneratorState : byte
+{
+    /// <summary>Stopped and ready to start, if it has fuel.</summary>
+    Off,
+    Running,
+    /// <summary>Won't start until someone works on it (a timed repair with a skill roll).</summary>
+    NeedsRepair,
+    /// <summary>Seized solid: needs parts, which nobody can bring yet.</summary>
+    Seized,
+}
+
+public enum PlantState : byte
+{
+    Running,
+    /// <summary>Coming up to speed; it feeds the grid when the count reaches zero.</summary>
+    Starting,
+    /// <summary>Tripped offline: a geothermal turbine restarts in minutes.</summary>
+    Tripped,
+    /// <summary>In safe shutdown: a reactor takes an hour to bring back.</summary>
+    Shutdown,
+}
+
+public enum BreakerState : byte { Closed, Open, Tripped }
+
+/// <summary>Something done to a piece of equipment. Which ones make sense depends on the device (see PowerGrid.Choices).</summary>
+public enum PowerOp : byte
+{
+    SiteOn,
+    SiteOff,
+    /// <summary>Close the breaker of a line (the argument is the feeder id).</summary>
+    CloseLine,
+    OpenLine,
+    BackupAuto,
+    BackupManual,
+    Start,
+    Stop,
+    Repair,
+    OpenValve,
+    CloseValve,
+    InverterOn,
+    InverterOff,
+    Connect,
+    Disconnect,
+    Restart,
+    Shutdown,
+}
+
+/// <summary>A rectangle in island metres (inclusive). Devices are worked from inside it or next to it.</summary>
+public readonly record struct Footprint(int X0, int Y0, int X1, int Y1)
+{
+    public static Footprint Around(int x, int y, int half) => new(x - half, y - half, x + half, y + half);
+
+    public bool Contains(long x, long y) => x >= X0 && x <= X1 && y >= Y0 && y <= Y1;
+
+    /// <summary>Inside, or within <paramref name="margin"/> tiles of an edge.</summary>
+    public bool Near(long x, long y, int margin = 1) => x >= X0 - margin && x <= X1 + margin && y >= Y0 - margin && y <= Y1 + margin;
+
+    public (int X, int Y) Centre => ((X0 + X1) / 2, (Y0 + Y1) / 2);
+}
+
+/// <summary>A piece of power equipment at a facility (or out on a line), placed in island metres.</summary>
+public abstract class PowerDevice
+{
+    protected PowerDevice(int id, int siteId, string name, Footprint footprint)
+    {
+        Id = id; SiteId = siteId; Name = name; Footprint = footprint;
+    }
+
+    public int Id { get; }
+
+    /// <summary>The site it belongs to; −1 for a fault out on a line.</summary>
+    public int SiteId { get; }
+
+    /// <summary>"the backup generator", "the switch panel": lower case, for sentences.</summary>
+    public string Name { get; }
+
+    public Footprint Footprint { get; }
+}
+
+/// <summary>
+/// The site's switchboard: switches the whole site on or off, holds the breakers of the lines that
+/// leave the site, and the transfer switch that starts the backup generator when the grid fails.
+/// </summary>
+public sealed class Panel(int id, int siteId, string name, Footprint footprint) : PowerDevice(id, siteId, name, footprint);
+
+/// <summary>A diesel backup generator with its own day tank, topped up from the yard tanks when their valve is open.</summary>
+public sealed class Generator(int id, int siteId, string name, Footprint footprint, int kw, int tankCentilitres)
+    : PowerDevice(id, siteId, name, footprint)
+{
+    public int Kw { get; } = kw;
+    public int TankCentilitres { get; } = tankCentilitres;
+    public GeneratorState State { get; internal set; }
+    public int FuelCentilitres { get; internal set; }
+    /// <summary>Started by the transfer switch (it stops it again when the grid comes back), not by hand.</summary>
+    public bool AutoStarted { get; internal set; }
+}
+
+/// <summary>The yard fuel tanks: they feed the day tanks of the site's generator while the valve is open.</summary>
+public sealed class FuelStore(int id, int siteId, string name, Footprint footprint, int capacityLitres)
+    : PowerDevice(id, siteId, name, footprint)
+{
+    public int CapacityLitres { get; } = capacityLitres;
+    public int Litres { get; internal set; }
+    public bool ValveOpen { get; internal set; }
+}
+
+/// <summary>A battery bank with an inverter. Any source charges it; it carries the site when nothing else can.</summary>
+public sealed class BatteryBank(int id, int siteId, string name, Footprint footprint, int capacityWh)
+    : PowerDevice(id, siteId, name, footprint)
+{
+    public int CapacityWh { get; } = capacityWh;
+    public int ChargeWh { get; internal set; }
+    public bool InverterOn { get; internal set; }
+    public int ChargePercent => CapacityWh == 0 ? 0 : (int)((long)ChargeWh * 100 / CapacityWh);
+}
+
+/// <summary>Solar panels on a roof, worked from their charge controller. Output follows the sun and the cloud.</summary>
+public sealed class SolarArray(int id, int siteId, string name, Footprint footprint, int peakW)
+    : PowerDevice(id, siteId, name, footprint)
+{
+    public int PeakW { get; } = peakW;
+    /// <summary>How much of its rating ten years of dirt and storms have left it, percent.</summary>
+    public int ConditionPercent { get; internal set; } = 100;
+    public bool Connected { get; internal set; }
+    /// <summary>What it is giving now, in watts.</summary>
+    public int OutputW { get; internal set; }
+}
+
+/// <summary>A power station's turbine or reactor, worked from its control room. It feeds the grid when running.</summary>
+public sealed class Plant(int id, int siteId, string name, Footprint footprint, bool nuclear)
+    : PowerDevice(id, siteId, name, footprint)
+{
+    public bool Nuclear { get; } = nuclear;
+    public PlantState State { get; internal set; }
+    public int StartMinutesLeft { get; internal set; }
+    /// <summary>Game minutes from a restart until it feeds the grid.</summary>
+    public int StartMinutes => Nuclear ? 60 : 10;
+}
+
+/// <summary>Where an overhead line has come down; worked on the spot. Repairing it puts the line back up.</summary>
+public sealed class LineFault(int id, string name, Footprint footprint, int feederId) : PowerDevice(id, -1, name, footprint)
+{
+    public int FeederId { get; } = feederId;
+}
+
+/// <summary>
+/// A line between two sites, or from a site to a paddock fence. Its breaker sits at the
+/// <see cref="From"/> site's panel. Power flows either way along it (the tie cable between the two
+/// plants' networks only makes sense that way).
+/// </summary>
+public sealed class Feeder(int id, int from, int to, string toName, bool underground)
+{
+    public int Id { get; } = id;
+    public int From { get; } = from;
+    /// <summary>The site at the far end, or −1 for a paddock fence.</summary>
+    public int To { get; } = to;
+    /// <summary>The far end's name: a site, or a paddock ("Tyrannosaur paddock").</summary>
+    public string ToName { get; } = toName;
+    /// <summary>A buried cable: storms don't trip it and it can't come down.</summary>
+    public bool Underground { get; } = underground;
+    public BreakerState Breaker { get; internal set; }
+    public bool Down { get; internal set; }
+    public int? FaultDevice { get; internal set; }
+    public bool Carries => !Down && Breaker == BreakerState.Closed;
+    public bool ToFence => To < 0;
+}
+
+/// <summary>A light at a facility, in island metres: on while its site is powered.</summary>
+public sealed record PowerLamp(int Id, int SiteId, int X, int Y, int HeightDm, int RadiusTiles, int IntensityPercent);
+
+/// <summary>A facility on the power network.</summary>
+public sealed class PowerSite(int id, string name, string kind, int x, int y, int radius, int loadKw)
+{
+    public int Id { get; } = id;
+    public string Name { get; } = name;
+    /// <summary>The facility kind's key ("genetics", "comms"…).</summary>
+    public string Kind { get; } = kind;
+    public int X { get; } = x;
+    public int Y { get; } = y;
+    /// <summary>Compound radius, m.</summary>
+    public int Radius { get; } = radius;
+    /// <summary>What the site draws with everything on, kW.</summary>
+    public int LoadKw { get; } = loadKw;
+
+    /// <summary>The main switch: off, nothing in the buildings gets power whatever is running.</summary>
+    public bool BoardOn { get; internal set; }
+    /// <summary>The transfer switch on auto starts the backup generator when the grid goes, and stops it when it returns.</summary>
+    public bool AutoBackup { get; internal set; }
+
+    public int? PanelId { get; internal set; }
+    public int? GeneratorId { get; internal set; }
+    public int? FuelId { get; internal set; }
+    public int? BatteryId { get; internal set; }
+    public int? SolarId { get; internal set; }
+    public int? PlantId { get; internal set; }
+
+    /// <summary>The grid reaches the site's switchyard.</summary>
+    public bool Energised { get; internal set; }
+    /// <summary>Some source could carry the site's load now (whether or not its main switch is on).</summary>
+    public bool BusLive { get; internal set; }
+    /// <summary>The buildings have power: the lights are on.</summary>
+    public bool Powered { get; internal set; }
+    public PowerSource Source { get; internal set; }
+
+    public bool Contains(long x, long y) => Math.Abs(x - X) <= Radius && Math.Abs(y - Y) <= Radius;
+}
+
+/// <summary>One thing that can be done at a device now, for the right-click menu.</summary>
+public sealed record PowerChoice(PowerOp Op, int Arg, string Text, string? Hint = null, bool Enabled = true);
+
+/// <summary>What came of working a device: what to tell the player, how long it took, and how loud it was.</summary>
+public sealed record PowerResult(bool Done, string Message, int Ticks, int Loudness = 0, string NoiseKind = "");
+
+public enum PowerEventKind : byte
+{
+    SiteLit, SiteDark, GeneratorStarted, GeneratorStopped, GeneratorRanDry, BreakerTripped, PlantRunning, PlantStopped, BatteryFlat,
+}
+
+/// <summary>Something that changed on the network by itself as time passed (or right after a switch).</summary>
+public sealed record PowerEvent(PowerEventKind Kind, int SiteId, string Text);

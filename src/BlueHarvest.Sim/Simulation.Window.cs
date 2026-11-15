@@ -136,6 +136,7 @@ public sealed partial class Simulation
         }
 
         _lightGrid = null;
+        SyncPowerLights(); // facility lamps that came into the window, and those that left
 
         // ---- minds ----
         foreach (Actor actor in _actors)

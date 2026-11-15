@@ -34,6 +34,8 @@ public partial class Main
         _sim.ActorEscaped += OnActorEscaped;
         _sim.SparksDied += OnSparksDied;
         _sim.WeatherChanged += OnWeatherChanged;
+        _sim.PowerChanged += OnPowerChanged;
+        _sim.PowerOperated += OnPowerOperated;
         // what the weather is at the start, without saying so
         _weatherQuiet = true;
         OnWeatherChanged(_sim.Weather.Settings);

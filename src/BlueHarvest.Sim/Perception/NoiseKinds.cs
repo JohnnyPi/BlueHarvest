@@ -21,6 +21,7 @@ public static class NoiseKinds
     public const string Talking = "talking";
     public const string Sparks = "crackling sparks";
     public const string SnappingWire = "snapping wire";
+    public const string Generator = "a running generator";
 
     /// <summary>Someone hurt cries out. A creature that hears it knows it's prey.</summary>
     public const string Scream = "a scream";

@@ -374,6 +374,7 @@ public partial class Main
                 distance <= range ? $"{distance:0} m" : $"{distance:0} m, lands short", range > 0));
         }
 
+        AddPowerChoices(choices, tile);
         choices.Add(new MenuChoice("Look", () => Say(LookText(tile))));
         _tooltip.Visible = false;
         _menu.Open(at, GetViewportRect().Size, $"{TileTitle(tile)}  ({tile.X}, {tile.Y})", choices);
@@ -444,6 +445,7 @@ public partial class Main
         if (Chebyshev(me.Position, tile) == 1
             && _sim.MoveBlockReason(me, Directions.FromDelta(tile.X - me.Position.X, tile.Y - me.Position.Y)) is { } why)
             facts.Add(($"Can't step here: {why}", HudTheme.Danger));
+        AddPowerFacts(facts, tile);
         return facts;
     }
 

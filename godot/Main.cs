@@ -490,6 +490,8 @@ public partial class Main : Node2D
         _sim.SetTimeOfDay(IslandStartHour);
         // showers drift in on the trade wind and differ from place to place; each run has its own
         _sim.FollowWeather(IslandWeather.For(world, Seed), _island.OriginX, _island.OriginY);
+        // the facilities' power as this run finds it: some still running, most dark, each with ways back
+        _sim.UsePower(PowerPlan.Build(world, Seed), _island.OriginX, _island.OriginY);
         TilePos start = _island.NearestStandable(_island.ToLocal(Island.IslandLaunch.X, Island.IslandLaunch.Y));
         _sim.AddActor("Survivor", '@', start, Species.Human, _player, loadout: Loadout.TestbedSurvivor);
         Say($"Island {world.Params.Seed}. You are on foot; the map follows you. F10 for the menu.");

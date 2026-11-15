@@ -1,3 +1,4 @@
+using BlueHarvest.Sim.Power;
 using BlueHarvest.Sim.World;
 
 namespace BlueHarvest.Sim.Actors;
@@ -52,3 +53,10 @@ public sealed record ToggleLightAction : ActorAction;
 
 /// <summary>Rope down to the next tile in a direction: for drops too far to jump. Uses up the rope.</summary>
 public sealed record RappelAction(Direction Direction) : ActorAction;
+
+/// <summary>
+/// Work a piece of power equipment (by device id in Simulation.Power) from inside or next to it:
+/// throw a switch, start a generator, open a valve, repair a line. <paramref name="Arg"/> picks the
+/// breaker for line operations. What can be done is listed by PowerGrid.Choices.
+/// </summary>
+public sealed record OperateAction(int DeviceId, PowerOp Op, int Arg = -1) : ActorAction;

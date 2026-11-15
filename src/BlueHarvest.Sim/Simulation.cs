@@ -91,7 +91,8 @@ public sealed partial class Simulation
     private int _ambientLight = 100;
     private readonly int _moonStartPhase;
     private bool _followWeather;
-    private long _weatherOriginX, _weatherOriginY;
+    /// <summary>Where the map's tile (0, 0) was in island metres when the window origin was (0, 0); see <see cref="IslandOrigin"/>.</summary>
+    private long _islandOriginX, _islandOriginY;
 
     /// <summary>
     /// Starts a simulation on a map. Every connected patch of vehicle cover becomes a Vehicle and
@@ -331,8 +332,7 @@ public sealed partial class Simulation
     public void FollowWeather(IWeatherSource source, long islandX, long islandY)
     {
         WeatherSource = source;
-        _weatherOriginX = islandX - WindowOrigin.X;
-        _weatherOriginY = islandY - WindowOrigin.Y;
+        SetIslandOrigin(islandX, islandY);
         _followWeather = true;
         ApplySourceWeather(CurrentTick);
     }
@@ -347,8 +347,20 @@ public sealed partial class Simulation
     }
 
     /// <summary>The spot the map's weather is taken from: the middle of the map, in the source's metres.</summary>
-    public (long X, long Y) WeatherPlace =>
-        (_weatherOriginX + WindowOrigin.X + Map.Width / 2, _weatherOriginY + WindowOrigin.Y + Map.Height / 2);
+    public (long X, long Y) WeatherPlace => (IslandOrigin.X + Map.Width / 2, IslandOrigin.Y + Map.Height / 2);
+
+    /// <summary>
+    /// Where the map's tile (0, 0) is now in island metres, on a map that is a window on the island
+    /// (set by <see cref="FollowWeather"/> or <see cref="UsePower"/>): tile + this = island metres.
+    /// </summary>
+    public (long X, long Y) IslandOrigin => (_islandOriginX + WindowOrigin.X, _islandOriginY + WindowOrigin.Y);
+
+    /// <summary>Tells the simulation where the map's tile (0, 0) is now, in island metres.</summary>
+    private void SetIslandOrigin(long islandX, long islandY)
+    {
+        _islandOriginX = islandX - WindowOrigin.X;
+        _islandOriginY = islandY - WindowOrigin.Y;
+    }
 
     /// <summary>Game minutes at a tick: the clock's reading, or minutes since tick 0 on a map without a clock.</summary>
     public long GameMinute(long tick) => Clock?.TotalMinutes(tick) ?? tick / WorldClock.TicksPerGameMinute;
@@ -541,15 +553,19 @@ public sealed partial class Simulation
             return;
         long from = _weatherTick;
         _weatherTick = CurrentTick;
-        if (FollowingWeatherSource)
+        if (FollowingWeatherSource || Power is not null)
         {
             // look the weather up again at every game minute passed, in order, so lightning in each
-            // stretch goes by the weather of that stretch and the scent clock changes speed on time
+            // stretch goes by the weather of that stretch and the scent clock changes speed on time;
+            // the power network takes its minute's step after the weather
             for (long b = (Math.Max(0, from) / WeatherStepTicks + 1) * WeatherStepTicks; b <= CurrentTick; b += WeatherStepTicks)
             {
                 RaiseStrikes(from, b - 1);
                 from = b - 1;
-                ApplySourceWeather(b);
+                if (FollowingWeatherSource)
+                    ApplySourceWeather(b);
+                if (Power is not null)
+                    StepPower(b);
             }
         }
         RaiseStrikes(from, CurrentTick);
@@ -1046,6 +1062,7 @@ public sealed partial class Simulation
         ExpireLights();
         AdvanceWeather();
         AdvanceSparks();
+        AdvanceMachinery();
         var actor = _actors[id];
         UpdateHealth(actor);
         if (actor.IsGone)
@@ -1104,6 +1121,7 @@ public sealed partial class Simulation
         ExpireLights();
         AdvanceWeather();
         AdvanceSparks();
+        AdvanceMachinery();
     }
 
     /// <summary>
@@ -1154,6 +1172,7 @@ public sealed partial class Simulation
         foreach (var light in _lights)
             hasher.Add(light.Position.X).Add(light.Position.Y).Add(light.On ? 1 : 0);
         Weather.AddTo(hasher);
+        Power?.AddTo(hasher);
         foreach (var actor in _actors)
             hasher.Add(actor.EscapedTick ?? -1);
         foreach (var sparks in _sparks)
@@ -1227,6 +1246,7 @@ public sealed partial class Simulation
         ThrowAction thrown => Throw(actor, thrown.Item, thrown.Target),
         ToggleLightAction => ToggleLight(actor),
         RappelAction rappel => Rappel(actor, rappel.Direction),
+        OperateAction operate => Operate(actor, operate.DeviceId, operate.Op, operate.Arg),
         _ => throw new ArgumentOutOfRangeException(nameof(action), $"Unknown action {action}."),
     };
 

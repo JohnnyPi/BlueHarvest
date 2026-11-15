@@ -497,6 +497,7 @@ public partial class Main
                   $"({_sim.WeatherPlace.X}, {_sim.WeatherPlace.Y}) m, cloud {_sim.Weather.Settings.CloudPercent}%   " +
                   $"in an hour: {inAnHour.Describe()}\n"
                 : "") +
+            PowerReadout() +
             (_island is { } island
                 ? $"Away from here: {island.Changes.TileCount} changed tiles kept in {island.Changes.ChunkCount} chunks, " +
                   $"{_sim.Actors.Count(a => a.LeftBehind)} left behind\n"

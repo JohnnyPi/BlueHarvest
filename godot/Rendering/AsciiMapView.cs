@@ -549,6 +549,8 @@ public partial class AsciiMapView : Node2D
                 continue;
             if (state is FogState.Plan or FogState.Unknown)
                 continue;
+            if (RoofShown(p))
+                continue; // a ceiling light in a building you're not in: its light shows, the lamp doesn't
             DrawGlyphAt('*', p.X * CellSize, p.Y * CellSize - Lift(p),
                 flare ? FlareInk : state == FogState.Remembered ? RememberedLamp : LightGlyph);
         }
