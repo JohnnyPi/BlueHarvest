@@ -86,6 +86,12 @@ public sealed class Actor
     /// <summary>Whether the scheduler still holds a turn for it. The gone are dropped from the schedule when their turn comes up.</summary>
     internal bool Scheduled { get; set; }
 
+    /// <summary>
+    /// Riding an elevator or a cable car: where it gets out, in island metres. Set when the ride starts;
+    /// Simulation.CompleteRide puts the actor there once the ride's time has passed.
+    /// </summary>
+    public (long X, long Y)? PendingRide { get; internal set; }
+
     /// <summary>Dead, escaped or left behind: off the map as far as everyone else is concerned (no turns, not perceived).</summary>
     public bool IsGone => IsDead || HasEscaped || LeftBehind;
 

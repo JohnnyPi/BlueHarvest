@@ -7,8 +7,9 @@ using Godot;
 namespace BlueHarvest.Game.Rendering;
 
 /// <summary>
-/// Everything on the map that moves on its own: for now, water. Glints on lakes and the open sea,
-/// streaks running down rivers, wave lines coming in to the shore, and rings where rain hits water.
+/// Everything on the map that moves on its own: water (glints on lakes and the open sea, streaks
+/// running down rivers, wave lines coming in to the shore, rings where rain hits water) and the
+/// sparks crawling along live paddock fences.
 /// It runs on real time, so it keeps moving while the game waits for your turn, like the rain.
 /// Purely for looks: it reads the map and never changes it, and nothing in the simulation reads it.
 /// Add it after the AsciiMapView (so it draws on top of the ground) and before the WeatherView.
@@ -47,6 +48,7 @@ public partial class AmbientView : Node2D
     private static readonly Color Wave = new(0.85f, 0.94f, 1f, 0.50f);
     private static readonly Color Foam = new(1f, 1f, 1f, 0.70f);
     private static readonly Color RainRing = new(0.80f, 0.88f, 1f, 0.45f);
+    private static readonly Color Spark = new(0.75f, 0.92f, 1f, 0.95f);
 
     private Simulation? _sim;
     private AsciiMapView? _map;
@@ -170,7 +172,7 @@ public partial class AmbientView : Node2D
         _sinceDraw += delta;
         if (_sim is null || _map is null)
             return;
-        bool on = _map.Overlays.Animation && _animated > 0;
+        bool on = _map.Overlays.Animation && (_animated > 0 || _sim.LiveFenceTiles.Count > 0);
         // one more redraw after it's switched off (or the water scrolls away) clears what was drawn
         if ((on || _drewSomething) && _sinceDraw >= 1.0 / FramesPerSecond)
         {
@@ -183,10 +185,13 @@ public partial class AmbientView : Node2D
     {
         _drewSomething = false;
         DrawnTiles = 0;
-        if (_sim is null || _map is null || !_map.Overlays.Animation || _animated == 0)
+        if (_sim is null || _map is null || !_map.Overlays.Animation)
             return;
         var sim = _sim;
         var map = _map;
+        DrawFenceSparks(sim, map, (float)(_time % 3600.0));
+        if (_animated == 0)
+            return;
         if (sim.Map.Width != _width || sim.Map.Height != _height)
             return; // the map changed size under us; MapChanged will catch up
 
@@ -257,7 +262,39 @@ public partial class AmbientView : Node2D
                 DrawnTiles++;
             }
         }
-        _drewSomething = DrawnTiles > 0;
+        _drewSomething |= DrawnTiles > 0; // the fence sparks may have drawn too
+    }
+
+    /// <summary>
+    /// Now and then a live fence tile in view crackles: a jagged blue-white spark for a tenth of a
+    /// second, every few seconds, each tile on its own beat.
+    /// </summary>
+    private void DrawFenceSparks(Simulation sim, AsciiMapView map, float time)
+    {
+        if (sim.LiveFenceTiles.Count == 0)
+            return;
+        foreach (TilePos p in sim.LiveFenceTiles)
+        {
+            float period = 2.5f + 3f * Unit(p.X, p.Y, 41);
+            float u = Frac(time / period + Unit(p.X, p.Y, 42));
+            if (u > 0.04f)
+                continue;
+            if (map.FogAt(p) != FogState.Visible)
+                continue;
+            var c = map.CenterOf(p);
+            if (!_onScreen.HasPoint(c))
+                continue;
+            float a = 1f - u / 0.04f;
+            var ink = Faded(Spark, a);
+            var p0 = c + new Vector2(-6f, -2f);
+            var p1 = c + new Vector2(-2f, 3f);
+            var p2 = c + new Vector2(2f, -3f);
+            var p3 = c + new Vector2(6f, 2f);
+            DrawLine(p0, p1, ink, 1.5f);
+            DrawLine(p1, p2, ink, 1.5f);
+            DrawLine(p2, p3, ink, 1.5f);
+            _drewSomething = true;
+        }
     }
 
     /// <summary>A short bright dash that fades in and out and drifts a little: light on slow water.</summary>

@@ -44,11 +44,24 @@ public partial class Main
         }
     }
 
-    /// <summary>Tooltip lines: the equipment on this tile, and how the facility around it is doing.</summary>
+    /// <summary>Tooltip lines: a live fence, a powered door, the equipment on this tile, and how the facility around it is doing.</summary>
     private void AddPowerFacts(List<(string Text, Color? Color)> facts, TilePos tile)
     {
         if (_sim.Power is not { } grid)
             return;
+        if (_sim.IsLiveFence(tile))
+            facts.Add(("A live fence: it holds, and it bites whatever touches it", HudTheme.Danger));
+        if (_sim.PowerDoorAt(tile) is { } door)
+        {
+            string doorSite = grid.Sites[door.SiteId].Name;
+            facts.Add(door.Kind == DoorKind.SecurityLock
+                ? (grid.DoorLocked(door)
+                    ? ($"Security door ({door.Room}): locked while the {doorSite} has power; release it at the switch panel", HudTheme.Muted)
+                    : ($"Security door ({door.Room}): its lock is off", HudTheme.Ink))
+                : (grid.DoorPowered(door)
+                    ? ("Motorised door: it slides open", HudTheme.Ink)
+                    : ("Motorised door, no power: it can be forced (20 s, loud)", HudTheme.Muted)));
+        }
         foreach (PowerDevice device in _sim.DevicesAt(tile))
             facts.Add((grid.Describe(device.Id), HudTheme.Ink));
         if (_sim.SiteAt(tile) is { } site)
@@ -68,6 +81,47 @@ public partial class Main
     {
         if (actor == _playerActor)
             Say(result.Message);
+    }
+
+    private void OnShocked(Actor actor, TilePos fence)
+    {
+        if (actor == _playerActor)
+            Say("The fence bites back: a jolt throws you off it, your arm numb.");
+        else if (actor == _rex && Shown(actor))
+            Say("The Rex flinches back from the live fence with a crack of sparks.");
+        else if (Shown(actor))
+            Say($"{actor.Name} touches the live fence and is thrown back.");
+        else if (Chebyshev(_playerActor.Position, fence) <= 40)
+            Say("Somewhere close, a fence cracks and spits.");
+    }
+
+    private void OnDoorForced(Actor actor, TilePos door)
+    {
+        if (actor == _playerActor)
+            Say("The door has no power. You haul it along its track by hand, metal screaming.");
+        else if (Shown(actor))
+            Say($"{actor.Name} forces a dead door open.");
+    }
+
+    private void OnRideEnded(Actor actor)
+    {
+        if (actor == _playerActor)
+            Say("The doors open. You step out.");
+    }
+
+    /// <summary>
+    /// After a turn: if the player has just ridden an elevator or a cable car, put them at the far end,
+    /// moving the window there first if the far end is off the map.
+    /// </summary>
+    private void ArriveFromRide()
+    {
+        if (_island is null || _playerActor.PendingRide is null)
+            return;
+        TilePos there = _sim.CompleteRide(_playerActor);
+        if (!_playerActor.LeftBehind)
+            return;
+        (int dx, int dy) = _island.Recenter(there);
+        _sim.ShiftWindow(dx, dy); // the player is waiting there, parked, and comes back onto the map
     }
 
     private bool NearSite(PowerSite site)

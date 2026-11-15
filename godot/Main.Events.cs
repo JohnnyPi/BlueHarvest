@@ -36,6 +36,9 @@ public partial class Main
         _sim.WeatherChanged += OnWeatherChanged;
         _sim.PowerChanged += OnPowerChanged;
         _sim.PowerOperated += OnPowerOperated;
+        _sim.Shocked += OnShocked;
+        _sim.DoorForced += OnDoorForced;
+        _sim.RideEnded += OnRideEnded;
         // what the weather is at the start, without saying so
         _weatherQuiet = true;
         OnWeatherChanged(_sim.Weather.Settings);

@@ -9,15 +9,23 @@ namespace BlueHarvest.Sim.Lighting;
 public sealed class LightGrid
 {
     private readonly byte[] _levels;
+    private readonly byte[] _red;
     private readonly int _width;
 
-    private LightGrid(byte[] levels, int width)
+    private LightGrid(byte[] levels, byte[] red, int width)
     {
         _levels = levels;
+        _red = red;
         _width = width;
     }
 
     public int LevelAt(TilePos p) => _levels[p.Y * _width + p.X];
+
+    /// <summary>
+    /// How much of a tile's light is red (emergency lights, flares), 0–100. For the screen only:
+    /// creatures see by <see cref="LevelAt"/>, whatever its colour.
+    /// </summary>
+    public int RedPercentAt(TilePos p) => _red[p.Y * _width + p.X];
 
     /// <summary>
     /// Starts every outdoor tile at the ambient level (indoor tiles at a third of it), then adds each
@@ -27,6 +35,7 @@ public sealed class LightGrid
     {
         int width = map.Width, height = map.Height;
         var levels = new int[width * height];
+        var red = new int[width * height];
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
@@ -66,13 +75,20 @@ public sealed class LightGrid
                     long added = light.IntensityPercent * (r2 - d2) / r2 * visibility / 100;
                     int index = tile.Y * width + tile.X;
                     levels[index] = (int)Math.Min(100, levels[index] + added);
+                    if (light.Red)
+                        red[index] = (int)Math.Min(1000, red[index] + added);
                 }
             }
         }
 
         var bytes = new byte[levels.Length];
+        var redShare = new byte[levels.Length];
         for (int i = 0; i < levels.Length; i++)
+        {
             bytes[i] = (byte)Math.Clamp(levels[i], 0, 100);
-        return new LightGrid(bytes, width);
+            if (red[i] > 0)
+                redShare[i] = (byte)Math.Clamp(red[i] * 100 / Math.Max(1, levels[i]), 0, 100);
+        }
+        return new LightGrid(bytes, redShare, width);
     }
 }

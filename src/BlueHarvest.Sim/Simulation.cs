@@ -972,6 +972,8 @@ public sealed partial class Simulation
             var cover = Map.CoverAt(tile);
             if (!movingAway && cover.StopsLargeBody(actor.Species.Force))
                 return $"{cover.Name} is in the way";
+            if (!movingAway && IsLiveFence(tile))
+                return LiveFenceReason;
 
             if (Map.Structures.HasDeck(tile) && Map.Structures.DeckDm(tile) < actor.Species.BodyHeightDm)
                 return "a platform is in the way";
@@ -1265,11 +1267,17 @@ public sealed partial class Simulation
 
         var (blocked, toDeck) = SmallStep(actor, actor.Position, actor.OnDeck, direction, ignoreSmallActors: false);
         if (blocked is not null)
+        {
+            // walking into a live fence: it bites back
+            var ahead = actor.Position.Offset(direction);
+            if (!actor.OnDeck && Map.InBounds(ahead) && IsLiveFence(ahead))
+                return Shock(actor, ahead);
             return Bump(actor, blocked);
+        }
 
         var to = actor.Position.Offset(direction);
         if (!toDeck && IsClosedDoor(to))
-            return SwingDoor(actor, to, DoorState.Open);
+            return WorkDoor(actor, to, DoorState.Open);
 
         int step = Map.SurfaceHeight(to, toDeck) - StandHeight(actor);
         var cover = toDeck ? Covers.Deck : Map.CoverAt(to);
@@ -1526,9 +1534,9 @@ public sealed partial class Simulation
             case DoorState.Open:
                 if (ActorAt(tile) is { } inTheWay)
                     return Bump(actor, $"{inTheWay.Name} is in the doorway");
-                return SwingDoor(actor, tile, DoorState.Closed);
+                return WorkDoor(actor, tile, DoorState.Closed);
             case DoorState.Closed:
-                return SwingDoor(actor, tile, DoorState.Open);
+                return WorkDoor(actor, tile, DoorState.Open);
             default:
                 return Bump(actor, "the door is locked");
         }
@@ -1584,6 +1592,14 @@ public sealed partial class Simulation
     {
         var (anchor, facing, blocked, shove) = PlanLargeMove(actor, direction, allowShove);
         bool turning = facing != actor.Facing;
+        if (blocked == LiveFenceReason)
+        {
+            foreach (TilePos touched in CoreTiles(actor.Species.Body.Footprint(anchor, Compass16.Of(facing))))
+            {
+                if (IsLiveFence(touched))
+                    return Shock(actor, touched);
+            }
+        }
         if (blocked is not null)
             return Bump(actor, blocked);
 
@@ -1802,6 +1818,13 @@ public sealed partial class Simulation
 
     private void TryBreak(TilePos tile, int force, Actor? by)
     {
+        if (IsLiveFence(tile))
+        {
+            // a live fence holds, and whatever hit it gets the current
+            if (by is not null)
+                Shock(by, tile);
+            return;
+        }
         var type = Cover[tile];
         var cover = Covers.Get(type);
         if (cover.BrokenInto is not { } into || cover.BreakStrength > force)

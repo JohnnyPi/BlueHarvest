@@ -32,10 +32,19 @@ public sealed class PowerGrid
     // how long working each thing takes, in ticks
     public const int SwitchTicks = 300, ValveTicks = 500, StartTicks = 1000, RepairTicks = 6000, LineRepairTicks = 9000;
 
+    /// <summary>Floodlights come on below this much daylight (and standalone ones charge above it).</summary>
+    public const int DuskSunPercent = 20;
+
+    // rides: elevator and train speeds, m/s, and the time spent at the doors, ticks
+    public const int ElevatorMps = 2, TrainMps = 15, CableMps = 5, BoardingTicks = 2000;
+
     private readonly List<PowerSite> _sites = new();
     private readonly List<PowerDevice> _devices = new();
     private readonly List<Feeder> _feeders = new();
     private readonly List<PowerLamp> _lamps = new();
+    private readonly List<PowerDoor> _doors = new();
+    private readonly Dictionary<(int X, int Y), PowerDoor> _doorAt = new();
+    private readonly List<FenceLine> _fences = new();
     private readonly ulong _seed;
 
     public PowerGrid(ulong seed) => _seed = seed;
@@ -44,6 +53,8 @@ public sealed class PowerGrid
     public IReadOnlyList<PowerDevice> Devices => _devices;
     public IReadOnlyList<Feeder> Feeders => _feeders;
     public IReadOnlyList<PowerLamp> Lamps => _lamps;
+    public IReadOnlyList<PowerDoor> Doors => _doors;
+    public IReadOnlyList<FenceLine> FenceLines => _fences;
 
     // ---------------- building the network (PowerPlan does this for the island) ----------------
 
@@ -87,12 +98,55 @@ public sealed class PowerGrid
 
     public int NextDeviceId => _devices.Count;
 
-    public PowerLamp AddLamp(int siteId, int x, int y, int heightDm, int radiusTiles, int intensityPercent)
+    public PowerLamp AddLamp(int siteId, int x, int y, int heightDm, int radiusTiles, int intensityPercent,
+        LampKind kind = LampKind.Room, bool inCompound = true)
     {
-        var lamp = new PowerLamp(_lamps.Count, siteId, x, y, heightDm, radiusTiles, intensityPercent);
+        var lamp = new PowerLamp(_lamps.Count, siteId, x, y, heightDm, radiusTiles, intensityPercent, kind, inCompound);
         _lamps.Add(lamp);
         return lamp;
     }
+
+    /// <summary>Makes a floodlight run on its own panel and battery (or marks it broken).</summary>
+    public static void SetStandalone(PowerLamp lamp, int panelW, int capacityWh, int chargeWh, bool broken)
+    {
+        lamp.Standalone = true;
+        lamp.PanelW = panelW;
+        lamp.CapacityWh = capacityWh;
+        lamp.ChargeWh = Math.Clamp(chargeWh, 0, capacityWh);
+        lamp.Broken = broken;
+    }
+
+    /// <summary>A powered doorway; one per tile (a second at the same tile is ignored).</summary>
+    public PowerDoor AddDoor(int siteId, int x, int y, DoorKind kind, string room)
+    {
+        if (_doorAt.TryGetValue((x, y), out PowerDoor? had))
+            return had;
+        var door = new PowerDoor(_doors.Count, siteId, x, y, kind, room);
+        _doors.Add(door);
+        _doorAt[(x, y)] = door;
+        if (kind == DoorKind.SecurityLock)
+            _sites[siteId].HasSecurityDoors = true;
+        return door;
+    }
+
+    /// <summary>The powered door at a place in island metres, if any.</summary>
+    public PowerDoor? DoorAt(long x, long y) => _doorAt.TryGetValue(((int)x, (int)y), out PowerDoor? door) ? door : null;
+
+    /// <summary>A security door holds while its site has power and its locks are engaged.</summary>
+    public bool DoorLocked(PowerDoor door) =>
+        door.Kind == DoorKind.SecurityLock && _sites[door.SiteId] is { Powered: true, LocksEngaged: true };
+
+    /// <summary>A motorised door moves by itself only while its site has power.</summary>
+    public bool DoorPowered(PowerDoor door) => _sites[door.SiteId].Powered;
+
+    public FenceLine AddFenceLine(int feederId, string paddock, int[] poly)
+    {
+        var fence = new FenceLine(feederId, paddock, poly);
+        _fences.Add(fence);
+        return fence;
+    }
+
+    public static void SetLocks(PowerSite site, bool engaged) => site.LocksEngaged = engaged;
 
     // setters for the starting state, so generation and tests can set things up
     public static void SetBoard(PowerSite site, bool on, bool autoBackup) { site.BoardOn = on; site.AutoBackup = autoBackup; }
@@ -285,8 +339,49 @@ public sealed class PowerGrid
                 site.Powered = powered;
                 events.Add(powered
                     ? new PowerEvent(PowerEventKind.SiteLit, site.Id, $"The lights come on at the {site.Name}.")
-                    : new PowerEvent(PowerEventKind.SiteDark, site.Id, $"The {site.Name} goes dark."));
+                    : new PowerEvent(PowerEventKind.SiteDark, site.Id, $"The {site.Name} goes dark{(site.HasSecurityDoors && site.LocksEngaged ? ": the security doors unlock" : "")}."));
             }
+        }
+
+        // the lamps: room lights follow the power, emergency lights the lack of it, floodlights the dark
+        bool dark = sunPercent < DuskSunPercent;
+        int floodCloudSite = -1, floodCloud = 0;
+        foreach (PowerLamp lamp in _lamps)
+        {
+            PowerSite site = _sites[lamp.SiteId];
+            if (lamp.Kind != LampKind.Flood || !lamp.Standalone)
+            {
+                lamp.Lit = lamp.Kind switch
+                {
+                    LampKind.Room => site.Powered,
+                    LampKind.Emergency => !site.Powered,
+                    _ => site.Powered && dark,
+                };
+                continue;
+            }
+            if (lamp.Broken)
+            {
+                lamp.Lit = false;
+                continue;
+            }
+            if (consume)
+            {
+                if (!dark)
+                {
+                    if (floodCloudSite != site.Id)
+                    {
+                        floodCloudSite = site.Id;
+                        floodCloud = weatherAt(site.X, site.Y).CloudPercent;
+                    }
+                    long gainedWh = (long)lamp.PanelW * sunPercent / 100 * (100 - floodCloud * 7 / 10) / 100 / 60;
+                    lamp.ChargeWh = (int)Math.Min(lamp.CapacityWh, lamp.ChargeWh + gainedWh);
+                }
+                else if (lamp.ChargeWh > 0)
+                {
+                    lamp.ChargeWh = Math.Max(0, lamp.ChargeWh - (PowerLamp.FloodDrawW + 59) / 60);
+                }
+            }
+            lamp.Lit = dark && lamp.ChargeWh > 0;
         }
     }
 
@@ -345,6 +440,19 @@ public sealed class PowerGrid
                     yield return site.AutoBackup
                         ? new PowerChoice(PowerOp.BackupManual, -1, "Set the backup to manual", "it won't start by itself")
                         : new PowerChoice(PowerOp.BackupAuto, -1, "Set the backup to automatic", "it starts when the grid fails");
+                if (site.HasSecurityDoors)
+                    yield return site.LocksEngaged
+                        ? new PowerChoice(PowerOp.ReleaseLocks, -1, "Release the security locks", site.Powered ? "the security doors open" : "they're open while the power's off")
+                        : new PowerChoice(PowerOp.EngageLocks, -1, "Engage the security locks", site.Powered ? "the security doors lock" : "they'll lock when the power's back");
+                break;
+            case Transport t:
+                foreach (Transport to in Destinations(t))
+                {
+                    string? why = RideBlock(t, to);
+                    yield return new PowerChoice(PowerOp.Ride, to.Id,
+                        t.Kind == TransportKind.Monorail ? $"Take the elevator and the monorail to the {to.Stop}" : $"Ride the cable car to the {to.Stop}",
+                        why ?? $"{RideTicks(t, to) / 100 / 60 + 1} min", why is null);
+                }
                 break;
             case Generator g:
                 switch (g.State)
@@ -423,6 +531,23 @@ public sealed class PowerGrid
                     ? $"The breaker for the {to} clunks shut{(f.Down ? ", but that line is down somewhere" : "")}."
                     : $"You open the breaker for the {to}.", SwitchTicks, 25, Switch);
             }
+            case (Panel, PowerOp.EngageLocks or PowerOp.ReleaseLocks) when site is not null:
+                if (!site.HasSecurityDoors) return new PowerResult(false, "There are no security doors here.", 0);
+                site.LocksEngaged = op == PowerOp.EngageLocks;
+                return new PowerResult(true, site.LocksEngaged
+                    ? (site.Powered ? "You engage the security locks. Somewhere a bolt slams home." : "You engage the security locks. They'll hold once there's power.")
+                    : "You release the security locks.", SwitchTicks, 15, Switch);
+            case (Transport t, PowerOp.Ride):
+            {
+                if (arg < 0 || arg >= _devices.Count || _devices[arg] is not Transport to || to.Line != t.Line || to == t)
+                    return new PowerResult(false, "That's not a stop on this line.", 0);
+                if (RideBlock(t, to) is { } why)
+                    return new PowerResult(false, why, SwitchTicks, 10, Switch);
+                return new PowerResult(true, t.Kind == TransportKind.Monorail
+                    ? $"The elevator drops to the platform; a car hums in and takes you to the {to.Stop}."
+                    : $"The cabin lurches off the platform and swings out over the trees toward the {to.Stop}.",
+                    RideTicks(t, to), 25, t.Kind == TransportKind.Monorail ? "an elevator" : "a winch");
+            }
             case (Panel, PowerOp.BackupAuto or PowerOp.BackupManual) when site is not null:
                 site.AutoBackup = op == PowerOp.BackupAuto;
                 return new PowerResult(true, site.AutoBackup ? "The transfer switch is on automatic: the generator will start if the grid fails." : "The transfer switch is on manual.", SwitchTicks, 10, Switch);
@@ -487,6 +612,34 @@ public sealed class PowerGrid
         return new PowerResult(false, $"You can't do that with {device.Name}.", 0);
     }
 
+    /// <summary>The other stops on a transport's line.</summary>
+    public IEnumerable<Transport> Destinations(Transport from) =>
+        _devices.OfType<Transport>().Where(t => t.Line == from.Line && t != from);
+
+    /// <summary>
+    /// How long a ride takes, in ticks: down the shaft, along the line and up again (a cable car only
+    /// crosses), plus time at the doors. A ride of a few kilometres is a few action minutes.
+    /// </summary>
+    public static int RideTicks(Transport from, Transport to)
+    {
+        int along = Math.Abs(to.AlongM - from.AlongM);
+        long ticks = BoardingTicks + (from.Kind == TransportKind.Monorail
+            ? (long)(from.ShaftM + to.ShaftM) * 100 / ElevatorMps + (long)along * 100 / TrainMps
+            : (long)along * 100 / CableMps);
+        return (int)Math.Min(int.MaxValue, ticks);
+    }
+
+    /// <summary>Why a ride can't go now (null if it can): both ends of a monorail ride need power, a cable car its winch.</summary>
+    public string? RideBlock(Transport from, Transport to)
+    {
+        PowerSite here = _sites[from.SiteId], there = _sites[to.SiteId];
+        if (!here.Powered)
+            return from.Kind == TransportKind.Monorail ? $"The elevator is dead: no power from the {here.Name}." : $"The winch is dead: no power from the {here.Name}.";
+        if (!there.Powered)
+            return $"The far end has no power: the {there.Name} is dark.";
+        return null;
+    }
+
     /// <summary>Percent chance a repair takes: 45 untrained, 70 with some electronics, 90 for an expert.</summary>
     public static int RepairChance(int electronics) => Math.Min(90, 45 + 25 * Math.Max(0, electronics));
 
@@ -527,6 +680,9 @@ public sealed class PowerGrid
                 };
             case LineFault lf:
                 return _feeders[lf.FeederId].Down ? "A downed power line" : "A repaired power line";
+            case Transport t:
+                return (t.Kind == TransportKind.Monorail ? "Elevator to the monorail: " : "Cable car: ")
+                    + (_sites[t.SiteId].Powered ? "running" : $"no power (the {_sites[t.SiteId].Name})");
         }
         return device.Name;
     }
@@ -567,7 +723,12 @@ public sealed class PowerGrid
     public void AddTo(StateHasher hasher)
     {
         foreach (PowerSite s in _sites)
-            hasher.Add(s.BoardOn ? 1 : 0).Add(s.AutoBackup ? 1 : 0).Add(s.Powered ? 1 : 0).Add((int)s.Source);
+            hasher.Add(s.BoardOn ? 1 : 0).Add(s.AutoBackup ? 1 : 0).Add(s.Powered ? 1 : 0).Add((int)s.Source).Add(s.LocksEngaged ? 1 : 0);
+        foreach (PowerLamp l in _lamps)
+        {
+            if (l.Standalone)
+                hasher.Add(l.ChargeWh).Add(l.Lit ? 1 : 0);
+        }
         foreach (Feeder f in _feeders)
             hasher.Add((int)f.Breaker).Add(f.Down ? 1 : 0);
         foreach (PowerDevice d in _devices)

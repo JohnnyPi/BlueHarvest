@@ -467,9 +467,10 @@ public class PowerPlanTests
     public void LampsAndEquipment_SitInsideTheirCompounds()
     {
         PowerGrid grid = PowerPlan.Build(TestIslands.World("Default"), runSeed: 1);
-        foreach (PowerLamp lamp in grid.Lamps)
+        foreach (PowerLamp lamp in grid.Lamps.Where(l => l.InCompound))
             Assert.True(grid.Sites[lamp.SiteId].Contains(lamp.X, lamp.Y), $"a lamp of the {grid.Sites[lamp.SiteId].Name} is outside it");
-        foreach (PowerDevice d in grid.Devices.Where(d => d.SiteId >= 0))
+        // (elevators and cable cars stand at stations outside the compounds they run on)
+        foreach (PowerDevice d in grid.Devices.Where(d => d.SiteId >= 0 && d is not Transport))
         {
             var (x, y) = d.Footprint.Centre;
             Assert.True(grid.Sites[d.SiteId].Contains(x, y), $"{d.Name} of the {grid.Sites[d.SiteId].Name} is outside it");
@@ -531,14 +532,19 @@ public class SimulationPowerTests
     public void TheSitesLamps_AreLightsInTheWindow_OnWithTheSite()
     {
         var (sim, _, grid, site) = AtGenetics();
-        var lamps = grid.Lamps.Where(l => l.SiteId == site.Id).ToList();
+        var lamps = grid.Lamps.Where(l => l.SiteId == site.Id && l.InCompound).ToList();
         Assert.NotEmpty(lamps);
         foreach (PowerLamp lamp in lamps)
         {
             TilePos tile = sim.FromIsland(lamp.X, lamp.Y);
             Assert.True(sim.Map.InBounds(tile));
-            Assert.Contains(sim.Lights, l => l.Position == tile && l.RadiusTiles == lamp.RadiusTiles && l.On == site.Powered);
+            Assert.Contains(sim.Lights, l => l.Position == tile && l.RadiusTiles == lamp.RadiusTiles
+                && l.IntensityPercent == lamp.IntensityPercent && l.On == lamp.Lit && l.Red == (lamp.Kind == LampKind.Emergency));
         }
+        // by day: room lights with the power, emergency lights without it, floodlights off
+        Assert.All(lamps.Where(l => l.Kind == LampKind.Room), l => Assert.Equal(site.Powered, l.Lit));
+        Assert.All(lamps.Where(l => l.Kind == LampKind.Emergency), l => Assert.Equal(!site.Powered, l.Lit));
+        Assert.All(lamps.Where(l => l.Kind == LampKind.Flood), l => Assert.False(l.Lit));
     }
 
     [Fact]
@@ -560,8 +566,11 @@ public class SimulationPowerTests
         sim.RunUntil(sim.CurrentTick + 100); // the switch acts as the turn begins; the noise is still fresh
         Assert.False(site.Powered);
         Assert.Single(said);
-        TilePos lampTile = sim.FromIsland(grid.Lamps.First(l => l.SiteId == site.Id).X, grid.Lamps.First(l => l.SiteId == site.Id).Y);
-        Assert.DoesNotContain(sim.Lights, l => l.Position == lampTile && l.On);
+        PowerLamp roomLamp = grid.Lamps.First(l => l.SiteId == site.Id && l.Kind == LampKind.Room);
+        TilePos lampTile = sim.FromIsland(roomLamp.X, roomLamp.Y);
+        Assert.DoesNotContain(sim.Lights, l => l.Position == lampTile && l.On && !l.Red);
+        // the emergency lights take over
+        Assert.Contains(sim.Lights, l => l.On && l.Red);
         Assert.Contains(sim.RecentNoises, n => n.Kind == "a heavy switch");
     }
 

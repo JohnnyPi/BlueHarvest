@@ -10,6 +10,7 @@ namespace BlueHarvest.Sim.Lighting;
 /// <param name="IntensityPercent">Light added at the source itself.</param>
 /// <param name="ConeCosPermille">Cosine of the cone's half-angle ×1000; ignored without a facing.</param>
 /// <param name="On">Off lights (a switched-off flashlight, a burnt-out flare) light nothing and aren't seen.</param>
+/// <param name="Red">Red light (emergency lighting, flares): as bright for the eyes as any other, tinted red on screen.</param>
 public sealed record LightSource(
     TilePos Position,
     int HeightDm,
@@ -17,7 +18,8 @@ public sealed record LightSource(
     int IntensityPercent,
     Direction? Facing = null,
     int ConeCosPermille = -1000,
-    bool On = true)
+    bool On = true,
+    bool Red = false)
 {
     /// <summary>Battery emergency light on a 3 m pole.</summary>
     public static LightSource Emergency(TilePos position) => new(position, HeightDm: 30, RadiusTiles: 6, IntensityPercent: 60);
@@ -27,7 +29,7 @@ public sealed record LightSource(
         new(position, HeightDm: 10, RadiusTiles: 16, IntensityPercent: 90, Facing: facing, ConeCosPermille: 800);
 
     /// <summary>A road flare on the ground: bright, red, all round, short reach.</summary>
-    public static LightSource Flare(TilePos position) => new(position, HeightDm: 2, RadiusTiles: 7, IntensityPercent: 90);
+    public static LightSource Flare(TilePos position) => new(position, HeightDm: 2, RadiusTiles: 7, IntensityPercent: 90, Red: true);
 
     /// <summary>A hand-held flashlight: a narrow beam (about 30° either side) at chest height.</summary>
     public static LightSource Flashlight(TilePos position, Direction facing) =>

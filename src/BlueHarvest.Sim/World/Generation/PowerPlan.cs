@@ -47,6 +47,20 @@ public static class PowerPlan
 
     private static readonly string[] BatteryRooms = ["UPS and batteries", "Battery room"];
 
+    /// <summary>
+    /// Rooms behind security doors: maglocks that hold while the facility has power. None of them
+    /// holds power equipment, so the switch panel that releases the locks can always be reached.
+    /// </summary>
+    private static readonly HashSet<string> SecureRooms =
+    [
+        "Server hall", "Data centre", "Cryo vault", "Armoury", "Security office", "Security", "Sequencing lab", "Embryology lab",
+        "Fertilisation lab", "Clean room", "Genetics lab", "Specimen store", "Records", "Health physics",
+        "Fuel pool", "Cask store", "Accumulator chamber", "Holding cell 1", "Holding cell 2", "Holding cell 3", "Holding cell 4", "Animal holding",
+    ];
+
+    /// <summary>Rooms whose doors are motorised: elevators, airlocks, and the big doors of vehicle bays and cargo halls.</summary>
+    private static readonly HashSet<string> MotorRooms = ["Elevator", "Airlock", "Vehicle bays", "Hangar floor", "Boat bays", "Cargo hall"];
+
     /// <summary>Kinds whose generator matters most: they get two ways back to power of their own.</summary>
     private static readonly HashSet<string> Majors = ["genetics", "control", "nuclear", "geothermal", "lab", "depot", "docks", "airstrip"];
 
@@ -76,6 +90,7 @@ public static class PowerPlan
         // ---- their rooms and yards, read back from the compounds' primitives ----
         var rooms = new Dictionary<int, List<RoomInfo>>();
         var fuelYards = new Dictionary<int, (Footprint Box, int Tanks)>();
+        var buildings = new List<(Prim Building, int SiteId)>();
         foreach (Prim p in works.Prims.InOrder(works.CompoundPrims))
         {
             string[] parts = works.Labels[p.Label].Split(" · ");
@@ -83,6 +98,7 @@ public static class PowerPlan
                 continue;
             if (p.Kind == PrimKind.Building && p.Rooms is not null)
             {
+                buildings.Add((p, site.Id));
                 if (!rooms.TryGetValue(site.Id, out List<RoomInfo>? list))
                     rooms[site.Id] = list = new List<RoomInfo>();
                 foreach (Room r in p.Rooms)
@@ -150,12 +166,21 @@ public static class PowerPlan
                 }
             }
 
-            // lamps: a grid of ceiling lights in every room, floodlights at the compound's corners
-            foreach (RoomInfo r in mine)
-                AddRoomLamps(grid, site.Id, r);
+            // lamps: a grid of ceiling lights in every room, a red emergency light in every other room,
+            // floodlights at the compound's corners (most on their own panel and battery)
+            for (int k = 0; k < mine.Count; k++)
+                AddRoomLamps(grid, site.Id, mine[k], emergency: k % 2 == 0, inCompound: true);
             int c = Math.Max(4, site.Radius - 6);
+            bool standalone = Roll("flood-solar", site.Name) < 65;
+            int corner = 0;
             foreach ((int dx, int dy) in new[] { (-1, -1), (1, -1), (-1, 1), (1, 1) })
-                grid.AddLamp(site.Id, site.X + dx * c, site.Y + dy * c, heightDm: 60, radiusTiles: 14, intensityPercent: 75);
+            {
+                PowerLamp flood = grid.AddLamp(site.Id, site.X + dx * c, site.Y + dy * c, heightDm: 60, radiusTiles: 14, intensityPercent: 75, LampKind.Flood);
+                string floodKey = $"{site.Name}#{corner++}";
+                if (standalone)
+                    PowerGrid.SetStandalone(flood, panelW: 150, capacityWh: 1500, chargeWh: 300 + Roll("flood-charge", floodKey) * 12,
+                        broken: Roll("flood-broken", floodKey) < 20);
+            }
         }
 
         // ---- the lines: the generated power tree, the fences, and the tie between the two plants' networks ----
@@ -170,6 +195,15 @@ public static class PowerPlan
             lines.Add((f, l));
         }
         AddTie(grid);
+        AddStations(grid, works, byName);
+        AddDoors(grid, buildings, works.Labels);
+        foreach (Paddock q in works.Paddocks)
+        {
+            Feeder? fence = grid.Feeders.FirstOrDefault(f => f.ToFence && f.ToName == q.Name);
+            if (fence is null)
+                continue;
+            grid.AddFenceLine(fence.Id, q.Name, q.Poly.Select(v => (int)Math.Round(v)).ToArray());
+        }
 
         // ---- how it was all left ----
         foreach ((Feeder f, PowerLine l) in lines)
@@ -212,8 +246,11 @@ public static class PowerPlan
         return grid;
     }
 
-    /// <summary>Ceiling lights inside a room's walls, about one per 12 m each way.</summary>
-    private static void AddRoomLamps(PowerGrid grid, int siteId, RoomInfo r)
+    /// <summary>
+    /// Ceiling lights inside a room's walls, about one per 12 m each way, and (if asked) one dim red
+    /// emergency light by the room's corner.
+    /// </summary>
+    private static void AddRoomLamps(PowerGrid grid, int siteId, RoomInfo r, bool emergency, bool inCompound)
     {
         int w = r.X1 - r.X0 - 1, h = r.Y1 - r.Y0 - 1;
         if (w < 1 || h < 1)
@@ -223,7 +260,95 @@ public static class PowerPlan
         for (int j = 0; j < ny; j++)
             for (int i = 0; i < nx; i++)
                 grid.AddLamp(siteId, r.X0 + 1 + (2 * i + 1) * w / (2 * nx), r.Y0 + 1 + (2 * j + 1) * h / (2 * ny),
-                    heightDm: 25, radiusTiles: radius, intensityPercent: 70);
+                    heightDm: 25, radiusTiles: radius, intensityPercent: 70, LampKind.Room, inCompound);
+        if (emergency)
+            grid.AddLamp(siteId, r.X0 + 1, r.Y0 + 1, heightDm: 22, radiusTiles: 5, intensityPercent: 30, LampKind.Emergency, inCompound);
+    }
+
+    /// <summary>
+    /// The monorail stations' elevators and the cable cars' cabin halls, with their stations' lights.
+    /// A monorail station runs on the power of the facility it serves; a cable car on its winch end's.
+    /// </summary>
+    private static void AddStations(PowerGrid grid, IslandWorks works, Dictionary<string, PowerSite> byName)
+    {
+        // where each stop is along its line, and what powers it, by "line · Station at …"
+        var stops = new Dictionary<string, (TransportKind Kind, PowerSite Power, int AlongM, int ShaftM)>();
+        if (works.Monorail is { } mono)
+        {
+            double along = 0;
+            for (int k = 0; k < mono.Stations.Count; k++)
+            {
+                MonorailStation st = mono.Stations[k];
+                if (k > 0)
+                    along += Math.Sqrt((double)(st.X - mono.Stations[k - 1].X) * (st.X - mono.Stations[k - 1].X)
+                        + (double)(st.Y - mono.Stations[k - 1].Y) * (st.Y - mono.Stations[k - 1].Y));
+                if (byName.TryGetValue(st.Power, out PowerSite? power))
+                    stops[$"{mono.Name} · Station at {st.Name}"] = (TransportKind.Monorail, power, (int)Math.Round(along), (int)Math.Round(Math.Max(0, st.Shaft)));
+            }
+        }
+        foreach (Lift lift in works.Lifts)
+        {
+            if (!byName.TryGetValue(lift.From, out PowerSite? winch))
+                continue;
+            stops[$"{lift.Name} · Station at {lift.From}"] = (TransportKind.CableCar, winch, 0, 0);
+            stops[$"{lift.Name} · Station at {lift.To}"] = (TransportKind.CableCar, winch, (int)Math.Round(lift.Km * 1000), 0);
+        }
+
+        foreach (Prim p in works.Prims.InOrder())
+        {
+            if (p.Kind != PrimKind.Building || p.Rooms is null || !stops.TryGetValue(works.Labels[p.Label], out var stop))
+                continue;
+            string[] parts = works.Labels[p.Label].Split(" · ");
+            string line = parts[0], name = parts.Length > 1 ? parts[1] : parts[0];
+            var stationRooms = p.Rooms.Select(r =>
+            {
+                string[] rp = works.Labels[r.Label].Split(" · ");
+                return new RoomInfo(name, rp[^1], r.X0, r.Y0, r.X1, r.Y1);
+            }).ToList();
+            for (int k = 0; k < stationRooms.Count; k++)
+                AddRoomLamps(grid, stop.Power.Id, stationRooms[k], emergency: k == 0, inCompound: false);
+            RoomInfo? board = stationRooms.Find(r => r.Name == (stop.Kind == TransportKind.Monorail ? "Elevator" : "Cabin hall"));
+            if (board is not null)
+                grid.AddDevice(new Transport(grid.NextDeviceId, stop.Power.Id,
+                    stop.Kind == TransportKind.Monorail ? "the elevator" : "the cable car", board.Footprint,
+                    stop.Kind, line, name, stop.AlongM, stop.ShaftM));
+            AddDoorsOf(grid, p, stop.Power.Id, stationRooms);
+        }
+    }
+
+    /// <summary>The powered doors of the compounds' buildings.</summary>
+    private static void AddDoors(PowerGrid grid, List<(Prim Building, int SiteId)> buildings, List<string> labels)
+    {
+        foreach ((Prim b, int siteId) in buildings)
+        {
+            if (b.Rooms is null)
+                continue;
+            var named = b.Rooms.Select(r => new RoomInfo("", labels[r.Label].Split(" · ")[^1], r.X0, r.Y0, r.X1, r.Y1)).ToList();
+            AddDoorsOf(grid, b, siteId, named);
+        }
+    }
+
+    /// <summary>
+    /// A door is a security door if it opens onto a secure room, motorised if it opens onto an elevator,
+    /// an airlock, a vehicle bay, a hangar floor, a boat bay or a cargo hall.
+    /// </summary>
+    private static void AddDoorsOf(PowerGrid grid, Prim building, int siteId, List<RoomInfo> rooms)
+    {
+        if (building.Doors is null)
+            return;
+        foreach ((int x, int y) in building.Doors)
+        {
+            var touching = rooms.Where(t => x >= t.X0 && x <= t.X1 && y >= t.Y0 && y <= t.Y1).Select(t => t.Name).ToList();
+            string? secure = touching.FirstOrDefault(SecureRooms.Contains);
+            if (secure is not null)
+            {
+                grid.AddDoor(siteId, x, y, DoorKind.SecurityLock, secure);
+                continue;
+            }
+            string? motor = touching.FirstOrDefault(MotorRooms.Contains);
+            if (motor is not null)
+                grid.AddDoor(siteId, x, y, DoorKind.Motor, motor);
+        }
     }
 
     /// <summary>

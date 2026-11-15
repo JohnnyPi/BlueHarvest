@@ -322,6 +322,7 @@ public partial class Main : Node2D
         _sim.RunUntilInputNeeded();
         // on the island the map follows the player: near an edge it scrolls and new ground streams in
         _windowShifted = false;
+        ArriveFromRide(); // at the far end of an elevator or cable-car ride, the window goes too
         if (_island is not null && !_playerActor.IsGone)
             _island.Follow(_sim, _playerActor);
         _director.Update(_sim, _playerActor);

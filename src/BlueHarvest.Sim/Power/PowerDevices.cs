@@ -48,7 +48,35 @@ public enum PowerOp : byte
     Disconnect,
     Restart,
     Shutdown,
+    /// <summary>Lock the facility's security doors (they hold while it has power).</summary>
+    EngageLocks,
+    /// <summary>Release the facility's security doors.</summary>
+    ReleaseLocks,
+    /// <summary>Ride an elevator or cable car to another stop (the argument is the destination's device id).</summary>
+    Ride,
 }
+
+/// <summary>What a facility lamp is for.</summary>
+public enum LampKind : byte
+{
+    /// <summary>A ceiling light: on while its facility has power.</summary>
+    Room,
+    /// <summary>A dim red light on its own battery: on while its facility has no power.</summary>
+    Emergency,
+    /// <summary>A floodlight on a pole: dusk to dawn, on the facility's power or on its own panel and battery.</summary>
+    Flood,
+}
+
+/// <summary>What kind of powered door a doorway holds.</summary>
+public enum DoorKind : byte
+{
+    /// <summary>A maglock: locked while its facility has power and its locks are engaged; it fails safe, opening when the power dies.</summary>
+    SecurityLock,
+    /// <summary>A motorised door: slides open with power; without, it has to be forced, slowly and loudly.</summary>
+    Motor,
+}
+
+public enum TransportKind : byte { Monorail, CableCar }
 
 /// <summary>A rectangle in island metres (inclusive). Devices are worked from inside it or next to it.</summary>
 public readonly record struct Footprint(int X0, int Y0, int X1, int Y1)
@@ -170,8 +198,62 @@ public sealed class Feeder(int id, int from, int to, string toName, bool undergr
     public bool ToFence => To < 0;
 }
 
-/// <summary>A light at a facility, in island metres: on while its site is powered.</summary>
-public sealed record PowerLamp(int Id, int SiteId, int X, int Y, int HeightDm, int RadiusTiles, int IntensityPercent);
+/// <summary>
+/// A light at a facility or a station, in island metres. Whether it is on (<see cref="Lit"/>) depends on
+/// its kind: room lights follow the power, emergency lights come on without it, floodlights shine from
+/// dusk to dawn on the facility's power or (<see cref="Standalone"/>) their own panel and battery.
+/// </summary>
+public sealed class PowerLamp(int id, int siteId, int x, int y, int heightDm, int radiusTiles, int intensityPercent, LampKind kind, bool inCompound)
+{
+    public int Id { get; } = id;
+    /// <summary>The site whose power it runs on (for a station, the site that powers the station).</summary>
+    public int SiteId { get; } = siteId;
+    public int X { get; } = x;
+    public int Y { get; } = y;
+    public int HeightDm { get; } = heightDm;
+    public int RadiusTiles { get; } = radiusTiles;
+    public int IntensityPercent { get; } = intensityPercent;
+    public LampKind Kind { get; } = kind;
+    /// <summary>Inside its site's compound (false for transit stations).</summary>
+    public bool InCompound { get; } = inCompound;
+
+    /// <summary>A floodlight with its own solar panel and battery, not on the facility's power.</summary>
+    public bool Standalone { get; internal set; }
+    /// <summary>Broken: the bulb, the panel or the battery is gone. Never lights.</summary>
+    public bool Broken { get; internal set; }
+    public int ChargeWh { get; internal set; }
+    public int CapacityWh { get; internal set; }
+    public int PanelW { get; internal set; }
+    /// <summary>What a standalone floodlight draws while lit, W.</summary>
+    public const int FloodDrawW = 150;
+
+    /// <summary>On now.</summary>
+    public bool Lit { get; internal set; }
+}
+
+/// <summary>A powered doorway at a facility or a station, in island metres.</summary>
+public sealed record PowerDoor(int Id, int SiteId, int X, int Y, DoorKind Kind, string Room);
+
+/// <summary>A paddock fence line fed by a fence feeder: a closed polyline in island metres.</summary>
+public sealed record FenceLine(int FeederId, string Paddock, int[] Poly);
+
+/// <summary>
+/// An elevator down to the monorail, or a cable car's cabin hall: worked from inside its room, it
+/// takes you to another stop on the same line. It runs on <see cref="PowerDevice.SiteId"/>'s power.
+/// </summary>
+public sealed class Transport(int id, int siteId, string name, Footprint footprint, TransportKind kind, string line, string stop, int alongM, int shaftM)
+    : PowerDevice(id, siteId, name, footprint)
+{
+    public TransportKind Kind { get; } = kind;
+    /// <summary>The line's name: every transport on it can reach every other.</summary>
+    public string Line { get; } = line;
+    /// <summary>The stop's name ("Station at Genetics complex").</summary>
+    public string Stop { get; } = stop;
+    /// <summary>How far along the line the stop is, m.</summary>
+    public int AlongM { get; } = alongM;
+    /// <summary>The elevator shaft from the surface to the platform, m (0 for a cable car).</summary>
+    public int ShaftM { get; } = shaftM;
+}
 
 /// <summary>A facility on the power network.</summary>
 public sealed class PowerSite(int id, string name, string kind, int x, int y, int radius, int loadKw)
@@ -191,6 +273,10 @@ public sealed class PowerSite(int id, string name, string kind, int x, int y, in
     public bool BoardOn { get; internal set; }
     /// <summary>The transfer switch on auto starts the backup generator when the grid goes, and stops it when it returns.</summary>
     public bool AutoBackup { get; internal set; }
+    /// <summary>The security doors' locks are engaged: they hold while the site has power.</summary>
+    public bool LocksEngaged { get; internal set; } = true;
+    /// <summary>Whether the site has any security doors (the panel offers the lock switch only then).</summary>
+    public bool HasSecurityDoors { get; internal set; }
 
     public int? PanelId { get; internal set; }
     public int? GeneratorId { get; internal set; }

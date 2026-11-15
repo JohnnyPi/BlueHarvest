@@ -111,6 +111,15 @@ public partial class AsciiMapView : Node2D
     private static readonly Color ActorBacking = new(0f, 0f, 0f, 0.5f);
     private static readonly Color LightGlow = new(1f, 0.72f, 0.3f, 0.12f);
     private static readonly Color LightGlyph = new(1f, 0.8f, 0.35f);
+
+    /// <summary>What red light (emergency lights, flares) multiplies a tile's colour by at full strength.</summary>
+    private static readonly Color RedLight = new(1.35f, 0.42f, 0.36f);
+
+    /// <summary>Paddock fence wire with power in it.</summary>
+    private static readonly Color LiveFenceInk = new(0.55f, 0.85f, 1f);
+
+    /// <summary>A red emergency light's own glyph.</summary>
+    private static readonly Color EmergencyGlyph = new(1f, 0.3f, 0.25f);
     private static readonly Color RememberedLamp = new(0.67f, 0.6f, 0.45f, 0.5f);
     private static readonly Color RexSeen = new(1f, 0.15f, 0.1f, 0.45f);
     private static readonly Color RexGlimpse = new(1f, 0.15f, 0.1f, 0.14f);
@@ -443,14 +452,15 @@ public partial class AsciiMapView : Node2D
             background = ScaleColor(background, jitter);
         }
         int light = roofed ? sim.EffectiveAmbientPercent : sim.Light.LevelAt(p);
+        float red = roofed ? 0f : sim.Light.RedPercentAt(p) / 100f;
         bool dimmed = o.PlayerView && o.PlayerVisibleTiles is { } visible && !visible[p.Y * sim.Map.Width + p.X];
 
-        DrawRect(cell, Tone(background, shade, light, state, dimmed));
+        DrawRect(cell, Tone(background, shade, light, state, dimmed, red));
         if (!roofed)
         {
             var (glyph, ink) = GlyphFor(p, cover, look.Glyph, look.Ink, state);
             if (glyph != ' ')
-                DrawGlyphAt(glyph, p.X * CellSize, top, Tone(ink, Math.Min(1.25f, shade * 1.2f), light, state, dimmed));
+                DrawGlyphAt(glyph, p.X * CellSize, top, Tone(ink, Math.Min(1.25f, shade * 1.2f), light, state, dimmed, red));
         }
         else if (o.Varied && p.Y % 2 == 0)
         {
@@ -469,7 +479,7 @@ public partial class AsciiMapView : Node2D
             int faceLight = sim.Map.InBounds(south) ? Math.Max(light, sim.Light.LevelAt(south)) : light;
             var faceColor = roofed ? MapLook.RoofFace : MapLook.Face(cover);
             var faceRect = new Rect2(p.X * CellSize, top + CellSize, CellSize, face);
-            DrawRect(faceRect, Tone(faceColor, 1f, faceLight, state, dimmed));
+            DrawRect(faceRect, Tone(faceColor, 1f, faceLight, state, dimmed, red));
             DrawFaceTexture(p, cover, roofed, faceRect);
             DrawLine(faceRect.Position, new Vector2(faceRect.End.X, faceRect.Position.Y), RimLight, 1f);
         }
@@ -552,7 +562,7 @@ public partial class AsciiMapView : Node2D
             if (RoofShown(p))
                 continue; // a ceiling light in a building you're not in: its light shows, the lamp doesn't
             DrawGlyphAt('*', p.X * CellSize, p.Y * CellSize - Lift(p),
-                flare ? FlareInk : state == FogState.Remembered ? RememberedLamp : LightGlyph);
+                flare ? FlareInk : state == FogState.Remembered ? RememberedLamp : light.Red ? EmergencyGlyph : LightGlyph);
         }
 
         // A sparking fence section flickers between a bright and a dim crackle while it's live.
@@ -873,7 +883,8 @@ public partial class AsciiMapView : Node2D
     /// A colour as the fog and light leave it. In view: scaled by height shade and (with lighting on) the
     /// light grid. Remembered: a cool, unlit grey. "Your view" debug overlay dims what you can't see.
     /// </summary>
-    private Color Tone(Color c, float shade, int light, FogState state, bool dimmed)
+    /// <param name="red">How much of the tile's light is red, 0–1 (LightGrid.RedPercentAt).</param>
+    private Color Tone(Color c, float shade, int light, FogState state, bool dimmed, float red = 0f)
     {
         if (state == FogState.Remembered)
         {
@@ -886,6 +897,8 @@ public partial class AsciiMapView : Node2D
         if (dimmed)
             f *= 0.25f;
         Color sky = Overlays.Lighting ? Overlays.SkyTint : new Color(1f, 1f, 1f);
+        if (Overlays.Lighting && red > 0f)
+            sky = new Color(sky.R * Mathf.Lerp(1f, RedLight.R, red), sky.G * Mathf.Lerp(1f, RedLight.G, red), sky.B * Mathf.Lerp(1f, RedLight.B, red));
         return new Color(c.R * f * sky.R, c.G * f * sky.G, c.B * f * sky.B, c.A);
     }
 
@@ -906,6 +919,8 @@ public partial class AsciiMapView : Node2D
                 _ => ('+', LockedInk),
             };
         }
+        if (cover == CoverType.Fence && state == FogState.Visible && sim.IsLiveFence(p))
+            return (Overlays.Varied ? MapLook.VariedGlyph(cover, p.X, p.Y, CoverAt) : glyph, LiveFenceInk);
         if (cover == CoverType.Vehicle && state == FogState.Visible && sim.VehicleAt(p) is { } vehicle)
         {
             var damaged = ink.Lerp(DamagedInk, 1f - vehicle.Integrity / (float)Vehicle.MaxIntegrity);

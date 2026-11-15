@@ -22,6 +22,9 @@ public static class NoiseKinds
     public const string Sparks = "crackling sparks";
     public const string SnappingWire = "snapping wire";
     public const string Generator = "a running generator";
+    public const string ElectricCrack = "an electric crack";
+    public const string DoorSliding = "a door sliding";
+    public const string DoorForced = "a door being forced";
 
     /// <summary>Someone hurt cries out. A creature that hears it knows it's prey.</summary>
     public const string Scream = "a scream";
