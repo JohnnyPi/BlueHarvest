@@ -137,6 +137,7 @@ public sealed partial class Simulation
 
         _lightGrid = null;
         SyncPowerWorld(); // facility lamps, doors and fences that came into the window, and those that left
+        SyncWater();      // the tide and the rivers on the ground that came in
 
         // ---- minds ----
         foreach (Actor actor in _actors)

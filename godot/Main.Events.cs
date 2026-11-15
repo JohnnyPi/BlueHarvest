@@ -39,6 +39,9 @@ public partial class Main
         _sim.Shocked += OnShocked;
         _sim.DoorForced += OnDoorForced;
         _sim.RideEnded += OnRideEnded;
+        _sim.WaterMoved += OnWaterMoved;
+        _sim.WaterChanged += OnWaterChanged;
+        _sim.Swept += OnSwept;
         // what the weather is at the start, without saying so
         _weatherQuiet = true;
         OnWeatherChanged(_sim.Weather.Settings);

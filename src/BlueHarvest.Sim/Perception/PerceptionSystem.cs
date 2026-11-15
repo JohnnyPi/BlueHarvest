@@ -261,7 +261,8 @@ public static class PerceptionSystem
 
     /// <summary>
     /// How loud a noise of <paramref name="loudness"/> at <paramref name="source"/> is where the listener
-    /// stands, after the weather's masking at <paramref name="atTick"/> (the current tick if left out).
+    /// stands, after the weather's masking at <paramref name="atTick"/> (the current tick if left out)
+    /// and the roar of running water or surf around the listener.
     /// </summary>
     public static int HearingLevel(Simulation sim, Actor listener, TilePos source, int loudness, long? atTick = null)
     {
@@ -279,7 +280,8 @@ public static class PerceptionSystem
             - trace.SolidTiles * 6
             - (trace.TerrainBlocked ? 10 : 0)
             - (trace.RoofBlocked ? 12 : 0)
-            - sim.Weather.HearingMask(atTick ?? sim.CurrentTick);
+            - sim.Weather.HearingMask(atTick ?? sim.CurrentTick)
+            - sim.WaterMaskAt(at);
     }
 
     /// <summary>How bright a light source looks to the observer, 0-100; 0 if out of view.</summary>

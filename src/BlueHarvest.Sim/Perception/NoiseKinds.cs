@@ -23,6 +23,7 @@ public static class NoiseKinds
     public const string SnappingWire = "snapping wire";
     public const string Generator = "a running generator";
     public const string ElectricCrack = "an electric crack";
+    public const string Splashing = "splashing";
     public const string DoorSliding = "a door sliding";
     public const string DoorForced = "a door being forced";
 

@@ -498,6 +498,7 @@ public partial class Main
                   $"in an hour: {inAnHour.Describe()}\n"
                 : "") +
             PowerReadout() +
+            WaterReadout() +
             (_island is { } island
                 ? $"Away from here: {island.Changes.TileCount} changed tiles kept in {island.Changes.ChunkCount} chunks, " +
                   $"{_sim.Actors.Count(a => a.LeftBehind)} left behind\n"

@@ -2,17 +2,36 @@ namespace BlueHarvest.Sim.World.Generation;
 
 /// <summary>
 /// Turns the island's 1 m tiles into the game's map tiles: cover types with rules, heights in 0.5 m
-/// levels, roofs over building interiors, closed doors and the current in the rivers.
+/// levels, roofs over building interiors, closed doors, the current in the rivers, and where the tide
+/// and the rivers' floods can reach.
 /// </summary>
 public sealed class IslandTiles
 {
     /// <summary>Water deeper than this (m) can't be waded.</summary>
     public const double WadeDepth = 1.2;
 
+    /// <summary>The tide can cover sea-edge ground from this far below mean sea level (dm)…</summary>
+    public const int TidalLowestDm = -(WaterLevels.WadeDepthDm + WaterLevels.SpringAmplitudeDm + WaterLevels.DailyAmplitudeDm);
+
+    /// <summary>…to this far above it.</summary>
+    public const int TidalHighestDm = WaterLevels.SpringAmplitudeDm + WaterLevels.DailyAmplitudeDm;
+
+    /// <summary>A flood can reach river banks up to this far above the river's usual surface (dm).</summary>
+    public const int FloodHighestDm = 40;
+
+    /// <summary>Ground a flood can cover and leave as it was: land with nothing built on it.</summary>
+    private static readonly HashSet<CoverType> FloodableCovers =
+    [
+        CoverType.Grass, CoverType.Scrub, CoverType.SparseJungle, CoverType.DenseJungle, CoverType.Mud, CoverType.TallGrass,
+        CoverType.Ferns, CoverType.Reeds, CoverType.Sand, CoverType.BareRock,
+    ];
+
     private readonly HashSet<int> _indoorLabels = [];
+    private readonly IslandShape _shape;
 
     public IslandTiles(IslandWorld world)
     {
+        _shape = world.Shape;
         // a tile is indoors when its label is a building's or one of its rooms'
         foreach (Prim q in world.Works.Prims.InOrder())
         {
@@ -84,8 +103,72 @@ public sealed class IslandTiles
                 map.Flow[p] = type is CoverType.ShallowWater or CoverType.DeepWater
                     ? new WaterFlow(chunk.FlowX[k], chunk.FlowY[k])
                     : WaterFlow.None;
+                map.Water[p] = WaterFor(chunk, k, cover, type);
             }
         }
+    }
+
+    /// <summary>
+    /// Where water can come and go on a tile: the sea's edge between the lowest low and the highest
+    /// high water, a river's bed, and its banks up to <see cref="FloodHighestDm"/> above its surface.
+    /// </summary>
+    private WaterTile WaterFor(IslandChunk chunk, int k, Cover cover, CoverType type)
+    {
+        double ground = chunk.Height[k];
+        if (cover is Cover.Shallow or Cover.Reef or Cover.Deep or Cover.Beach)
+        {
+            Direction? facing = ShoreFacing(chunk.X0 + k % chunk.Size + 0.5, chunk.Y0 + k / chunk.Size + 0.5);
+            int dm = (int)Math.Round(ground * 10);
+            bool tidal = cover != Cover.Deep && dm >= TidalLowestDm && dm <= TidalHighestDm
+                && (cover != Cover.Beach || type == CoverType.Sand);
+            if (!tidal)
+                return facing is null ? WaterTile.None : new WaterTile(WaterKind.None, 0, type, -1, facing);
+            return new WaterTile(WaterKind.Sea, (short)dm, cover == Cover.Reef ? CoverType.BareRock : CoverType.Sand, -1, facing);
+        }
+        int river = chunk.River[k];
+        if (river < 0 || float.IsNaN(chunk.RiverLevel[k]))
+            return WaterTile.None;
+        int rel = (int)Math.Round((ground - chunk.RiverLevel[k]) * 10);
+        if (cover == Cover.River)
+            return new WaterTile(WaterKind.River, (short)Math.Min(-1, rel), CoverType.Mud, (short)river, null);
+        if (!FloodableCovers.Contains(type) || rel > FloodHighestDm)
+            return WaterTile.None;
+        return new WaterTile(WaterKind.River, (short)Math.Max(1, rel), type, (short)river, null);
+    }
+
+    /// <summary>
+    /// The way the nearest stretch of coast looks out to sea, from the coarse grid's coast normals
+    /// within a cell and a half; null far from any coast.
+    /// </summary>
+    private Direction? ShoreFacing(double x, double y)
+    {
+        IslandShape s = _shape;
+        double cell = s.Cell;
+        int cx = (int)Math.Floor(x / cell), cy = (int)Math.Floor(y / cell);
+        double best = double.MaxValue;
+        float nx = 0, ny = 0;
+        for (int yy = cy - 1; yy <= cy + 1; yy++)
+        {
+            for (int xx = cx - 1; xx <= cx + 1; xx++)
+            {
+                if (xx < 0 || yy < 0 || xx >= s.Nx || yy >= s.Ny) continue;
+                int i = yy * s.Nx + xx;
+                if (s.CoastNx[i] == 0 && s.CoastNy[i] == 0) continue;
+                double ddx = (xx + 0.5) * cell - x, ddy = (yy + 0.5) * cell - y, d2 = ddx * ddx + ddy * ddy;
+                if (d2 < best) { best = d2; nx = s.CoastNx[i]; ny = s.CoastNy[i]; }
+            }
+        }
+        if (best == double.MaxValue) return null;
+        // the nearest of the eight directions (the one the normal points along most)
+        Direction facing = Direction.North;
+        double most = double.MinValue;
+        foreach (Direction d in Directions.All)
+        {
+            var (dx, dy) = d.Delta();
+            double along = (nx * dx + ny * dy) / (dx != 0 && dy != 0 ? Math.Sqrt(2) : 1);
+            if (along > most) { most = along; facing = d; }
+        }
+        return facing;
     }
 }
 
@@ -185,8 +268,8 @@ public sealed class IslandWindow
             for (int i = 0; i < Chunk; i++)
             {
                 var p = new TilePos(left + i, top + j);
-                // a vehicle is a thing standing on the ground, not a change to it
-                CoverType cover = Map.Cover[p] == CoverType.Vehicle ? _pristine.Cover[p] : Map.Cover[p];
+                // a vehicle is a thing standing on the ground, not a change to it; nor is the tide or a flood
+                CoverType cover = Map.Cover[p] == CoverType.Vehicle || Map.Water[p].IsWaterState(Map.Cover[p]) ? _pristine.Cover[p] : Map.Cover[p];
                 StructureMap now = Map.Structures, was = _pristine.Structures;
                 if (cover == _pristine.Cover[p] && now.RoofDm(p) == was.RoofDm(p) && now.DoorAt(p) == was.DoorAt(p)
                     && now.DeckDm(p) == was.DeckDm(p) && now.HasLadder(p) == was.HasLadder(p)) continue;

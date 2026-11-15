@@ -532,6 +532,9 @@ public sealed partial class Simulation
         actor.LastScentTick = CurrentTick;
         if (VehicleAt(at) is { Breached: false })
             return;
+        // running water carries scent away: a trail breaks where it crosses a river
+        if (!CurrentAt(at).IsNone)
+            return;
         long wash = Weather.Wash(CurrentTick);
         if (actor.Species.ScentStrength > 0)
             AddScent(new ScentMark(at, CurrentTick, actor.Id, actor.Species.ScentStrength, Blood: false, wash));
@@ -553,11 +556,11 @@ public sealed partial class Simulation
             return;
         long from = _weatherTick;
         _weatherTick = CurrentTick;
-        if (FollowingWeatherSource || Power is not null)
+        if (FollowingWeatherSource || Power is not null || Waters is not null)
         {
             // look the weather up again at every game minute passed, in order, so lightning in each
             // stretch goes by the weather of that stretch and the scent clock changes speed on time;
-            // the power network takes its minute's step after the weather
+            // the power network takes its minute's step after the weather, then the tide and the rivers
             for (long b = (Math.Max(0, from) / WeatherStepTicks + 1) * WeatherStepTicks; b <= CurrentTick; b += WeatherStepTicks)
             {
                 RaiseStrikes(from, b - 1);
@@ -566,6 +569,8 @@ public sealed partial class Simulation
                     ApplySourceWeather(b);
                 if (Power is not null)
                     StepPower(b);
+                if (Waters is not null)
+                    StepWater(b);
             }
         }
         RaiseStrikes(from, CurrentTick);
@@ -1148,7 +1153,7 @@ public sealed partial class Simulation
     /// <summary>Fingerprint of the current state. Same seed and inputs must give the same hash.</summary>
     public ulong ComputeStateHash()
     {
-        var hasher = new StateHasher().Add(CurrentTick).Add(CoverChanges).Add(StructureChanges);
+        var hasher = new StateHasher().Add(CurrentTick).Add(CoverChanges).Add(StructureChanges).Add(WaterChanges);
         foreach (var actor in _actors)
         {
             hasher.Add(actor.Id)
@@ -1302,8 +1307,12 @@ public sealed partial class Simulation
             actor.Id, toDeck);
         int cost = actor.Movement.CostTicks(step, direction.IsDiagonal()) * cover.MoveCostPercent / 100
             * actor.Health.StepCostPercent / 100;
+        if (!toDeck)
+            cost = cost * WadeCostPercent(to, direction) / 100;
         if (running)
             cost = cost * (actor.Health.SprintWinded ? GearRules.WindedSprintCostPercent : GearRules.SprintCostPercent) / 100;
+        if (!toDeck)
+            cost += SweepDownstream(actor);
         return Math.Max(1, cost);
     }
 

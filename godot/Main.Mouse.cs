@@ -446,6 +446,7 @@ public partial class Main
             && _sim.MoveBlockReason(me, Directions.FromDelta(tile.X - me.Position.X, tile.Y - me.Position.Y)) is { } why)
             facts.Add(($"Can't step here: {why}", HudTheme.Danger));
         AddPowerFacts(facts, tile);
+        AddWaterFacts(facts, tile);
         return facts;
     }
 

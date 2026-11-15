@@ -114,7 +114,7 @@ public partial class AmbientView : Node2D
                 if (!water)
                     continue;
                 _animated++;
-                WaterFlow flow = map.Flow[p];
+                WaterFlow flow = _sim.CurrentAt(p); // faster when the river is high
                 if (!flow.IsNone)
                 {
                     float speed = Mathf.Sqrt(flow.X * flow.X + flow.Y * flow.Y);
@@ -125,7 +125,8 @@ public partial class AmbientView : Node2D
                     continue;
                 }
                 _motion[i] = Motion.Still;
-                sea[i] = map.Heights[p] == 0;
+                // sea: water at sea level, or the sea's edge the tide has covered (beaches stand a little higher)
+                sea[i] = map.Heights[p] == 0 || map.Water[p].Kind == WaterKind.Sea || map.Water[p].ShoreFacing is not null;
             }
         }
 
@@ -254,7 +255,7 @@ public partial class AmbientView : Node2D
                             DrawStreak(cell, x, y, 1, time, i, lit);
                         break;
                     case Motion.Surf:
-                        DrawWave(cell, x, y, time, wind, i, lit);
+                        DrawWave(cell, x, y, time, wind, i, lit, sim.SurfPercentAt(p));
                         break;
                 }
                 if (rain > 0)
@@ -338,9 +339,12 @@ public partial class AmbientView : Node2D
     /// One wave front crossing the surf zone toward the land. Every tile works out where the front is
     /// from the time and its own distance from the shore, so neighbouring tiles draw one moving line.
     /// </summary>
-    private void DrawWave(Rect2 cell, int x, int y, float time, float wind, int i, float lit)
+    /// <param name="surf">How big the surf is here (Simulation.SurfPercentAt): bigger waves are brighter and break white
+    /// farther out; 0 off the island's coast, where the waves keep their old look.</param>
+    private void DrawWave(Rect2 cell, int x, int y, float time, float wind, int i, float lit, int surf)
     {
-        float period = WavePeriod / (1f + wind / 12f);
+        float size = surf > 0 ? 0.35f + 0.65f * surf / 100f : 0.6f;
+        float period = WavePeriod / (1f + wind / 12f) * (surf > 0 ? 1.3f - 0.5f * surf / 100f : 1f);
         // a slow wobble along the coast, so the whole beach doesn't break at the same instant
         float offset = 0.15f * Mathf.Sin((x + y) * 0.35f);
         float front = SurfReach * (1f - Frac(time / period + offset));   // tiles from the land
@@ -358,10 +362,10 @@ public partial class AmbientView : Node2D
             return;
         a = Clamped(cell, a);
         b = Clamped(cell, b);
-        // waves grow as they come in and break white on the last tile
+        // waves grow as they come in and break white on the last tile (big surf breaks a tile farther out)
         float grown = 1f - front / SurfReach;
-        bool breaking = distance < 1.6f;
-        DrawLine(a, b, Faded(breaking ? Foam : Wave, (0.25f + 0.75f * grown) * lit), breaking ? 2f : 1f);
+        bool breaking = distance < (surf >= 60 ? 2.6f : 1.6f);
+        DrawLine(a, b, Faded(breaking ? Foam : Wave, (0.25f + 0.75f * grown) * lit * size * 1.6f), breaking ? (surf >= 60 ? 3f : 2f) : 1f);
     }
 
     /// <summary>A ring spreading where a raindrop lands. More tiles ring at once in heavier rain.</summary>
