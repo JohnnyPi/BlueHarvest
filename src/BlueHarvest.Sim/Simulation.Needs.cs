@@ -39,8 +39,9 @@ public partial class Simulation
         ReportNeeds(actor, needs, silent: true);
     }
 
-    /// <summary>Sets someone's needs directly (setup, tests, debug): kcal and ml short, minutes awake, breath.</summary>
-    public void SetNeeds(Actor actor, int? hungerKcal = null, int? thirstMl = null, int? awakeMinutes = null, int? stamina = null)
+    /// <summary>Sets someone's needs directly (setup, tests, debug): kcal and ml short, minutes awake, breath, heat lost, wetness.</summary>
+    public void SetNeeds(Actor actor, int? hungerKcal = null, int? thirstMl = null, int? awakeMinutes = null, int? stamina = null,
+        int? chill = null, int? wet = null)
     {
         if (actor.Needs is not { } needs)
             return;
@@ -49,6 +50,8 @@ public partial class Simulation
         if (thirstMl is { } t) needs.Thirst = Math.Max(0, t) * 10;
         if (awakeMinutes is { } a) needs.Fatigue = Math.Max(0, a);
         if (stamina is { } s) needs.Stamina = Math.Clamp(s, 0, NeedRules.MaxStamina);
+        if (chill is { } c) needs.Chill = Math.Max(0, c);
+        if (wet is { } w) needs.Wet = Math.Clamp(w, 0, 100);
         ReportNeeds(actor, needs, silent: true);
     }
 
@@ -63,20 +66,12 @@ public partial class Simulation
         long minute = CurrentTick / WorldClock.TicksPerGameMinute;
         if (minute > needs.Minute)
         {
-            int m = (int)Math.Min(minute - needs.Minute, 100_000);
+            long from = needs.Minute;
             needs.Minute = minute;
-            if (needs.Asleep)
-            {
-                needs.Hunger += NeedRules.HungerAsleepPerMinute * m;
-                needs.Thirst += NeedRules.ThirstAsleepPerMinute * m;
-                needs.Fatigue = Math.Max(0, needs.Fatigue - NeedRules.SleepRecoveryPerMinute * m);
-            }
-            else
-            {
-                needs.Hunger += NeedRules.HungerPerMinute * m;
-                needs.Thirst += NeedRules.ThirstPerMinute * m;
-                needs.Fatigue += m;
-            }
+            long last = Math.Min(minute, from + 100_000);
+            var place = PlaceOf(actor);
+            for (long m = from + 1; m <= last; m++)
+                PassMinute(actor, needs, m * WorldClock.TicksPerGameMinute, place);
         }
         RegainBreath(actor, needs);
 
@@ -95,6 +90,16 @@ public partial class Simulation
             Kill(actor, "died of exhaustion");
             return;
         }
+        if (needs.Chill >= NeedRules.DiedOfColdAt)
+        {
+            Kill(actor, "died of cold");
+            return;
+        }
+        if (needs.Sickness(CurrentTick) >= NeedRules.DiedOfInfectionAt)
+        {
+            Kill(actor, "died of infection");
+            return;
+        }
 
         if (needs.Asleep)
         {
@@ -106,6 +111,8 @@ public partial class Simulation
                 Wake(actor, needs, "thirst");
             else if (needs.Stage(NeedKind.Hunger, actor.Health, CurrentTick) >= 3)
                 Wake(actor, needs, "hunger");
+            else if (needs.Stage(NeedKind.Warmth, actor.Health, CurrentTick) >= 3)
+                Wake(actor, needs, "cold");
         }
         ReportNeeds(actor, needs, silent: false);
     }
@@ -133,6 +140,8 @@ public partial class Simulation
             return "you're too thirsty to sleep";
         if (NeedStage(actor, NeedKind.Hunger) >= 3)
             return "you're too hungry to sleep";
+        if (NeedStage(actor, NeedKind.Warmth) >= 3)
+            return "you're too cold to sleep";
         int pain = NeedStage(actor, NeedKind.Pain), sleep = NeedStage(actor, NeedKind.Sleep);
         if (pain >= 3 && sleep < 3 || pain == 2 && sleep < 2)
             return "it hurts too much to sleep";
@@ -231,7 +240,12 @@ public partial class Simulation
         int percent = needs.Effects(actor.Health, CurrentTick).BlackoutPercent;
         if (percent <= 0 || Rng.Fork($"needs-blackout:{actor.Id}:{CurrentTick}").NextInt(100) >= percent)
             return null;
-        return needs.Stage(NeedKind.Sleep, actor.Health, CurrentTick) >= 3 ? NeedKind.Sleep : NeedKind.Thirst;
+        // the cause named: the worst of the needs that black you out
+        var health = actor.Health;
+        if (needs.Stage(NeedKind.Sleep, health, CurrentTick) >= 3) return NeedKind.Sleep;
+        if (needs.Stage(NeedKind.Thirst, health, CurrentTick) >= 3) return NeedKind.Thirst;
+        if (needs.Stage(NeedKind.Warmth, health, CurrentTick) >= 4) return NeedKind.Warmth;
+        return NeedKind.Sickness;
     }
 
     /// <summary>Senses as the needs leave them: asleep, blind and hard to wake; tired or parched, dimmer and duller.</summary>
@@ -303,7 +317,8 @@ public partial class Simulation
             if (actor.Needs is not { } needs)
                 continue;
             hasher.Add(actor.Id).Add(needs.Hunger).Add(needs.Thirst).Add(needs.Fatigue).Add(needs.Stamina)
-                .Add(needs.Asleep ? 1 : 0).Add(needs.PainkillersUntilTick).Add(needs.AdrenalineUntilTick);
+                .Add(needs.Asleep ? 1 : 0).Add(needs.PainkillersUntilTick).Add(needs.AdrenalineUntilTick)
+                .Add(needs.Chill).Add(needs.Wet).Add(needs.GutOnsetTick).Add(needs.GutEndTick).Add(needs.Infection).Add(needs.AntibioticsUntilTick);
         }
     }
 }

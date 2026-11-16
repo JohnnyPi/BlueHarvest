@@ -184,12 +184,18 @@ public sealed partial class Simulation
                 used = Math.Min(def.Dose, item.Amount);
                 item.Amount -= used;
                 Nourish(actor, Nutrition.Drink(def.Kind, used));
+                if (item.Unsafe)
+                    MaybeCatchGutInfection(actor);
+                if (item.Amount == 0)
+                    item.Unsafe = false; // nothing left in it to be bad
                 break;
             case ItemUse.TakeMedicine:
                 used = Math.Min(def.Dose, item.Amount);
                 item.Amount -= used;
                 if (def.Kind == ItemKind.Painkillers)
                     TakePainkillers(actor);
+                else if (def.Kind == ItemKind.Antibiotics)
+                    TakeAntibiotics(actor);
                 break;
             case ItemUse.Inject:
                 UseUp(inventory, item, 1);
@@ -225,6 +231,8 @@ public sealed partial class Simulation
                     return Refuse(actor, "you have no wounds to see to");
                 UseUp(inventory, item, 1);
                 used = 1;
+                if (def.Kind is ItemKind.Antiseptic or ItemKind.SutureKit or ItemKind.BurnGel)
+                    CleanWounds(actor);
                 break;
             }
             case ItemUse.Listen:
@@ -233,14 +241,20 @@ public sealed partial class Simulation
                 EmitNoise(actor.Position, ItemRules.RadioLoudness, NoiseKinds.RadioStatic, actor.Id);
                 break;
             case ItemUse.TreatWater:
+            {
                 if (!inventory.All.Any(i => i.Def.Is(ItemCategory.Potable) && !i.Def.Stacks && i.Amount > 0))
                     return Refuse(actor, "you have no water to treat");
+                // the first untreated water carried; a tablet in good water does no harm
+                var bad = inventory.All.FirstOrDefault(i => i.Unsafe && i.Amount > 0);
+                if (bad is not null)
+                    bad.Unsafe = false;
                 UseUp(inventory, item, 1);
                 used = 1;
                 break;
+            }
         }
         ItemUsed?.Invoke(actor, item, use, used);
-        return Math.Max(RefuseTicks, def.UseTicks);
+        return Math.Max(RefuseTicks, def.UseTicks * NeedEffectsOf(actor).HandsPercent / 100);
     }
 
     // ---------- locks ----------

@@ -65,11 +65,13 @@ public partial class Main
             ItemUse.Drink => $"You drink {amount} ml from the {def.Name}.",
             ItemUse.StopBleeding => $"You bind the wound with the {def.Name}: the bleeding stops.",
             ItemUse.TakeMedicine => $"You swallow {amount} {def.Unit ?? "doses"} from the {def.Name}.",
-            ItemUse.DressWounds => $"You use the {def.Name} on your wounds.",
+            ItemUse.DressWounds => def.Kind is ItemKind.Antiseptic or ItemKind.SutureKit or ItemKind.BurnGel
+                ? $"You clean your wounds with the {def.Name}."
+                : $"You use the {def.Name} on your wounds.",
             ItemUse.Read => $"The {def.Name}: {def.Note ?? "nothing of use."}",
             ItemUse.TakeBearing => $"The needle settles: you're facing {_playerActor.Facing.Compass()}.",
             ItemUse.Listen => "Static. Under it, for a moment, a voice, then nothing.",
-            ItemUse.TreatWater => "You drop a tablet into your water.",
+            ItemUse.TreatWater => "You drop a tablet into your water. It tastes of swimming pools, but it's safe.",
             ItemUse.Inject => "You jab the auto-injector into your thigh. Your heart hammers; the pain drops away.",
             _ => $"You use the {def.Name}.",
         });
@@ -127,9 +129,15 @@ public partial class Main
                     return null;
                 return water > 0 ? $"{kcal} kcal, {water} ml" : $"{kcal} kcal";
             case ItemUse.Drink:
-                return $"{System.Math.Min(def.Dose, item.Amount)} ml of {item.Amount}";
+                return $"{System.Math.Min(def.Dose, item.Amount)} ml of {item.Amount}{(item.Unsafe ? ", untreated: it may make you ill" : "")}";
             case ItemUse.TakeMedicine when def.Kind == ItemKind.Painkillers:
                 return "dulls pain for 4 h";
+            case ItemUse.TakeMedicine when def.Kind == ItemKind.Antibiotics:
+                return "fights infection for 12 h";
+            case ItemUse.DressWounds when def.Kind is ItemKind.Antiseptic or ItemKind.SutureKit or ItemKind.BurnGel:
+                return "cleans your wounds";
+            case ItemUse.TreatWater:
+                return "makes untreated water safe";
             case ItemUse.Inject:
                 return "30 s: no pain, full breath";
             default:

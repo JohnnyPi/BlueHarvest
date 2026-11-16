@@ -13,6 +13,9 @@ public partial class HelpPanel : PanelContainer
         "[color=#e9b04c]Wait for light[/color]  z  until dawn or dusk (any key or click stops)\n" +
         "[color=#e9b04c]Sleep[/color]           Shift+Z, or right-click yourself: until rested or woken\n" +
         "[color=#e9b04c]Needs[/color]           eat, drink, sleep; painkillers dull pain; sprinting costs breath\n" +
+        "[color=#e9b04c]Warmth[/color]          rain, wind and wet clothes chill you; a poncho, a roof or a fire help\n" +
+        "[color=#e9b04c]Water[/color]           right-click a stream: drink, or fill a bottle (treat it with a tablet)\n" +
+        "[color=#e9b04c]Wounds[/color]          clean red wounds with antiseptic or they go bad; antibiotics cure\n" +
         "[color=#e9b04c]Power[/color]           right-click in a switch room, generator room,\n" +
         "                battery room or control room, or by the fuel tanks\n" +
         "                (a jerry can, tool kit or spare parts adds choices there)\n" +

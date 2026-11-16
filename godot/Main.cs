@@ -505,6 +505,8 @@ public partial class Main : Node2D
         _sim.UseWater(IslandWaters.For(world, Seed));
         // what was left in the rooms, ten years on: lockers, desks, fridges and what's in them
         _sim.UseItems(ItemPlan.Build(world, Seed));
+        // the island's mean air temperature at sea level: the sea's (it cools 6.5 °C a kilometre up)
+        _sim.SetBaseTemperature(world.Params.SeaTemp);
         TilePos start = _island.NearestStandable(_island.ToLocal(Island.IslandLaunch.X, Island.IslandLaunch.Y));
         _sim.AddActor("Survivor", '@', start, Species.Human, _player, loadout: Loadout.TestbedSurvivor);
         Say($"Island {world.Params.Seed}. You are on foot; the map follows you. F10 for the menu.");

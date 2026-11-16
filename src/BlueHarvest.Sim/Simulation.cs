@@ -1264,6 +1264,8 @@ public sealed partial class Simulation
     {
         WaitAction wait => Math.Max(1, wait.Ticks),
         SleepAction sleep => Sleep(actor, sleep.Ticks),
+        DrinkFromAction drink => DrinkFrom(actor, drink.Direction),
+        FillAction fill => Fill(actor, fill.ItemId, fill.Direction),
         MoveAction move => actor.IsLarge ? TryMoveLarge(actor, move.Direction, move.Shove, move.Sprint) : TryMove(actor, move.Direction, move.Sprint),
         BiteAction bite => ResolveBite(actor, bite.Investigative),
         UseDoorAction door => UseDoor(actor, door.Direction),
@@ -1339,6 +1341,8 @@ public sealed partial class Simulation
             EmitVibration(to, actor.Species.VibrationStrength, actor.Id, toDeck);
             int climb = GearRules.ClimbStepTicks(step, actor.Skills.Climbing) * actor.Health.ClimbCostPercent / 100
                 * (load == Load.Burdened ? ItemRules.BurdenedClimbPercent : 100) / 100;
+            if (actor.Needs is not null)
+                climb = climb * NeedEffectsOf(actor).HandsPercent / 100;
             SpendBreath(actor, NeedRules.ClimbStepCost, climb);
             return climb;
         }
@@ -1588,6 +1592,8 @@ public sealed partial class Simulation
         actor.LastMovedTick = CurrentTick;
         EmitNoise(p, ClimbLoudness, NoiseKinds.Climbing, actor.Id);
         int ladder = Math.Max(1, Map.Structures.DeckDm(p) * actor.Movement.ClimbTicksPerDm * actor.Health.ClimbCostPercent / 100);
+        if (actor.Needs is not null)
+            ladder = ladder * NeedEffectsOf(actor).HandsPercent / 100;
         SpendBreath(actor, NeedRules.ClimbStepCost, ladder);
         return ladder;
     }

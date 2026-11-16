@@ -3,7 +3,7 @@ using BlueHarvest.Sim.World;
 
 namespace BlueHarvest.Sim.Actors;
 
-/// <summary>What a body needs. Order matters: stage arrays index by it. Append only (warmth and sickness come next).</summary>
+/// <summary>What a body needs. Order matters: stage arrays index by it. Append only.</summary>
 public enum NeedKind : byte
 {
     Hunger,
@@ -11,18 +11,21 @@ public enum NeedKind : byte
     Sleep,
     Pain,
     Stamina,
+    Warmth,
+    Sickness,
 }
 
 /// <summary>
 /// The effects of the needs together: the most stamina there can be (of
 /// <see cref="NeedRules.MaxStamina"/>), how fast it comes back (percent), what a step costs
 /// (percent), the chance of a blackout on a turn (percent), sight range (percent) and how much
-/// louder sounds must be to be heard.
+/// louder sounds must be to be heard; and how long things done with the hands take (percent: using
+/// items, climbing).
 /// </summary>
 public readonly record struct NeedEffects(int StaminaCap, int RegenPercent, int StepCostPercent, int BlackoutPercent,
-    int SightPercent, int HearingPenalty)
+    int SightPercent, int HearingPenalty, int HandsPercent = 100)
 {
-    public static readonly NeedEffects None = new(NeedRules.MaxStamina, 100, 100, 0, 100, 0);
+    public static readonly NeedEffects None = new(NeedRules.MaxStamina, 100, 100, 0, 100, 0, 100);
 }
 
 /// <summary>How someone starts out: a little short of food and water, and awake for a while (from 07:00 by the clock if null).</summary>
@@ -78,6 +81,61 @@ public static class NeedRules
     /// <summary>Exertion burns food and water: per point of stamina spent, a tenth of a kcal and 0.15 ml.</summary>
     public const int ExertionHunger = 1, ExertionThirstPercent = 150;
 
+    // ---------- warmth (22b) ----------
+
+    /// <summary>
+    /// Air temperature, in tenths of a degree: the place's mean (26 °C unless set), 4 °C colder at 05:00
+    /// and warmer at 15:00, 6.5 °C colder a kilometre up, 2 °C colder in rain, 2 °C warmer in the sun.
+    /// </summary>
+    public const int DefaultBaseTemperature = 260, DaySwing = 40, RainCooling = 20, SunWarming = 20;
+
+    /// <summary>
+    /// What changes how warm it feels, in tenths of a degree: each m/s of wind outdoors (half under a
+    /// poncho), being soaked (scaled by how wet), clothes, moving, being asleep, a fire close by.
+    /// </summary>
+    public const int WindChillPerMs = 5, SoakedChill = 80, MovingWarmth = 30, AsleepChill = 20, FireCloseWarmth = 120, FireNearWarmth = 50;
+
+    /// <summary>Feeling 18 °C or more you warm up; below it you lose heat in proportion.</summary>
+    public const int ComfortTemperature = 180;
+
+    /// <summary>Chilly, cold, shivering, hypothermic: heat lost (a minute at 10 °C below comfort adds 10); dead of cold at 4800.</summary>
+    public static readonly IReadOnlyList<int> WarmthStages = [240, 720, 1440, 2880];
+    public const int DiedOfColdAt = 4800, MostWarmingPerMinute = 40;
+
+    /// <summary>Above 30 °C (felt) you sweat: thirst grows 15% faster for each degree over.</summary>
+    public const int SweatAbove = 300, SweatPercentPerDegree = 15;
+
+    /// <summary>Wet 0–100: soaked is 80+. Wading leaves you at least 60.</summary>
+    public const int WadingWet = 60, PonchoRainPercent = 25;
+
+    // ---------- sickness (22b) ----------
+
+    /// <summary>Queasy, sick, fevered, gravely ill (sickness 0–1500); infection kills at 1500.</summary>
+    public static readonly IReadOnlyList<int> SicknessStages = [100, 300, 600, 900];
+    public const int DiedOfInfectionAt = 1500;
+
+    /// <summary>A drink of untreated water: one in five makes you ill, 6 hours later, for a day and a half.</summary>
+    public const int BadWaterPercent = 20, GutIncubationTicks = 6 * 60 * WorldClock.TicksPerGameMinute,
+        GutIllnessTicks = 36 * 60 * WorldClock.TicksPerGameMinute;
+
+    /// <summary>A gut infection: queasy the first 4 hours and the last 8, sick in between (it never gets worse than sick).</summary>
+    public const int GutQueasy = 150, GutSick = 400, GutRampTicks = 4 * 60 * WorldClock.TicksPerGameMinute,
+        GutEaseTicks = 8 * 60 * WorldClock.TicksPerGameMinute;
+
+    /// <summary>
+    /// A red wound left uncleaned for 4 hours starts to go bad: a quarter point of sickness a minute for
+    /// each such wound (sick in about 20 h, fevered 40 h, dead 100 h). Antiseptic, stitches, burn gel or a
+    /// first-aid kit clean it.
+    /// </summary>
+    public const int InfectionGraceTicks = 4 * 60 * WorldClock.TicksPerGameMinute, InfectionQuarterPerWound = 1;
+
+    /// <summary>A course of antibiotics: 12 hours, beating an infection back by 1.5 a minute; it cuts a gut infection short to 6 hours.</summary>
+    public const int AntibioticTicks = 12 * 60 * WorldClock.TicksPerGameMinute, AntibioticQuarterCure = 6,
+        AntibioticGutTicks = 6 * 60 * WorldClock.TicksPerGameMinute;
+
+    /// <summary>A drink straight from a stream or pool: half a litre, 4 s.</summary>
+    public const int DrinkFromWaterMl = 500, DrinkFromWaterTicks = 400, FillTicks = 300;
+
     /// <summary>A blackout from thirst or exhaustion: 4 s lost.</summary>
     public const int BlackoutTicks = 400;
 
@@ -88,29 +146,41 @@ public static class NeedRules
     public const int WakeLoudness = 7, AsleepHearingPenalty = 4;
 
     // effects by stage, indexed by NeedKind and then stage
+    // rows: hunger, thirst, sleep, pain, stamina, warmth, sickness
     private static readonly int[][] Cap =
     [
         [1000, 1000, 700, 400], [1000, 1000, 750, 500, 250], [1000, 1000, 700, 600, 500], [1000, 1000, 1000, 600], [1000, 1000, 1000],
+        [1000, 1000, 1000, 800, 500], [1000, 1000, 800, 600, 400],
     ];
     private static readonly int[][] Regen =
     [
         [100, 75, 60, 40], [100, 100, 75, 50, 30], [100, 75, 60, 50, 40], [100, 100, 50, 30], [100, 100, 100],
+        [100, 100, 90, 70, 40], [100, 90, 70, 50, 30],
     ];
     private static readonly int[][] StepExtra =
     [
         [0, 0, 10, 25], [0, 0, 0, 15, 30], [0, 0, 0, 10, 20], [0, 0, 0, 10], [0, 0, 0],
+        [0, 0, 0, 10, 25], [0, 0, 0, 10, 20],
     ];
     private static readonly int[][] Blackout =
     [
         [0, 0, 0, 0], [0, 0, 0, 2, 5], [0, 0, 0, 3, 8], [0, 0, 0, 0], [0, 0, 0],
+        [0, 0, 0, 0, 5], [0, 0, 0, 0, 3],
     ];
     private static readonly int[][] Sight =
     [
         [100, 100, 100, 100], [100, 100, 100, 100, 80], [100, 100, 100, 85, 70], [100, 100, 100, 100], [100, 100, 100],
+        [100, 100, 100, 100, 85], [100, 100, 100, 100, 85],
     ];
     private static readonly int[][] Hearing =
     [
         [0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 1, 2, 3], [0, 0, 0, 2], [0, 0, 0],
+        [0, 0, 0, 0, 1], [0, 0, 0, 1, 2],
+    ];
+    private static readonly int[][] Hands =
+    [
+        [100, 100, 100, 100], [100, 100, 100, 100, 100], [100, 100, 100, 100, 100], [100, 100, 100, 100], [100, 100, 100],
+        [100, 100, 110, 130, 160], [100, 100, 100, 110, 120],
     ];
 
     /// <summary>The effects of one need at one stage.</summary>
@@ -118,7 +188,7 @@ public static class NeedRules
     {
         int k = (int)kind;
         int s = Math.Clamp(stage, 0, Cap[k].Length - 1);
-        return new NeedEffects(Cap[k][s], Regen[k][s], 100 + StepExtra[k][s], Blackout[k][s], Sight[k][s], Hearing[k][s]);
+        return new NeedEffects(Cap[k][s], Regen[k][s], 100 + StepExtra[k][s], Blackout[k][s], Sight[k][s], Hearing[k][s], Hands[k][s]);
     }
 
     /// <summary>The most a need's stage can be.</summary>
@@ -152,7 +222,15 @@ public static class NeedRules
         (NeedKind.Pain, 2) => "Hurting",
         (NeedKind.Pain, _) => "In agony",
         (NeedKind.Stamina, 1) => "Winded",
-        _ => "Out of breath",
+        (NeedKind.Stamina, _) => "Out of breath",
+        (NeedKind.Warmth, 1) => "Chilly",
+        (NeedKind.Warmth, 2) => "Cold",
+        (NeedKind.Warmth, 3) => "Shivering",
+        (NeedKind.Warmth, _) => "Hypothermic",
+        (NeedKind.Sickness, 1) => "Queasy",
+        (NeedKind.Sickness, 2) => "Sick",
+        (NeedKind.Sickness, 3) => "Fevered",
+        _ => "Gravely ill",
     };
 }
 
@@ -224,6 +302,55 @@ public sealed class Needs
     /// <summary>Until when adrenaline is working.</summary>
     public long AdrenalineUntilTick { get; internal set; } = long.MinValue;
 
+    /// <summary>Heat lost (0 warm; see <see cref="NeedRules.WarmthStages"/>).</summary>
+    public int Chill { get; internal set; }
+
+    /// <summary>How wet: 0 dry, 100 soaked through.</summary>
+    public int Wet { get; internal set; }
+
+    /// <summary>A gut infection from bad water: when it comes on and when it's over (long.MinValue: none).</summary>
+    public long GutOnsetTick { get; internal set; } = long.MinValue;
+
+    public long GutEndTick { get; internal set; } = long.MinValue;
+
+    /// <summary>Infection from dirty wounds, in quarter points of sickness.</summary>
+    public int Infection { get; internal set; }
+
+    /// <summary>Until when a course of antibiotics is working.</summary>
+    public long AntibioticsUntilTick { get; internal set; } = long.MinValue;
+
+    /// <summary>When each section's wounds were last cleaned (a red wound since then is dirty).</summary>
+    internal long[] CleanedTick { get; } = Enumerable.Repeat(long.MinValue, 6).ToArray();
+
+    public bool OnAntibiotics(long now) => AntibioticsUntilTick > now;
+
+    /// <summary>Whether a gut infection is coming or running.</summary>
+    public bool GutInfected(long now) => GutEndTick > now;
+
+    /// <summary>The gut infection's sickness now: 0 before it comes on, queasy at the start and the end, sick between.</summary>
+    public int GutSickness(long now)
+    {
+        if (now < GutOnsetTick || now >= GutEndTick)
+            return 0;
+        return now - GutOnsetTick < NeedRules.GutRampTicks || GutEndTick - now <= NeedRules.GutEaseTicks ? NeedRules.GutQueasy : NeedRules.GutSick;
+    }
+
+    /// <summary>Sickness now: the worse of a gut infection and a wound infection.</summary>
+    public int Sickness(long now) => Math.Max(GutSickness(now), Infection / 4);
+
+    /// <summary>Red wounds that have gone uncleaned past the grace time: each feeds an infection.</summary>
+    public int DirtyWounds(Health health, long now)
+    {
+        int dirty = 0;
+        foreach (var section in Enum.GetValues<BodySection>())
+        {
+            var wound = health[section];
+            if (wound.Severity == Severity.Red && CleanedTick[(int)section] < wound.SinceTick && now - wound.SinceTick >= NeedRules.InfectionGraceTicks)
+                dirty++;
+        }
+        return dirty;
+    }
+
     public int HungerKcal => Hunger / 10;
 
     public int ThirstMl => Thirst / 10;
@@ -281,6 +408,8 @@ public sealed class Needs
         NeedKind.Thirst => NeedRules.StageOf(Thirst, NeedRules.ThirstStages),
         NeedKind.Sleep => NeedRules.StageOf(Fatigue, NeedRules.SleepStages),
         NeedKind.Pain => NeedRules.StageOf(Pain(health, now), NeedRules.PainStages),
+        NeedKind.Warmth => NeedRules.StageOf(Chill, NeedRules.WarmthStages),
+        NeedKind.Sickness => NeedRules.StageOf(Sickness(now), NeedRules.SicknessStages),
         _ => Stamina < NeedRules.SprintMinimum ? 2 : Stamina < NeedRules.WindedBelow ? 1 : 0,
     };
 
@@ -291,8 +420,8 @@ public sealed class Needs
     /// </summary>
     public NeedEffects Effects(Health health, long now)
     {
-        int cap = NeedRules.MaxStamina, regen = 100, step = 100, blackout = 0, sight = 100, hearing = 0;
-        foreach (var kind in new[] { NeedKind.Hunger, NeedKind.Thirst, NeedKind.Sleep, NeedKind.Pain })
+        int cap = NeedRules.MaxStamina, regen = 100, step = 100, blackout = 0, sight = 100, hearing = 0, hands = 100;
+        foreach (var kind in new[] { NeedKind.Hunger, NeedKind.Thirst, NeedKind.Sleep, NeedKind.Pain, NeedKind.Warmth, NeedKind.Sickness })
         {
             var e = NeedRules.Of(kind, Stage(kind, health, now));
             cap = Math.Min(cap, e.StaminaCap);
@@ -301,9 +430,10 @@ public sealed class Needs
             blackout = Math.Max(blackout, e.BlackoutPercent);
             sight = Math.Min(sight, e.SightPercent);
             hearing = Math.Max(hearing, e.HearingPenalty);
+            hands = Math.Max(hands, e.HandsPercent);
         }
         if (OnAdrenaline(now))
             cap = NeedRules.MaxStamina;
-        return new NeedEffects(cap, regen, step, blackout, sight, hearing);
+        return new NeedEffects(cap, regen, step, blackout, sight, hearing, hands);
     }
 }

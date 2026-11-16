@@ -102,3 +102,9 @@ public sealed record PourFuelAction(Direction? Direction = null) : ActorAction;
 
 /// <summary>Sleeps (or sleeps on) for a while: needs someone tired enough, and not in too much pain, thirst or hunger. Those without needs just wait.</summary>
 public sealed record SleepAction(int Ticks) : ActorAction;
+
+/// <summary>Drinks from a stream or pool on your tile or the next: half a litre of untreated water.</summary>
+public sealed record DrinkFromAction(Direction? Direction = null) : ActorAction;
+
+/// <summary>Fills a carried water bottle or canteen from a stream or pool on your tile or the next (untreated).</summary>
+public sealed record FillAction(int ItemId, Direction? Direction = null) : ActorAction;

@@ -50,6 +50,9 @@ public static class NoiseKinds
     /// <summary>Fuel splashed out of a can.</summary>
     public const string Pouring = "liquid splashing";
 
+    /// <summary>Someone drinking from water or filling a bottle: slurping and gurgling.</summary>
+    public const string Drinking = "water gurgling";
+
     /// <summary>A radio switched on: hiss and crackle.</summary>
     public const string RadioStatic = "radio static";
 }

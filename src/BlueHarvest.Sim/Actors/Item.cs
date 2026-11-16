@@ -162,6 +162,9 @@ public sealed class Item
     /// <summary>A container with a door or lid (<see cref="ContainerSpec.Closes"/>) that stands open.</summary>
     public bool IsOpen { get; internal set; }
 
+    /// <summary>Water from a stream or pool, not yet treated with a tablet: it may make you ill.</summary>
+    public bool Unsafe { get; internal set; }
+
     /// <summary>What's inside, in the order it went in. Empty for anything that isn't a container.</summary>
     public IReadOnlyList<Item> Contents => (IReadOnlyList<Item>?)_contents ?? Array.Empty<Item>();
 
@@ -302,6 +305,8 @@ public sealed class Item
             text += Level > 0 ? $" ({tag}, level {Level})" : $" ({tag})";
         if (Locked)
             text += " (locked)";
+        if (Unsafe && Amount > 0)
+            text += " (untreated)";
         return text;
     }
 

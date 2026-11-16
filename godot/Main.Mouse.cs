@@ -392,6 +392,7 @@ public partial class Main
         AddItemChoices(choices, tile, reach);
         AddPowerChoices(choices, tile);
         AddFireChoices(choices, tile, reach);
+        AddWaterChoices(choices, tile, reach);
         choices.Add(new MenuChoice("Look", () => Say(LookText(tile))));
         _tooltip.Visible = false;
         _menu.Open(at, GetViewportRect().Size, $"{TileTitle(tile)}  ({tile.X}, {tile.Y})", choices);
