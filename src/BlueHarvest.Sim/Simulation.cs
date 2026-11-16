@@ -1903,6 +1903,9 @@ public sealed partial class Simulation
 
         var result = new BiteResult(CurrentTick, investigative, zone, hits, coverBitten, vehiclesBitten);
         actor.LastBite = result;
+        foreach (var hit in hits)
+            if (hit.Victim.IsDead && hit.Victim.Health.DiedTick == CurrentTick)
+                FeedOnKill(actor, hit.Victim);
         Bit?.Invoke(actor, result);
         return Math.Max(1, actor.Movement.BiteTicks);
     }

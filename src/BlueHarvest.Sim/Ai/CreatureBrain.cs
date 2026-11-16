@@ -26,6 +26,15 @@ public enum Activity : byte
 
     /// <summary>Backing away from a fire: the heat and the smell of it are more than any prey is worth.</summary>
     Fleeing,
+
+    /// <summary>Asleep (needs only): blind, and only a loud noise or a wound wakes it.</summary>
+    Sleeping,
+
+    /// <summary>Lying up after a kill (needs only): nothing much is worth getting up for.</summary>
+    Resting,
+
+    /// <summary>Going to water, or drinking (needs only).</summary>
+    Drinking,
 }
 
 /// <summary>
@@ -34,6 +43,10 @@ public enum Activity : byte
 /// wandering, and pursues it: path there, line up its head, bite. Unidentified things get a test bite,
 /// and what the bite felt reclassifies them.
 /// It never reads the world beyond its percepts and its own bites, so hiding works.
+/// With needs (step 23b, opted in per creature), hunger scales how much prey and the unknown are
+/// worth and how far it will range for them; fed, it lies up; thirsty with nothing to chase, it goes to
+/// the nearest fresh water it knows of (its territory: the map within <see cref="WaterSearchRadius"/>);
+/// in its sleeping hours, or worn out, it sleeps. Without needs it behaves exactly as before.
 /// </summary>
 public sealed class CreatureBrain : IActorController, IWindowShiftListener
 {
@@ -46,6 +59,18 @@ public sealed class CreatureBrain : IActorController, IWindowShiftListener
     private ContactKey? _focusKey;
     private ContactKey? _biteTargetKey;
     private int _stuckTurns;
+    private GoToController? _goToWater;
+    private TilePos _waterGoal;
+    private TilePos? _water;
+
+    /// <summary>How long after a kill it lies up digesting: 12 game hours.</summary>
+    public const int DigestTicks = 12 * 60 * WorldClock.TicksPerGameMinute;
+
+    /// <summary>Sleep goes half a minute at a time (as long as noises are kept), resting a game minute.</summary>
+    public const int SleepTurnTicks = Simulation.NoiseMemoryTicks, RestTurnTicks = WorldClock.TicksPerGameMinute;
+
+    /// <summary>How far (tiles) it knows where water is.</summary>
+    public const int WaterSearchRadius = 25;
 
     /// <param name="rng">Its own stream, used only while wandering.</param>
     public CreatureBrain(AiProfile profile, Rng rng)
@@ -61,6 +86,8 @@ public sealed class CreatureBrain : IActorController, IWindowShiftListener
     {
         Memory.Shift(dx, dy, map);
         _goal = new TilePos(Math.Clamp(_goal.X - dx, 0, map.Width - 1), Math.Clamp(_goal.Y - dy, 0, map.Height - 1));
+        _waterGoal = new TilePos(Math.Clamp(_waterGoal.X - dx, 0, map.Width - 1), Math.Clamp(_waterGoal.Y - dy, 0, map.Height - 1));
+        _water = null; // looked for again on the new map
     }
 
     public AiProfile Profile => Memory.Profile;
@@ -95,6 +122,14 @@ public sealed class CreatureBrain : IActorController, IWindowShiftListener
             return flee;
         }
 
+        // asleep: it sleeps on while it can (a loud noise or a wound wakes it: the simulation sees to that)
+        if (self.Needs is { Asleep: true } sleeper && KeepSleeping(self, sim, sleeper))
+        {
+            Activity = Activity.Sleeping;
+            _focusKey = null;
+            return new SleepAction(SleepTurnTicks);
+        }
+
         var focus = ChooseFocus(self, now);
         if (focus?.Key != _focusKey)
             _stuckTurns = 0;
@@ -102,6 +137,8 @@ public sealed class CreatureBrain : IActorController, IWindowShiftListener
 
         if (focus is null)
         {
+            if (self.Needs is { } needs && LookAfterItself(self, sim, needs, now) is { } own)
+                return own;
             Activity = Activity.Wandering;
             return _wander.Decide(self, sim);
         }
@@ -115,6 +152,12 @@ public sealed class CreatureBrain : IActorController, IWindowShiftListener
     {
         if (Activity == Activity.Fleeing)
             return "backing away from the fire";
+        if (Activity == Activity.Sleeping)
+            return "asleep";
+        if (Activity == Activity.Resting)
+            return "lying up after a kill";
+        if (Activity == Activity.Drinking)
+            return "going to water";
         if (Focus is not { } focus)
             return "wandering";
 
@@ -153,7 +196,14 @@ public sealed class CreatureBrain : IActorController, IWindowShiftListener
         int score = confidence * weight / 100;
         if (contact.Class == ContactClass.Prey && contact.Moving)
             score += Profile.MovingPreyBonus;
-        score -= Chebyshev(self.Position, contact.Estimate) * Profile.DistancePenaltyPer10Tiles / 10;
+        // hunger: a fed creature hardly cares, a starving one cares far more and ranges further (lights are curiosity, not hunger)
+        int hunger = HungerPercent(self, now);
+        if (hunger != 100 && contact.Key.Source != ContactSource.Light)
+            score = score * hunger / 100;
+        int penalty = Chebyshev(self.Position, contact.Estimate) * Profile.DistancePenaltyPer10Tiles / 10;
+        if (hunger > 100)
+            penalty = penalty * 100 / hunger;
+        score -= penalty;
 
         if (contact.Searched)
             return score / 4;
@@ -291,6 +341,98 @@ public sealed class CreatureBrain : IActorController, IWindowShiftListener
                 Memory.MarkSearched(missed, now);
         }
         _biteTargetKey = null;
+    }
+
+    /// <summary>
+    /// How much prey and the unknown are worth to it now, in percent of what its profile says: 100
+    /// without needs; after a kill, 30 while it digests; then 70 fed, 100 hungry, 140 weak, 180 starving.
+    /// </summary>
+    public static int HungerPercent(Actor self, long now)
+    {
+        if (self.Needs is not { } needs)
+            return 100;
+        if (needs.FedTick != long.MinValue && now - needs.FedTick < DigestTicks)
+            return 30;
+        return NeedRules.StageOf(needs.Hunger, NeedRules.HungerStages) switch
+        {
+            0 => 70,
+            1 => 100,
+            2 => 140,
+            _ => 180,
+        };
+    }
+
+    /// <summary>Sleeps on while there's sleep owed and it's its sleeping hours (or it's worn out).</summary>
+    private static bool KeepSleeping(Actor self, Simulation sim, Needs needs) =>
+        needs.Fatigue > 0 && (sim.SleepingHours(self) || sim.NeedStage(self, NeedKind.Sleep) >= 2);
+
+    /// <summary>Its sleeping hours with a few hours awake behind it, or worn out.</summary>
+    private static bool WantsSleep(Actor self, Simulation sim, Needs needs) =>
+        sim.SleepingHours(self) && needs.Fatigue >= NeedRules.MinFatigueToSleep || sim.NeedStage(self, NeedKind.Sleep) >= 2;
+
+    /// <summary>
+    /// With nothing worth chasing: sleep if it's time, drink if thirsty and there's water it knows of,
+    /// lie up if it has just eaten. Null: none of those, so it wanders.
+    /// </summary>
+    private ActorAction? LookAfterItself(Actor self, Simulation sim, Needs needs, long now)
+    {
+        if (WantsSleep(self, sim, needs) && sim.SleepBlock(self) is null)
+        {
+            Activity = Activity.Sleeping;
+            return new SleepAction(SleepTurnTicks);
+        }
+        if (sim.NeedStage(self, NeedKind.Thirst) >= 1 && DrinkAction(self, sim) is { } drink)
+        {
+            Activity = Activity.Drinking;
+            return drink;
+        }
+        if (needs.FedTick != long.MinValue && now - needs.FedTick < DigestTicks)
+        {
+            Activity = Activity.Resting;
+            return new WaitAction(RestTurnTicks);
+        }
+        return null;
+    }
+
+    /// <summary>Drink if fresh water is in reach (its tile, the next, or under a big head); otherwise head for the nearest it knows.</summary>
+    private ActorAction? DrinkAction(Actor self, Simulation sim)
+    {
+        var at = self.Position;
+        if (sim.WaterSourceAt(at) == WaterSource.Fresh)
+            return new DrinkFromAction();
+        foreach (var d in Directions.All)
+            if (sim.WaterSourceAt(at.Offset(d)) == WaterSource.Fresh)
+                return new DrinkFromAction(d);
+        if (self.IsLarge && sim.BiteZone(self).Any(t => sim.WaterSourceAt(t) == WaterSource.Fresh))
+            return new DrinkFromAction();
+
+        if (_water is not { } known || sim.WaterSourceAt(known) != WaterSource.Fresh)
+            _water = NearestWater(sim, at);
+        if (_water is not { } goal)
+            return null;
+        _waterGoal = goal;
+        _goToWater ??= new GoToController(() => _waterGoal, Math.Max(1, self.Species.Body.HeadReach - 1));
+        return _goToWater.Decide(self, sim);
+    }
+
+    private static TilePos? NearestWater(Simulation sim, TilePos at)
+    {
+        TilePos? best = null;
+        int bestDistance = int.MaxValue;
+        for (int y = Math.Max(0, at.Y - WaterSearchRadius); y <= Math.Min(sim.Map.Height - 1, at.Y + WaterSearchRadius); y++)
+        {
+            for (int x = Math.Max(0, at.X - WaterSearchRadius); x <= Math.Min(sim.Map.Width - 1, at.X + WaterSearchRadius); x++)
+            {
+                var p = new TilePos(x, y);
+                int d = Chebyshev(at, p);
+                if (d < bestDistance && sim.WaterSourceAt(p) == WaterSource.Fresh)
+                {
+                    best = p;
+                    bestDistance = d;
+                }
+            }
+        }
+        return best;
     }
 
     private static int Chebyshev(TilePos a, TilePos b) => Math.Max(Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));

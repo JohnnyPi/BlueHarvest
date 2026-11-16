@@ -28,8 +28,47 @@ public readonly record struct NeedEffects(int StaminaCap, int RegenPercent, int 
     public static readonly NeedEffects None = new(NeedRules.MaxStamina, 100, 100, 0, 100, 0, 100);
 }
 
-/// <summary>How someone starts out: a little short of food and water, and awake for a while (from 07:00 by the clock if null).</summary>
-public sealed record NeedsStart(int HungerKcal = 300, int ThirstMl = 200, int? AwakeMinutes = null);
+/// <summary>How someone starts out: a little short of food and water, and awake for a while (from 07:00 by the clock if null); or asleep.</summary>
+public sealed record NeedsStart(int HungerKcal = 300, int ThirstMl = 200, int? AwakeMinutes = null, bool Asleep = false);
+
+/// <summary>
+/// How a kind of body has its needs (step 23b): how fast it hungers and thirsts compared with a
+/// person (hunger and thirst are counted in a person's kcal and ml, so the stages read the same), when
+/// it sleeps (game minutes of the day, wrapping past midnight), what a kill gives it, and whether cold
+/// and bad water touch it. A big predator goes days between meals and gorges.
+/// </summary>
+public sealed record NeedProfile(
+    int HungerPercent = 100,
+    int ThirstPercent = 100,
+    int SleepFromMinute = 23 * 60,
+    int SleepToMinute = 7 * 60,
+    int MealKcal = 0,
+    bool FeelsCold = true,
+    bool CatchesIllness = true)
+{
+    /// <summary>People: the rates the player has.</summary>
+    public static readonly NeedProfile Human = new();
+
+    /// <summary>The Rex: hungry about five days after a meal, thirsty in about 20 hours; sleeps 21:00 to 05:00; a kill fills it.</summary>
+    public static readonly NeedProfile Rex = new(HungerPercent: 15, ThirstPercent: 40, SleepFromMinute: 21 * 60, SleepToMinute: 5 * 60,
+        MealKcal: 20_000, FeelsCold: false, CatchesIllness: false);
+
+    /// <summary>Raptors: hungry in a day and a half, thirsty in about 13 hours; hunt by night and sleep 09:00 to 16:00.</summary>
+    public static readonly NeedProfile Raptor = new(HungerPercent: 50, ThirstPercent: 60, SleepFromMinute: 9 * 60, SleepToMinute: 16 * 60,
+        MealKcal: 8_000, FeelsCold: false, CatchesIllness: false);
+
+    public static NeedProfile For(Species species) =>
+        species == Species.Rex ? Rex : species == Species.Raptor ? Raptor : Human;
+
+    /// <summary>Whether a minute of the day falls in its sleeping hours.</summary>
+    public bool SleepTime(int minuteOfDay) =>
+        SleepFromMinute <= SleepToMinute
+            ? minuteOfDay >= SleepFromMinute && minuteOfDay < SleepToMinute
+            : minuteOfDay >= SleepFromMinute || minuteOfDay < SleepToMinute;
+
+    /// <summary>Minutes since it last woke at its usual time, for a minute of the day it's awake at.</summary>
+    public int MinutesSinceWaking(int minuteOfDay) => (minuteOfDay - SleepToMinute + 24 * 60) % (24 * 60);
+}
 
 /// <summary>
 /// Numbers for hunger, thirst, sleep, pain and stamina. Hunger, thirst and sleep go by game time (a
@@ -272,8 +311,9 @@ public static class Nutrition
 /// </summary>
 public sealed class Needs
 {
-    internal Needs(int hunger, int thirst, int fatigue, long now)
+    internal Needs(int hunger, int thirst, int fatigue, long now, NeedProfile? profile = null)
     {
+        Profile = profile ?? NeedProfile.Human;
         Hunger = hunger;
         Thirst = thirst;
         Fatigue = fatigue;
@@ -281,6 +321,12 @@ public sealed class Needs
         StaminaTick = now;
         WakeCheckTick = now;
     }
+
+    /// <summary>How this body has its needs (rates, sleeping hours, what a kill gives).</summary>
+    public NeedProfile Profile { get; }
+
+    /// <summary>When it last ate a kill (long.MinValue: never).</summary>
+    public long FedTick { get; internal set; } = long.MinValue;
 
     /// <summary>Tenths of a kcal short.</summary>
     public int Hunger { get; internal set; }

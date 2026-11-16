@@ -18,7 +18,12 @@ public static class ScenarioBuilder
     /// markers lay out their items (on the deck, if the tile has one).
     /// </summary>
     /// <param name="rexFacing">Which way the Rex starts facing (south if left out).</param>
-    public static Simulation Build(MapData data, ulong seed, IActorController? player = null, Direction? rexFacing = null)
+    /// <param name="creatureNeeds">
+    /// Give the creatures and NPCs needs, each from a varied start (step 23b). Off by default: the tuned
+    /// scenarios and the batch tests run without them.
+    /// </param>
+    public static Simulation Build(MapData data, ulong seed, IActorController? player = null, Direction? rexFacing = null,
+        bool creatureNeeds = false)
     {
         var sim = new Simulation(data.Map, seed) { AmbientLightPercent = data.AmbientLight };
         sim.SetWeather(data.StartingWeather);
@@ -89,6 +94,12 @@ public static class ScenarioBuilder
 
         if (!hasPlayer)
             throw new FormatException("The map has no player marker.");
+        if (creatureNeeds)
+        {
+            foreach (var actor in sim.Actors)
+                if (actor.Controller is CreatureBrain or HumanBrain)
+                    sim.UseVariedNeeds(actor);
+        }
         return sim;
     }
 

@@ -29,19 +29,62 @@ public partial class Simulation
     /// Gives an actor needs from now on (the player). Without needs, nothing here touches them: they
     /// never tire, hunger, thirst or lose breath.
     /// </summary>
-    public void UseNeeds(Actor actor, NeedsStart? start = null)
+    public void UseNeeds(Actor actor, NeedsStart? start = null, NeedProfile? profile = null)
     {
         start ??= new NeedsStart();
         int awake = start.AwakeMinutes
             ?? (Clock is { } clock ? (clock.MinuteOfDay(CurrentTick) - 7 * 60 + WorldClock.MinutesPerDay) % WorldClock.MinutesPerDay : 120);
-        var needs = new Needs(Math.Max(0, start.HungerKcal) * 10, Math.Max(0, start.ThirstMl) * 10, Math.Max(0, awake), CurrentTick);
+        var needs = new Needs(Math.Max(0, start.HungerKcal) * 10, Math.Max(0, start.ThirstMl) * 10, Math.Max(0, awake), CurrentTick,
+            profile ?? NeedProfile.For(actor.Species));
+        needs.Asleep = start.Asleep;
         actor.Needs = needs;
         ReportNeeds(actor, needs, silent: true);
     }
 
-    /// <summary>Sets someone's needs directly (setup, tests, debug): kcal and ml short, minutes awake, breath, heat lost, wetness.</summary>
+    /// <summary>
+    /// Gives a creature or an NPC needs from a start of its own (step 23b), so no two begin alike:
+    /// somewhere between fed and weak with hunger, a little thirsty, and asleep if it's their sleeping
+    /// hours by the clock (well into the night's sleep) or awake as long as their day has run. Seeded
+    /// by who they are, so it's the same every run of the same seed.
+    /// </summary>
+    public void UseVariedNeeds(Actor actor, NeedProfile? profile = null) =>
+        UseNeeds(actor, VariedStart(actor, profile ?? NeedProfile.For(actor.Species)), profile ?? NeedProfile.For(actor.Species));
+
+    /// <summary>The varied start <see cref="UseVariedNeeds"/> uses.</summary>
+    public NeedsStart VariedStart(Actor actor, NeedProfile profile)
+    {
+        var rng = Rng.Fork($"needs-start:{actor.Id}:{actor.Name}");
+        int hunger = rng.NextInt(NeedRules.HungerStages[1] / 10);
+        int thirst = rng.NextInt(1000);
+        if (Clock is not { } clock)
+            return new NeedsStart(hunger, thirst, 60 + rng.NextInt(600));
+        int minute = clock.MinuteOfDay(CurrentTick);
+        if (profile.SleepTime(minute))
+            return new NeedsStart(hunger, thirst, NeedRules.MinFatigueToSleep + rng.NextInt(400), Asleep: true);
+        return new NeedsStart(hunger, thirst, profile.MinutesSinceWaking(minute) + rng.NextInt(60));
+    }
+
+    /// <summary>Whether it's someone's sleeping hours by the clock (always false without a clock or needs).</summary>
+    public bool SleepingHours(Actor actor) =>
+        actor.Needs is { } needs && Clock is { } clock && needs.Profile.SleepTime(clock.MinuteOfDay(CurrentTick));
+
+    /// <summary>Someone with needs ate a kill (the creature, its kill).</summary>
+    public event Action<Actor, Actor>? AteKill;
+
+    /// <summary>A bite killed someone: the biter eats (a kill fills a big predator for days).</summary>
+    private void FeedOnKill(Actor eater, Actor kill)
+    {
+        if (eater.Needs is not { } needs || needs.Profile.MealKcal <= 0)
+            return;
+        UpdateNeeds(eater);
+        needs.Hunger = Math.Max(0, needs.Hunger - needs.Profile.MealKcal * 10);
+        needs.FedTick = CurrentTick;
+        AteKill?.Invoke(eater, kill);
+    }
+
+    /// <summary>Sets someone's needs directly (setup, tests, debug): kcal and ml short, minutes awake, breath, heat lost, wetness, just fed.</summary>
     public void SetNeeds(Actor actor, int? hungerKcal = null, int? thirstMl = null, int? awakeMinutes = null, int? stamina = null,
-        int? chill = null, int? wet = null)
+        int? chill = null, int? wet = null, bool? fed = null)
     {
         if (actor.Needs is not { } needs)
             return;
@@ -52,6 +95,7 @@ public partial class Simulation
         if (stamina is { } s) needs.Stamina = Math.Clamp(s, 0, NeedRules.MaxStamina);
         if (chill is { } c) needs.Chill = Math.Max(0, c);
         if (wet is { } w) needs.Wet = Math.Clamp(w, 0, 100);
+        if (fed is { } f) needs.FedTick = f ? CurrentTick : long.MinValue;
         ReportNeeds(actor, needs, silent: true);
     }
 

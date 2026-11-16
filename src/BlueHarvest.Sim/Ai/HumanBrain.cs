@@ -36,6 +36,12 @@ public enum Mood : byte
 
     /// <summary>Following an order to stay put.</summary>
     Staying,
+
+    /// <summary>Asleep (needs only).</summary>
+    Sleeping,
+
+    /// <summary>Seeing to themselves from their kit: a bandage, pills, a drink, food (needs only).</summary>
+    TendingSelf,
 }
 
 /// <summary>
@@ -46,6 +52,10 @@ public enum Mood : byte
 /// keep still once afraid; go and help a bleeding companion if brave enough and carrying a kit;
 /// otherwise wait. They never read the world beyond their senses, except for things in plain sight
 /// up close (an ally they're looking at is visibly bleeding; which tiles are cover).
+/// With needs (step 23b, opted in per person), when nothing frightens them they look after
+/// themselves from their own kit (bind a bleed, take painkillers, clean a wound, take antibiotics,
+/// treat water, drink, eat), sleep when worn out or in their sleeping hours with nothing to do (but
+/// not under a follow order), and lag behind when tired.
 /// </summary>
 public sealed class HumanBrain : IActorController, IWindowShiftListener
 {
@@ -149,6 +159,21 @@ public sealed class HumanBrain : IActorController, IWindowShiftListener
         if (Panicking)
             return Panic(self, sim);
 
+        if (self.Needs is { } needs && Fear < ShelterFear)
+        {
+            // asleep: sleep on while it's owed and nothing calls them (a loud noise or a wound wakes them)
+            if (needs.Asleep && needs.Fatigue > 0 && self.Order?.Order != NpcOrder.Follow)
+            {
+                Mood = Mood.Sleeping;
+                return new SleepAction(SleepTurnTicks);
+            }
+            if (SelfCare(self, sim, needs) is { } care)
+            {
+                Mood = Mood.TendingSelf;
+                return care;
+            }
+        }
+
         var order = self.Order;
         RefusingOrder = order is not null && Fear >= ShelterFear && Traits.Selfishness > SelfishnessToRefuse;
         if (order is not null && !RefusingOrder)
@@ -156,6 +181,8 @@ public sealed class HumanBrain : IActorController, IWindowShiftListener
             switch (order.Order)
             {
                 case NpcOrder.Stay:
+                    if (SleepNow(self, sim) is { } rest)
+                        return rest;
                     Mood = Mood.Staying;
                     return Still(self);
                 case NpcOrder.Follow when FollowAction(self, sim, order) is { } follow:
@@ -178,8 +205,67 @@ public sealed class HumanBrain : IActorController, IWindowShiftListener
         if (HelpAction(self, sim) is { } help)
             return help;
 
+        if (SleepNow(self, sim) is { } sleep)
+            return sleep;
+
         Mood = Threat is null ? Mood.Calm : Mood.Wary;
         return Still(self);
+    }
+
+    /// <summary>Sleep goes half a minute at a time, as long as noises are kept.</summary>
+    public const int SleepTurnTicks = Simulation.NoiseMemoryTicks;
+
+    /// <summary>A tired follower stops for a breather on this share of turns: tired, then exhausted or worse.</summary>
+    public const int TiredLagPercent = 25, ExhaustedLagPercent = 50;
+
+    /// <summary>
+    /// Lie down if it's safe (nothing threatening in mind) and they're worn out, or it's their
+    /// sleeping hours and they've been up a while; null otherwise.
+    /// </summary>
+    private ActorAction? SleepNow(Actor self, Simulation sim)
+    {
+        if (self.Needs is not { } needs || Threat is not null || sim.SleepBlock(self) is not null)
+            return null;
+        bool wants = sim.NeedStage(self, NeedKind.Sleep) >= 2
+            || sim.SleepingHours(self) && needs.Fatigue >= NeedRules.MinFatigueToSleep;
+        if (!wants)
+            return null;
+        Mood = Mood.Sleeping;
+        return new SleepAction(SleepTurnTicks);
+    }
+
+    /// <summary>
+    /// What they'd see to first from their own kit: a bleed, bad pain, a wound to clean, an infection,
+    /// untreated water, thirst (good water first, untreated only when it's bad), hunger. Null if nothing.
+    /// </summary>
+    private static ActorAction? SelfCare(Actor self, Simulation sim, Needs needs)
+    {
+        var inventory = self.Inventory;
+        long now = sim.CurrentTick;
+        Item? Find(Func<Item, bool> wanted) => inventory.All.FirstOrDefault(i => i.Amount > 0 && wanted(i));
+        ActorAction Use(Item item) => new UseItemAction(item.Id);
+
+        if (self.Health.BleedingWounds > 0 && Find(i => i.Kind is ItemKind.Bandage or ItemKind.Tourniquet) is { } bandage)
+            return Use(bandage);
+        if (sim.NeedStage(self, NeedKind.Pain) >= 2 && !needs.OnPainkillers(now) && Find(i => i.Kind == ItemKind.Painkillers) is { } pills)
+            return Use(pills);
+        if (sim.UncleanedWounds(self) > 0 && Find(i => i.Kind is ItemKind.Antiseptic or ItemKind.SutureKit or ItemKind.BurnGel) is { } clean)
+            return Use(clean);
+        if (sim.NeedStage(self, NeedKind.Sickness) >= 2 && !needs.OnAntibiotics(now) && Find(i => i.Kind == ItemKind.Antibiotics) is { } cure)
+            return Use(cure);
+        if (Find(i => i.Unsafe) is not null && Find(i => i.Kind == ItemKind.WaterTablets) is { } tablet)
+            return Use(tablet);
+        int thirst = sim.NeedStage(self, NeedKind.Thirst);
+        if (thirst >= 1)
+        {
+            var drink = Find(i => Recipes.UseOf(i.Def) == ItemUse.Drink && !i.Unsafe)
+                ?? (thirst >= 2 ? Find(i => Recipes.UseOf(i.Def) == ItemUse.Drink) : null);
+            if (drink is not null)
+                return Use(drink);
+        }
+        if (sim.NeedStage(self, NeedKind.Hunger) >= 1 && Find(i => Recipes.UseOf(i.Def) == ItemUse.Eat) is { } food)
+            return Use(food);
+        return null;
     }
 
     /// <summary>A short summary for the HUD, e.g. "hiding (fear 42)".</summary>
@@ -189,6 +275,7 @@ public sealed class HumanBrain : IActorController, IWindowShiftListener
         {
             Mood.SeekingShelter => "running for cover",
             Mood.Panicking => "PANICKING",
+            Mood.TendingSelf => "seeing to themselves",
             _ => Mood.ToString().ToLowerInvariant(),
         };
         return RefusingOrder ? $"{mood}, ignoring orders (fear {Fear})" : $"{mood} (fear {Fear})";
@@ -344,6 +431,10 @@ public sealed class HumanBrain : IActorController, IWindowShiftListener
         Mood = Mood.Following;
         int distance = Chebyshev(self.Position, leader.Position);
         if (distance <= 2)
+            return Still(self);
+        // tired: they stop for a breather now and then, and fall behind
+        int tired = self.Needs is null ? 0 : sim.NeedStage(self, NeedKind.Sleep);
+        if (tired >= 1 && _rng.NextInt(100) < (tired >= 2 ? ExhaustedLagPercent : TiredLagPercent))
             return Still(self);
         _personGoal = leader.Position;
         var action = _goToPerson.Decide(self, sim);

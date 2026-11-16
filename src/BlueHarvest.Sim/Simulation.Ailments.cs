@@ -121,25 +121,28 @@ public partial class Simulation
         int sick = needs.Stage(NeedKind.Sickness, health, tick);
         int feels = FeelsLike(actor, needs, tick, place);
 
+        var profile = needs.Profile;
         int hungerPercent = 100 + (warmth >= 3 ? 50 : warmth >= 2 ? 30 : 0);
         int thirstPercent = 100 + Math.Clamp((feels - NeedRules.SweatAbove) / 10 * NeedRules.SweatPercentPerDegree, 0, 100)
             + (sick >= 3 ? 50 : sick >= 2 ? 20 : 0)
             + (needs.GutSickness(tick) >= NeedRules.GutSick ? 30 : 0);
         if (needs.Asleep)
         {
-            needs.Hunger += NeedRules.HungerAsleepPerMinute * hungerPercent / 100;
-            needs.Thirst += NeedRules.ThirstAsleepPerMinute * thirstPercent / 100;
+            needs.Hunger += NeedRules.HungerAsleepPerMinute * hungerPercent / 100 * profile.HungerPercent / 100;
+            needs.Thirst += NeedRules.ThirstAsleepPerMinute * thirstPercent / 100 * profile.ThirstPercent / 100;
             needs.Fatigue = Math.Max(0, needs.Fatigue - NeedRules.SleepRecoveryPerMinute);
         }
         else
         {
-            needs.Hunger += NeedRules.HungerPerMinute * hungerPercent / 100;
-            needs.Thirst += NeedRules.ThirstPerMinute * thirstPercent / 100;
+            needs.Hunger += NeedRules.HungerPerMinute * hungerPercent / 100 * profile.HungerPercent / 100;
+            needs.Thirst += NeedRules.ThirstPerMinute * thirstPercent / 100 * profile.ThirstPercent / 100;
             needs.Fatigue += sick >= 3 ? 2 : 1; // a fever wears you out
         }
 
-        // heat: lost below comfort, in proportion; won back above it
-        if (feels < NeedRules.ComfortTemperature)
+        // heat: lost below comfort, in proportion; won back above it (big animals don't feel it)
+        if (!profile.FeelsCold)
+            needs.Chill = 0;
+        else if (feels < NeedRules.ComfortTemperature)
             needs.Chill += (NeedRules.ComfortTemperature - feels) / 10;
         else
             needs.Chill = Math.Max(0, needs.Chill - Math.Min(NeedRules.MostWarmingPerMinute, (feels - NeedRules.ComfortTemperature) / 5));
@@ -158,7 +161,9 @@ public partial class Simulation
         }
 
         // infection: dirty wounds feed it; antibiotics beat it back
-        if (needs.OnAntibiotics(tick))
+        if (!profile.CatchesIllness)
+            needs.Infection = 0;
+        else if (needs.OnAntibiotics(tick))
             needs.Infection = Math.Max(0, needs.Infection - NeedRules.AntibioticQuarterCure);
         else
             needs.Infection += needs.DirtyWounds(health, tick) * NeedRules.InfectionQuarterPerWound;
@@ -209,6 +214,17 @@ public partial class Simulation
     private int DrinkFrom(Actor actor, Direction? direction)
     {
         TilePos at = direction is { } d ? actor.Position.Offset(d) : actor.Position;
+        // a big body drinks where its head is
+        if (direction is null && actor.IsLarge && WaterSourceAt(at) != WaterSource.Fresh)
+        {
+            foreach (TilePos head in BiteZone(actor))
+            {
+                if (WaterSourceAt(head) != WaterSource.Fresh)
+                    continue;
+                at = head;
+                break;
+            }
+        }
         if (WaterRefusal(at) is { } why)
             return Refuse(actor, why);
         if (direction is { } facing)
@@ -242,7 +258,7 @@ public partial class Simulation
     /// <summary>A drink of untreated water: one time in five, a gut infection comes on six hours later (one at a time).</summary>
     private void MaybeCatchGutInfection(Actor actor)
     {
-        if (actor.Needs is not { } needs || needs.GutInfected(CurrentTick))
+        if (actor.Needs is not { } needs || needs.GutInfected(CurrentTick) || !needs.Profile.CatchesIllness)
             return;
         if (Rng.Fork($"bad-water:{actor.Id}:{CurrentTick}").NextInt(100) >= NeedRules.BadWaterPercent)
             return;
