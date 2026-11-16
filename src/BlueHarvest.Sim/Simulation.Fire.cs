@@ -204,11 +204,11 @@ public sealed partial class Simulation
         CoverType cover = Cover[p];
         Material m = FireRules.Of(cover);
         bool fuelled = FuelAt(p);
-        // a vehicle's tank goes with it
+        // a vehicle's tank goes with it: over the parts not burning yet (what's alight already has it)
         if (cover == CoverType.Vehicle && VehicleAt(p) is { } vehicle)
         {
             foreach (TilePos t in vehicle.Tiles)
-                if (Map.InBounds(t) && t != p)
+                if (Map.InBounds(t) && t != p && !_fires.ContainsKey(t))
                     _fuel[t] = CurrentTick + FireRules.FuelLastsTicks;
         }
         var fire = new Fire(p,
@@ -403,6 +403,7 @@ public sealed partial class Simulation
     {
         TilePos p = fire.Position;
         _fires.Remove(p);
+        _fuel.Remove(p); // any fuel that got onto it while it burned has burnt with it
         if (fire.StepsBurnt < 2)
             return; // put out before it took hold
         CoverType cover = Cover[p];
