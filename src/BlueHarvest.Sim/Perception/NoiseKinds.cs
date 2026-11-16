@@ -44,6 +44,12 @@ public static class NoiseKinds
     /// <summary>A lock wrenched open with a crowbar.</summary>
     public const string Prying = "metal wrenched apart";
 
+    /// <summary>A fire extinguisher's roar.</summary>
+    public const string Extinguisher = "a fire extinguisher";
+
+    /// <summary>Fuel splashed out of a can.</summary>
+    public const string Pouring = "liquid splashing";
+
     /// <summary>A radio switched on: hiss and crackle.</summary>
     public const string RadioStatic = "radio static";
 }

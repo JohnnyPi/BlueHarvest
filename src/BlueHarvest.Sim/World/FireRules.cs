@@ -26,6 +26,18 @@ public static class FireRules
     /// <summary>How hot each source is.</summary>
     public const int SparkHeat = 30, FlareHeat = 50, HeldFlareHeat = 60, LightningHeat = 100;
 
+    /// <summary>A lighter's or a match's flame: enough for fuel or dry tall grass, not scrub or anything damp.</summary>
+    public const int LighterHeat = 40;
+
+    /// <summary>Lighting something with a lighter or a match takes this long.</summary>
+    public const int LighterTicks = 100;
+
+    /// <summary>A burst from an extinguisher: its time, its roar, and how long the tiles it covered won't catch again.</summary>
+    public const int ExtinguishTicks = 150, ExtinguishLoudness = 30, QuenchTicks = 3000;
+
+    /// <summary>A fuel trail: 2 L a tile, up to four tiles, this long a tile.</summary>
+    public const int PourLitresPerTile = 2, PourTiles = 4, PourTicksPerTile = 150, PourLoudness = 8;
+
     /// <summary>Fuel on the ground makes anything at least this burnable, whatever it is or how wet.</summary>
     public const int FuelBurnable = 90;
 

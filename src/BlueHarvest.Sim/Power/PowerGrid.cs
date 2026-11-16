@@ -117,11 +117,11 @@ public sealed class PowerGrid
     }
 
     /// <summary>A powered doorway; one per tile (a second at the same tile is ignored).</summary>
-    public PowerDoor AddDoor(int siteId, int x, int y, DoorKind kind, string room)
+    public PowerDoor AddDoor(int siteId, int x, int y, DoorKind kind, string room, int level = 2)
     {
         if (_doorAt.TryGetValue((x, y), out PowerDoor? had))
             return had;
-        var door = new PowerDoor(_doors.Count, siteId, x, y, kind, room);
+        var door = new PowerDoor(_doors.Count, siteId, x, y, kind, room, level);
         _doors.Add(door);
         _doorAt[(x, y)] = door;
         if (kind == DoorKind.SecurityLock)
@@ -417,8 +417,12 @@ public sealed class PowerGrid
 
     // ---------------- working the equipment ----------------
 
-    /// <summary>What can be done at a device now, for the right-click menu.</summary>
-    public IEnumerable<PowerChoice> Choices(int deviceId)
+    /// <summary>
+    /// What can be done at a device now, for the right-click menu. With a <paramref name="kit"/> (what
+    /// the operator carries), the choices it opens up too: filling and pouring a jerry can, fitting
+    /// parts; and the monorail wants its key. Without one, items aren't considered.
+    /// </summary>
+    public IEnumerable<PowerChoice> Choices(int deviceId, OperatorKit? kit = null)
     {
         PowerDevice device = _devices[deviceId];
         PowerSite? site = device.SiteId >= 0 ? _sites[device.SiteId] : null;
@@ -448,7 +452,7 @@ public sealed class PowerGrid
             case Transport t:
                 foreach (Transport to in Destinations(t))
                 {
-                    string? why = RideBlock(t, to);
+                    string? why = RideBlock(t, to, kit?.MonorailKey ?? true);
                     yield return new PowerChoice(PowerOp.Ride, to.Id,
                         t.Kind == TransportKind.Monorail ? $"Take the elevator and the monorail to the {to.Stop}" : $"Ride the cable car to the {to.Stop}",
                         why ?? $"{RideTicks(t, to) / 100 / 60 + 1} min", why is null);
@@ -465,17 +469,31 @@ public sealed class PowerGrid
                             g.FuelCentilitres > 0 ? $"{Litres(g.FuelCentilitres)} L in the day tank" : "the day tank is dry", g.FuelCentilitres > 0);
                         break;
                     case GeneratorState.NeedsRepair:
-                        yield return new PowerChoice(PowerOp.Repair, -1, "Work on the generator", $"{Seconds(RepairTicks)} s, it may not take");
+                        yield return new PowerChoice(PowerOp.Repair, -1, "Work on the generator",
+                            $"{Seconds(RepairTicksWith(RepairTicks, kit))} s, it may not take{(kit is { ToolKit: true } ? " (with your tool kit)" : "")}");
                         break;
                     case GeneratorState.Seized:
-                        yield return new PowerChoice(PowerOp.Repair, -1, "The generator is seized solid", "it needs parts", false);
+                        yield return kit is { SpareParts: > 0 }
+                            ? new PowerChoice(PowerOp.Repair, -1, "Fit the spare parts to the seized generator", $"{Seconds(RepairTicks)} s")
+                            : new PowerChoice(PowerOp.Repair, -1, "The generator is seized solid", "it needs parts", false);
                         break;
+                }
+                if (kit is { HasCan: true } && g.State != GeneratorState.Seized)
+                {
+                    int room = (g.TankCentilitres - g.FuelCentilitres) / 100;
+                    yield return new PowerChoice(PowerOp.Refuel, -1, "Refuel it from the jerry can",
+                        kit.CanLitres == 0 ? "the can is empty" : room <= 0 ? "the day tank is full" : $"{kit.CanLitres} L in the can",
+                        kit.CanLitres > 0 && room > 0);
                 }
                 break;
             case FuelStore f:
                 yield return f.ValveOpen
                     ? new PowerChoice(PowerOp.CloseValve, -1, "Close the fuel valve", $"{f.Litres} L in the tanks")
                     : new PowerChoice(PowerOp.OpenValve, -1, "Open the fuel valve", f.Litres > 0 ? $"{f.Litres} L in the tanks" : "the tanks are empty");
+                if (kit is { HasCan: true })
+                    yield return new PowerChoice(PowerOp.FillCan, -1, "Fill the jerry can from the tanks",
+                        f.Litres == 0 ? "the tanks are empty" : kit.CanLitres >= kit.CanCapacity ? "the can is full" : $"{f.Litres} L in the tanks",
+                        f.Litres > 0 && kit.CanLitres < kit.CanCapacity);
                 break;
             case BatteryBank b:
                 yield return b.InverterOn
@@ -496,16 +514,20 @@ public sealed class PowerGrid
                         site.BusLive ? $"{p.StartMinutes} game min" : "needs power on site to start", site.BusLive);
                 break;
             case LineFault lf:
-                yield return new PowerChoice(PowerOp.Repair, -1, "Repair the downed line", $"{Seconds(LineRepairTicks)} s, it may not take", _feeders[lf.FeederId].Down);
+                yield return new PowerChoice(PowerOp.Repair, -1, "Repair the downed line",
+                    $"{Seconds(RepairTicksWith(LineRepairTicks, kit))} s, it may not take{(kit is { ToolKit: true } ? " (with your tool kit)" : "")}", _feeders[lf.FeederId].Down);
                 break;
         }
     }
 
     /// <summary>
     /// Works a device. <paramref name="roll"/> (0–99) decides repairs: a better
-    /// <paramref name="electronics"/> skill makes them likelier to take.
+    /// <paramref name="electronics"/> skill makes them likelier to take, and so does a tool kit in the
+    /// <paramref name="kit"/> (which also makes them quicker). The kit's jerry can fills and pours, its
+    /// spare parts free a seized generator, and the monorail wants its key; the result says what was
+    /// used, for the caller to take from what the operator carries. Without a kit, items aren't considered.
     /// </summary>
-    public PowerResult Operate(int deviceId, PowerOp op, int arg, int electronics, int roll)
+    public PowerResult Operate(int deviceId, PowerOp op, int arg, int electronics, int roll, OperatorKit? kit = null)
     {
         if (deviceId < 0 || deviceId >= _devices.Count)
             return new PowerResult(false, "There's nothing like that here.", 0);
@@ -541,7 +563,7 @@ public sealed class PowerGrid
             {
                 if (arg < 0 || arg >= _devices.Count || _devices[arg] is not Transport to || to.Line != t.Line || to == t)
                     return new PowerResult(false, "That's not a stop on this line.", 0);
-                if (RideBlock(t, to) is { } why)
+                if (RideBlock(t, to, kit?.MonorailKey ?? true) is { } why)
                     return new PowerResult(false, why, SwitchTicks, 10, Switch);
                 return new PowerResult(true, t.Kind == TransportKind.Monorail
                     ? $"The elevator drops to the platform; a car hums in and takes you to the {to.Stop}."
@@ -565,14 +587,43 @@ public sealed class PowerGrid
                 g.AutoStarted = false;
                 return new PowerResult(true, "The generator winds down and stops.", SwitchTicks, 20, Switch);
             case (Generator g, PowerOp.Repair):
-                if (g.State == GeneratorState.Seized) return new PowerResult(false, "Seized solid. Nothing you can do without parts.", SwitchTicks);
+                if (g.State == GeneratorState.Seized)
+                {
+                    if (kit is not { SpareParts: > 0 })
+                        return new PowerResult(false, "Seized solid. Nothing you can do without parts.", SwitchTicks);
+                    g.State = GeneratorState.NeedsRepair;
+                    return new PowerResult(true, "You strip it down and fit the new parts: gaskets, a relay, seals. It turns freely now, but it still needs work.",
+                        RepairTicks, 30, "clanking tools", PartsUsed: 1);
+                }
                 if (g.State != GeneratorState.NeedsRepair) return new PowerResult(false, "There's nothing wrong with it.", 0);
-                if (roll < RepairChance(electronics))
+                if (roll < RepairChanceWith(electronics, kit))
                 {
                     g.State = GeneratorState.Off;
-                    return new PowerResult(true, "You clean the injectors and free the starter. It should run now.", RepairTicks, 30, "clanking tools");
+                    return new PowerResult(true, "You clean the injectors and free the starter. It should run now.", RepairTicksWith(RepairTicks, kit), 30, "clanking tools");
                 }
-                return new PowerResult(false, "You work on it a long while. It still won't catch; it might another time.", RepairTicks, 30, "clanking tools");
+                return new PowerResult(false, "You work on it a long while. It still won't catch; it might another time.", RepairTicksWith(RepairTicks, kit), 30, "clanking tools");
+            case (Generator g, PowerOp.Refuel):
+            {
+                if (kit is not { HasCan: true }) return new PowerResult(false, "You have nothing to pour in.", 0);
+                if (kit.CanLitres <= 0) return new PowerResult(false, "The jerry can is empty.", 0);
+                int room = (g.TankCentilitres - g.FuelCentilitres) / 100;
+                if (room <= 0) return new PowerResult(false, "The day tank is full.", 0);
+                int litres = Math.Min(room, kit.CanLitres);
+                g.FuelCentilitres += litres * 100;
+                return new PowerResult(true, $"You pour {litres} L into the day tank ({Litres(g.FuelCentilitres)} L in it now).",
+                    CanTicks(litres), 15, "fuel glugging", CanLitres: -litres);
+            }
+            case (FuelStore f, PowerOp.FillCan):
+            {
+                if (kit is not { HasCan: true }) return new PowerResult(false, "You have nothing to carry fuel in.", 0);
+                int room = kit.CanCapacity - kit.CanLitres;
+                if (room <= 0) return new PowerResult(false, "The jerry can is full.", 0);
+                if (f.Litres <= 0) return new PowerResult(false, "The tanks are empty.", 0);
+                int litres = Math.Min(room, f.Litres);
+                f.Litres -= litres;
+                return new PowerResult(true, $"You fill the jerry can from the drain cock: {litres} L ({kit.CanLitres + litres} L in it).",
+                    CanTicks(litres), 15, "fuel glugging", CanLitres: litres);
+            }
             case (FuelStore f, PowerOp.OpenValve or PowerOp.CloseValve):
                 f.ValveOpen = op == PowerOp.OpenValve;
                 return new PowerResult(true, f.ValveOpen
@@ -601,12 +652,12 @@ public sealed class PowerGrid
             {
                 Feeder f = _feeders[lf.FeederId];
                 if (!f.Down) return new PowerResult(false, "The line is back up already.", 0);
-                if (roll < RepairChance(electronics))
+                if (roll < RepairChanceWith(electronics, kit))
                 {
                     f.Down = false;
-                    return new PowerResult(true, "You splice the broken conductor and rehang it. The line should carry now.", LineRepairTicks, 30, "clanking tools");
+                    return new PowerResult(true, "You splice the broken conductor and rehang it. The line should carry now.", RepairTicksWith(LineRepairTicks, kit), 30, "clanking tools");
                 }
-                return new PowerResult(false, "You struggle with the broken line and can't get it to hold. Try again.", LineRepairTicks, 30, "clanking tools");
+                return new PowerResult(false, "You struggle with the broken line and can't get it to hold. Try again.", RepairTicksWith(LineRepairTicks, kit), 30, "clanking tools");
             }
         }
         return new PowerResult(false, $"You can't do that with {device.Name}.", 0);
@@ -629,19 +680,39 @@ public sealed class PowerGrid
         return (int)Math.Min(int.MaxValue, ticks);
     }
 
-    /// <summary>Why a ride can't go now (null if it can): both ends of a monorail ride need power, a cable car its winch.</summary>
-    public string? RideBlock(Transport from, Transport to)
+    /// <summary>
+    /// Why a ride can't go now (null if it can): both ends of a monorail ride need power, a cable car
+    /// its winch; and the monorail's elevators open only to the access key (<paramref name="hasKey"/>).
+    /// </summary>
+    public string? RideBlock(Transport from, Transport to, bool hasKey = true)
     {
         PowerSite here = _sites[from.SiteId], there = _sites[to.SiteId];
         if (!here.Powered)
             return from.Kind == TransportKind.Monorail ? $"The elevator is dead: no power from the {here.Name}." : $"The winch is dead: no power from the {here.Name}.";
         if (!there.Powered)
             return $"The far end has no power: the {there.Name} is dark.";
+        if (from.Kind == TransportKind.Monorail && !hasKey)
+            return "The elevator's reader stays red: it wants the monorail access key.";
         return null;
     }
 
     /// <summary>Percent chance a repair takes: 45 untrained, 70 with some electronics, 90 for an expert.</summary>
     public static int RepairChance(int electronics) => Math.Min(90, 45 + 25 * Math.Max(0, electronics));
+
+    /// <summary>A tool kit adds this to the chance a repair takes (to at most <see cref="ToolKitChanceCap"/>), and takes a third off the time.</summary>
+    public const int ToolKitChanceBonus = 20, ToolKitChanceCap = 95;
+
+    /// <summary>The chance a repair takes with what the operator carries.</summary>
+    public static int RepairChanceWith(int electronics, OperatorKit? kit) =>
+        kit is { ToolKit: true } ? Math.Min(ToolKitChanceCap, RepairChance(electronics) + ToolKitChanceBonus) : RepairChance(electronics);
+
+    /// <summary>How long a repair takes with what the operator carries: a third less with a tool kit.</summary>
+    public static int RepairTicksWith(int ticks, OperatorKit? kit) => kit is { ToolKit: true } ? ticks * 2 / 3 : ticks;
+
+    /// <summary>Filling or emptying a jerry can: 300 ticks for every 10 L or part of it.</summary>
+    public const int CanTicksPer10Litres = 300;
+
+    public static int CanTicks(int litres) => CanTicksPer10Litres * Math.Max(1, (litres + 9) / 10);
 
     // ---------------- describing it ----------------
 

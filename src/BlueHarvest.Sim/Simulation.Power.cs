@@ -265,7 +265,12 @@ public sealed partial class Simulation
     private int WorkDoor(Actor actor, TilePos tile, DoorState state)
     {
         if (PowerDoorAt(tile) is not { Kind: DoorKind.Motor } door)
+        {
+            // a security door shut while its facility's locks hold locks again (a keycard opened it)
+            if (state == DoorState.Closed && PowerDoorAt(tile) is { Kind: DoorKind.SecurityLock } secure && Power!.DoorLocked(secure))
+                state = DoorState.Locked;
             return SwingDoor(actor, tile, state);
+        }
         SetDoor(tile, state);
         actor.LastMovedTick = CurrentTick;
         if (Power!.DoorPowered(door))
@@ -363,6 +368,56 @@ public sealed partial class Simulation
         }
     }
 
+    /// <summary>The jerry can an actor would use: the first one carried.</summary>
+    private static Item? JerryCanOf(Actor actor) => actor.Inventory.All.FirstOrDefault(i => i.Kind == ItemKind.JerryCan);
+
+    /// <summary>What an actor carries that matters to the power equipment: a tool kit, spare parts, a jerry can, the monorail key.</summary>
+    public OperatorKit KitOf(Actor actor)
+    {
+        var inventory = actor.Inventory;
+        var can = JerryCanOf(actor);
+        return new OperatorKit(
+            ToolKit: inventory.Has(ItemKind.ToolKit),
+            SpareParts: inventory.Count(ItemKind.SpareParts),
+            CanLitres: can?.Amount ?? 0,
+            CanCapacity: can?.Def.MaxAmount ?? 0,
+            MonorailKey: inventory.Has(ItemKind.Keycard, "monorail"));
+    }
+
+    /// <summary>What an actor could do at a device now, with what they carry (for the menu).</summary>
+    public IEnumerable<PowerChoice> PowerChoices(Actor actor, int deviceId) =>
+        Power is null ? Array.Empty<PowerChoice>() : Power.Choices(deviceId, KitOf(actor));
+
+    /// <summary>
+    /// A keycard the actor carries that opens a security door: the facility's own, at the door's level
+    /// or above.
+    /// </summary>
+    public Item? KeycardFor(Actor actor, PowerDoor door)
+    {
+        if (Power is null || door.Kind != DoorKind.SecurityLock)
+            return null;
+        string site = Power.Sites[door.SiteId].Name;
+        return actor.Inventory.All.FirstOrDefault(i => i.Kind == ItemKind.Keycard && i.Tag == site && i.Level >= door.Level);
+    }
+
+    /// <summary>
+    /// Someone at a locked security door with its facility's card: the lock clicks open for them (the
+    /// door swings open; the site's locks stay engaged, so it locks again once shut). Null if the door
+    /// isn't one their card opens.
+    /// </summary>
+    private int? Swipe(Actor actor, TilePos tile)
+    {
+        if (Map.Structures.DoorAt(tile) != DoorState.Locked || PowerDoorAt(tile) is not { Kind: DoorKind.SecurityLock } door
+            || KeycardFor(actor, door) is not { } card)
+            return null;
+        int ticks = SwingDoor(actor, tile, DoorState.Open) + ItemRules.UnlockTicks;
+        KeycardUsed?.Invoke(actor, card, tile);
+        return ticks;
+    }
+
+    /// <summary>Someone's keycard opened a security door (at the tile).</summary>
+    public event Action<Actor, Item, TilePos>? KeycardUsed;
+
     /// <summary>Works a device: the actor must be inside or next to it, on the ground. Repairs roll against its electronics skill.</summary>
     private int Operate(Actor actor, int deviceId, PowerOp op, int arg)
     {
@@ -375,7 +430,12 @@ public sealed partial class Simulation
             return BumpTicks;
         }
         int roll = Rng.Fork($"power:{deviceId}:{CurrentTick}").NextInt(100);
-        PowerResult result = Power.Operate(deviceId, op, arg, actor.Skills.Electronics, roll);
+        PowerResult result = Power.Operate(deviceId, op, arg, actor.Skills.Electronics, roll, KitOf(actor));
+        // what it used of what the actor carries
+        if (result.CanLitres != 0 && JerryCanOf(actor) is { } can)
+            can.Amount = Math.Clamp(can.Amount + result.CanLitres, 0, can.Def.MaxAmount);
+        for (int i = 0; i < result.PartsUsed; i++)
+            actor.Inventory.Use(ItemKind.SpareParts);
         if (result.Loudness > 0)
             EmitNoise(actor.Position, result.Loudness, result.NoiseKind, actor.Id);
         if (result.Done && op == PowerOp.Ride && Power.Devices[arg] is Transport to)

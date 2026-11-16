@@ -301,12 +301,14 @@ exit 77 53 floor hatch
 exit 70 16 culvert
 sparks 22 22
 item 40 28 crowbar
+item 48 28 jerry-can amount=12
 item 50 28 hard-case; >battery-d x4
-item 67 48 locker; >energy-bar x3; >water-bottle; >knife
+item 67 48 locker; >energy-bar x3; >water-bottle; >knife; >lighter
 item 72 48 desk; >notebook; >painkillers; >pistol; >magazine-9mm; >rounds-9mm x15; >keycard tag=testbed level=2
 item 78 49 medicine-cabinet; >bandage x4; >antiseptic
 item 75 50 crate locked; >canned-food x4; >lantern
 item 69 51 stick; duct-tape; rag x2
+item 77 51 fire-extinguisher
 item 76 53 cabinet locked tag=testbed level=2; >research-file; >data-drive
 item 70 54 field-pack
 end

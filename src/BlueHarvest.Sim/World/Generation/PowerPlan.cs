@@ -58,6 +58,9 @@ public static class PowerPlan
         "Fuel pool", "Cask store", "Accumulator chamber", "Holding cell 1", "Holding cell 2", "Holding cell 3", "Holding cell 4", "Animal holding",
     ];
 
+    /// <summary>Secure rooms whose doors want a level 3 keycard: vaults, the armoury, records and the reactor's fuel stores. The rest want level 2.</summary>
+    private static readonly HashSet<string> Level3Rooms = ["Cryo vault", "Armoury", "Records", "Fuel pool", "Cask store", "Accumulator chamber"];
+
     /// <summary>Rooms whose doors are motorised: elevators, airlocks, and the big doors of vehicle bays and cargo halls.</summary>
     private static readonly HashSet<string> MotorRooms = ["Elevator", "Airlock", "Vehicle bays", "Hangar floor", "Boat bays", "Cargo hall"];
 
@@ -342,7 +345,7 @@ public static class PowerPlan
             string? secure = touching.FirstOrDefault(SecureRooms.Contains);
             if (secure is not null)
             {
-                grid.AddDoor(siteId, x, y, DoorKind.SecurityLock, secure);
+                grid.AddDoor(siteId, x, y, DoorKind.SecurityLock, secure, Level3Rooms.Contains(secure) ? 3 : 2);
                 continue;
             }
             string? motor = touching.FirstOrDefault(MotorRooms.Contains);

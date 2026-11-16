@@ -59,6 +59,9 @@ public sealed partial class Simulation
 
     private readonly Dictionary<TilePos, Fire> _fires = new();
     private readonly Dictionary<TilePos, long> _fuel = new();
+
+    /// <summary>Tiles an extinguisher covered, and until when they won't catch.</summary>
+    private readonly Dictionary<TilePos, long> _quenched = new();
     private readonly List<(TilePos Tile, long OffTick)> _groundFlares = new();
     private readonly HashSet<int> _burntVehicles = new();
     private readonly Dictionary<int, long> _lastBurnTick = new();
@@ -190,6 +193,8 @@ public sealed partial class Simulation
     {
         if (!Map.InBounds(p) || _fires.ContainsKey(p))
             return false;
+        if (_quenched.TryGetValue(p, out long wet) && wet > tick)
+            return false;
         int burnable = BurnableAt(p);
         if (burnable <= 0)
             return false;
@@ -228,8 +233,10 @@ public sealed partial class Simulation
     /// Lights a fire with a flare held to a tile next to you (or your own): it uses up a flare, which
     /// then burns there like a thrown one.
     /// </summary>
-    private int Ignite(Actor actor, Direction? direction)
+    private int Ignite(Actor actor, Direction? direction, ItemKind source = ItemKind.Flare)
     {
+        if (source != ItemKind.Flare)
+            return IgniteWithFlame(actor, direction, source);
         if (!actor.Inventory.Has(ItemKind.Flare))
             return Bump(actor, "no flares left");
         TilePos tile = direction is { } d ? actor.Position.Offset(d) : actor.Position;
@@ -248,6 +255,118 @@ public sealed partial class Simulation
         Kindled?.Invoke(actor, tile, caught);
         return GearRules.ThrowTicks;
     }
+
+    /// <summary>
+    /// Lights a tile next to you (or your own) with a lighter or a match: one use, a small flame
+    /// (<see cref="FireRules.LighterHeat"/>), nothing left burning if it doesn't catch.
+    /// </summary>
+    private int IgniteWithFlame(Actor actor, Direction? direction, ItemKind source)
+    {
+        if (source is not (ItemKind.Lighter or ItemKind.Matches))
+            return Refuse(actor, $"you can't light anything with {ItemCatalog.Of(source).WithArticle}");
+        var flame = actor.Inventory.All.FirstOrDefault(i => i.Kind == source && i.Amount > 0);
+        if (flame is null)
+            return Refuse(actor, actor.Inventory.Has(source) ? $"the {ItemCatalog.Of(source).Name} is used up" : $"you have no {ItemCatalog.Of(source).Name}");
+        TilePos tile = direction is { } d ? actor.Position.Offset(d) : actor.Position;
+        if (!Map.InBounds(tile) || Map.CoverAt(tile).BlocksMovement && Cover[tile] != CoverType.Equipment && Cover[tile] != CoverType.Support)
+            return Refuse(actor, "nothing there to set alight");
+        flame.Amount--;
+        if (direction is { } facing)
+            actor.Facing = facing;
+        actor.LastMovedTick = CurrentTick;
+        bool caught = TryIgnite(tile, FireRules.LighterHeat, actor.Name);
+        Kindled?.Invoke(actor, tile, caught);
+        return FireRules.LighterTicks;
+    }
+
+    /// <summary>The tiles an extinguisher's burst covers: the one ahead, the two beside it (half a turn either way), and the one beyond.</summary>
+    public static IReadOnlyList<TilePos> ExtinguisherCone(TilePos from, Direction direction)
+    {
+        var left = (Direction)(((int)direction + 7) % 8);
+        var right = (Direction)(((int)direction + 1) % 8);
+        var ahead = from.Offset(direction);
+        return [ahead, from.Offset(left), from.Offset(right), ahead.Offset(direction)];
+    }
+
+    /// <summary>
+    /// A burst from a carried extinguisher: puts out the fire on the tiles of its cone, washes off any
+    /// fuel there, and keeps them from catching for <see cref="FireRules.QuenchTicks"/>. One charge.
+    /// </summary>
+    private int Extinguish(Actor actor, Direction direction)
+    {
+        var extinguisher = actor.Inventory.All.FirstOrDefault(i => i.Kind == ItemKind.FireExtinguisher && i.Amount > 0);
+        if (extinguisher is null)
+            return Refuse(actor, actor.Inventory.Has(ItemKind.FireExtinguisher) ? "the extinguisher is empty" : "you have no fire extinguisher");
+        extinguisher.Amount--;
+        actor.Facing = direction;
+        actor.LastMovedTick = CurrentTick;
+        bool hadFires = _fires.Count > 0;
+        int put = 0;
+        foreach (TilePos dry in _quenched.Where(kv => kv.Value <= CurrentTick).Select(kv => kv.Key).ToList())
+            _quenched.Remove(dry);
+        foreach (TilePos p in ExtinguisherCone(actor.Position, direction))
+        {
+            if (!Map.InBounds(p))
+                continue;
+            if (_fires.TryGetValue(p, out Fire? fire))
+            {
+                BurnOut(fire);
+                put++;
+            }
+            _fuel.Remove(p);
+            _quenched[p] = CurrentTick + FireRules.QuenchTicks;
+        }
+        EmitNoise(actor.Position, FireRules.ExtinguishLoudness, NoiseKinds.Extinguisher, actor.Id);
+        UpdateFireLights();
+        FireDoused?.Invoke(actor, put);
+        if (hadFires && _fires.Count == 0)
+            FiresOut?.Invoke();
+        return FireRules.ExtinguishTicks;
+    }
+
+    /// <summary>Someone used an extinguisher, putting out this many burning tiles.</summary>
+    public event Action<Actor, int>? FireDoused;
+
+    /// <summary>
+    /// Pours fuel from a carried jerry can: 2 L on your own tile, or a trail of 2 L a tile in a
+    /// direction, up to four tiles, stopping at anything solid or when the can runs dry. It soaks in
+    /// where things can burn (and runs off where they can't).
+    /// </summary>
+    private int PourFuel(Actor actor, Direction? direction)
+    {
+        var can = actor.Inventory.All.FirstOrDefault(i => i.Kind == ItemKind.JerryCan && i.Amount >= FireRules.PourLitresPerTile);
+        if (can is null)
+            return Refuse(actor, actor.Inventory.Has(ItemKind.JerryCan) ? "there's not enough fuel in the can" : "you have no jerry can");
+        var tiles = new List<TilePos>();
+        if (direction is not { } d)
+        {
+            tiles.Add(actor.Position);
+        }
+        else
+        {
+            actor.Facing = d;
+            var p = actor.Position;
+            for (int k = 0; k < FireRules.PourTiles && can.Amount >= FireRules.PourLitresPerTile * (tiles.Count + 1); k++)
+            {
+                p = p.Offset(d);
+                if (!Map.InBounds(p) || Map.CoverAt(p).BlocksMovement)
+                    break;
+                tiles.Add(p);
+            }
+            if (tiles.Count == 0)
+                return Refuse(actor, "there's no room to pour it that way");
+        }
+        foreach (TilePos p in tiles)
+            SpillFuel(p);
+        can.Amount -= FireRules.PourLitresPerTile * tiles.Count;
+        actor.LastMovedTick = CurrentTick;
+        EmitNoise(actor.Position, FireRules.PourLoudness, NoiseKinds.Pouring, actor.Id);
+        FuelPoured?.Invoke(actor, tiles);
+        return FireRules.PourTicksPerTile * tiles.Count;
+    }
+
+    /// <summary>Someone poured fuel on these tiles.</summary>
+    public event Action<Actor, IReadOnlyList<TilePos>>? FuelPoured;
 
     /// <summary>A flare lying burning on the ground: it may light what it's on, every fire step.</summary>
     private void FlareLanded(TilePos tile)
@@ -607,6 +726,17 @@ public sealed partial class Simulation
                 var to = new TilePos(p.X - dx, p.Y - dy);
                 if (Map.InBounds(to))
                     _fuel[to] = until;
+            }
+        }
+        if (_quenched.Count > 0)
+        {
+            var wet = _quenched.ToList();
+            _quenched.Clear();
+            foreach (var (p, until) in wet)
+            {
+                var to = new TilePos(p.X - dx, p.Y - dy);
+                if (Map.InBounds(to) && until > CurrentTick)
+                    _quenched[to] = until;
             }
         }
         for (int i = _groundFlares.Count - 1; i >= 0; i--)

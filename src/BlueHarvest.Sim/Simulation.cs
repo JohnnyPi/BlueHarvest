@@ -1185,7 +1185,7 @@ public sealed partial class Simulation
             hasher.Add(light.Position.X).Add(light.Position.Y).Add(light.On ? 1 : 0);
         Weather.AddTo(hasher);
         Power?.AddTo(hasher);
-        hasher.Add(TilesBurnt).Add(_fires.Count).Add(_fuel.Count);
+        hasher.Add(TilesBurnt).Add(_fires.Count).Add(_fuel.Count).Add(_quenched.Count);
         foreach (Fire fire in _fires.Values.OrderBy(f => f.Position.Y).ThenBy(f => f.Position.X))
             hasher.Add(fire.Position.X).Add(fire.Position.Y).Add(fire.Intensity).Add(fire.FuelSteps);
         foreach (var actor in _actors)
@@ -1263,7 +1263,9 @@ public sealed partial class Simulation
         ToggleLightAction => ToggleLight(actor),
         RappelAction rappel => Rappel(actor, rappel.Direction),
         OperateAction operate => Operate(actor, operate.DeviceId, operate.Op, operate.Arg),
-        IgniteAction ignite => Ignite(actor, ignite.Direction),
+        IgniteAction ignite => Ignite(actor, ignite.Direction, ignite.Source),
+        ExtinguishAction extinguish => Extinguish(actor, extinguish.Direction),
+        PourFuelAction pour => PourFuel(actor, pour.Direction),
         PickUpAction pickUp => PickUp(actor, pickUp.ItemId),
         DropAction drop => Drop(actor, drop.ItemId),
         PutAction put => Put(actor, put.ItemId, put.ContainerId),
@@ -1292,8 +1294,11 @@ public sealed partial class Simulation
         var (blocked, toDeck) = SmallStep(actor, actor.Position, actor.OnDeck, direction, ignoreSmallActors: false);
         if (blocked is not null)
         {
-            // walking into a live fence: it bites back
             var ahead = actor.Position.Offset(direction);
+            // a locked security door, with its facility's card: the lock clicks open
+            if (!actor.OnDeck && Map.InBounds(ahead) && actor.Species.OpensDoors && Swipe(actor, ahead) is { } swiped)
+                return swiped;
+            // walking into a live fence: it bites back
             if (!actor.OnDeck && Map.InBounds(ahead) && IsLiveFence(ahead))
                 return Shock(actor, ahead);
             return Bump(actor, blocked);
@@ -1585,7 +1590,7 @@ public sealed partial class Simulation
             case DoorState.Closed:
                 return WorkDoor(actor, tile, DoorState.Open);
             default:
-                return Bump(actor, "the door is locked");
+                return Swipe(actor, tile) ?? Bump(actor, "the door is locked");
         }
     }
 

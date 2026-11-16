@@ -27,7 +27,7 @@ public partial class Main
     /// </summary>
     private void AddPowerChoices(List<MenuChoice> choices, TilePos tile)
     {
-        if (_sim.Power is not { } grid)
+        if (_sim.Power is null)
             return;
         var reachable = _sim.DevicesInReach(_playerActor).ToList();
         IEnumerable<PowerDevice> shown = tile == _playerActor.Position ? reachable : _sim.DevicesAt(tile).ToList();
@@ -39,7 +39,7 @@ public partial class Main
                 continue;
             }
             int id = device.Id;
-            foreach (PowerChoice choice in grid.Choices(id))
+            foreach (PowerChoice choice in _sim.PowerChoices(_playerActor, id))
                 choices.Add(new MenuChoice(choice.Text, () => Submit(new OperateAction(id, choice.Op, choice.Arg)), choice.Hint, choice.Enabled));
         }
     }
@@ -56,7 +56,9 @@ public partial class Main
             string doorSite = grid.Sites[door.SiteId].Name;
             facts.Add(door.Kind == DoorKind.SecurityLock
                 ? (grid.DoorLocked(door)
-                    ? ($"Security door ({door.Room}): locked while the {doorSite} has power; release it at the switch panel", HudTheme.Muted)
+                    ? (_sim.KeycardFor(_playerActor, door) is not null
+                        ? ($"Security door ({door.Room}): locked; your keycard opens it", HudTheme.Safe)
+                        : ($"Security door ({door.Room}): locked while the {doorSite} has power; a level {door.Level} {doorSite} card opens it, or release it at the switch panel", HudTheme.Muted))
                     : ($"Security door ({door.Room}): its lock is off", HudTheme.Ink))
                 : (grid.DoorPowered(door)
                     ? ("Motorised door: it slides open", HudTheme.Ink)

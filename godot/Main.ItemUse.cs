@@ -19,6 +19,15 @@ public partial class Main
         _sim.ContainerUnlocked += OnContainerUnlocked;
         _sim.LockForced += OnLockForced;
         _sim.LightDied += OnLightDied;
+        _sim.KeycardUsed += OnKeycardUsed;
+        _sim.FireDoused += OnFireDoused;
+        _sim.FuelPoured += OnFuelPoured;
+    }
+
+    private void OnKeycardUsed(Actor actor, Item card, TilePos door)
+    {
+        if (actor == _playerActor)
+            Say($"You touch the {card.Def.Name} to the reader. The lock clicks and the door swings open.");
     }
 
     private void OnItemsCombined(Actor actor, Combination combination, int moved, Item? made)

@@ -54,6 +54,10 @@ public enum PowerOp : byte
     ReleaseLocks,
     /// <summary>Ride an elevator or cable car to another stop (the argument is the destination's device id).</summary>
     Ride,
+    /// <summary>Fill a carried jerry can from a site's fuel tanks.</summary>
+    FillCan,
+    /// <summary>Pour a carried jerry can into a generator's day tank.</summary>
+    Refuel,
 }
 
 /// <summary>What a facility lamp is for.</summary>
@@ -232,7 +236,8 @@ public sealed class PowerLamp(int id, int siteId, int x, int y, int heightDm, in
 }
 
 /// <summary>A powered doorway at a facility or a station, in island metres.</summary>
-public sealed record PowerDoor(int Id, int SiteId, int X, int Y, DoorKind Kind, string Room);
+/// <summary>A powered door. A security door's <paramref name="Level"/> is the keycard level that opens it (2 or 3).</summary>
+public sealed record PowerDoor(int Id, int SiteId, int X, int Y, DoorKind Kind, string Room, int Level = 2);
 
 /// <summary>A paddock fence line fed by a fence feeder: a closed polyline in island metres.</summary>
 public sealed record FenceLine(int FeederId, string Paddock, int[] Poly);
@@ -300,7 +305,22 @@ public sealed class PowerSite(int id, string name, string kind, int x, int y, in
 public sealed record PowerChoice(PowerOp Op, int Arg, string Text, string? Hint = null, bool Enabled = true);
 
 /// <summary>What came of working a device: what to tell the player, how long it took, and how loud it was.</summary>
-public sealed record PowerResult(bool Done, string Message, int Ticks, int Loudness = 0, string NoiseKind = "");
+/// <summary>
+/// What working a device did. <paramref name="CanLitres"/>: litres into the operator's jerry can
+/// (negative: out of it); <paramref name="PartsUsed"/>: sets of spare parts used up.
+/// </summary>
+public sealed record PowerResult(bool Done, string Message, int Ticks, int Loudness = 0, string NoiseKind = "",
+    int CanLitres = 0, int PartsUsed = 0);
+
+/// <summary>
+/// What the person working a device has on them that matters to it: a tool kit (repairs go better and
+/// faster), spare parts (for a seized generator), a jerry can (litres in it, and how much it holds;
+/// no can if <paramref name="CanCapacity"/> is 0), and the monorail access key.
+/// </summary>
+public sealed record OperatorKit(bool ToolKit = false, int SpareParts = 0, int CanLitres = 0, int CanCapacity = 0, bool MonorailKey = false)
+{
+    public bool HasCan => CanCapacity > 0;
+}
 
 public enum PowerEventKind : byte
 {

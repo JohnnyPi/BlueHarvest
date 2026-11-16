@@ -62,7 +62,7 @@ public sealed record RappelAction(Direction Direction) : ActorAction;
 public sealed record OperateAction(int DeviceId, PowerOp Op, int Arg = -1) : ActorAction;
 
 /// <summary>Holds a lit flare to the tile that way (or the actor's own, with no direction) to set it alight. Uses up a flare.</summary>
-public sealed record IgniteAction(Direction? Direction = null) : ActorAction;
+public sealed record IgniteAction(Direction? Direction = null, ItemKind Source = ItemKind.Flare) : ActorAction;
 
 /// <summary>
 /// Picks up an item within reach (your tile or the next, at your level): lying on the ground, in an
@@ -93,3 +93,9 @@ public sealed record UseItemAction(int ItemId) : ActorAction;
 
 /// <summary>Forces a locked container within reach with a crowbar: slow and loud.</summary>
 public sealed record PryAction(int ItemId) : ActorAction;
+
+/// <summary>Puts out fire in a direction with a carried extinguisher: the tile ahead, the two beside it, and the one beyond.</summary>
+public sealed record ExtinguishAction(Direction Direction) : ActorAction;
+
+/// <summary>Pours fuel from a carried jerry can: on your own tile, or a trail of up to four tiles in a direction (a fuse).</summary>
+public sealed record PourFuelAction(Direction? Direction = null) : ActorAction;

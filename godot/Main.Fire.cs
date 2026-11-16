@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using BlueHarvest.Game.Rendering;
 using BlueHarvest.Game.Ui;
 using BlueHarvest.Sim;
@@ -39,10 +40,32 @@ public partial class Main
 
     private void OnKindled(Actor actor, TilePos tile, bool caught)
     {
-        if (actor == _playerActor && !caught)
-            Say(_sim.BurnableAt(tile) > 0
+        if (actor != _playerActor || caught)
+            return;
+        bool flare = _sim.GroundFlares.Contains(tile);
+        Say(flare
+            ? _sim.BurnableAt(tile) > 0
                 ? "You hold the flare to it. It smoulders and won't catch; maybe the flare will do it yet."
-                : "You drop the flare. Nothing there will burn.");
+                : "You drop the flare. Nothing there will burn."
+            : _sim.BurnableAt(tile) > 0
+                ? "The little flame licks at it and goes out. Too damp, or too tough, for that."
+                : "Nothing there will burn.");
+    }
+
+    private void OnFireDoused(Actor actor, int put)
+    {
+        if (actor == _playerActor)
+            Say(put > 0 ? "The extinguisher roars; the flames die under the white cloud." : "The extinguisher roars, but nothing there was burning.");
+        else if (Shown(actor) && put > 0)
+            Say($"{actor.Name} puts out a fire with an extinguisher.");
+    }
+
+    private void OnFuelPoured(Actor actor, IReadOnlyList<TilePos> tiles)
+    {
+        if (actor == _playerActor)
+            Say(tiles.Count == 1 && tiles[0] == actor.Position
+                ? "You splash fuel at your feet. The fumes catch in your throat."
+                : $"You pour a trail of fuel, {tiles.Count} m long.");
     }
 
     private void OnTanksBurst(TilePos tile)
@@ -59,17 +82,47 @@ public partial class Main
 
     private bool TileInView(TilePos tile) => _map.FogAt(tile) == FogState.Visible;
 
-    /// <summary>The menu entry for setting a tile alight with a flare, on your own tile or next to it.</summary>
+    /// <summary>
+    /// The menu's fire entries, on your own tile or next to it: put a fire out with an extinguisher,
+    /// pour fuel, and set a tile alight with a flare, a lighter or a match.
+    /// </summary>
     private void AddFireChoices(List<MenuChoice> choices, TilePos tile, int reach)
     {
-        if (reach > 1 || !_playerActor.Inventory.Has(ItemKind.Flare) || _sim.FireAt(tile) is not null)
+        if (reach > 1)
             return;
+        var inventory = _playerActor.Inventory;
+        Direction? way = reach == 0 ? null : Directions.FromDelta(tile.X - _playerActor.Position.X, tile.Y - _playerActor.Position.Y);
+
+        if (_sim.FireAt(tile) is not null)
+        {
+            var extinguisher = inventory.All.FirstOrDefault(i => i.Kind == ItemKind.FireExtinguisher);
+            if (extinguisher is not null && way is { } toward)
+                choices.Add(new MenuChoice("Put the fire out with the extinguisher", () => Submit(new ExtinguishAction(toward)),
+                    extinguisher.Amount > 0 ? $"{extinguisher.Amount} of {extinguisher.Def.MaxAmount} charges" : "it's empty", extinguisher.Amount > 0));
+            return;
+        }
+
+        if (inventory.All.FirstOrDefault(i => i.Kind == ItemKind.JerryCan) is { } can)
+            choices.Add(new MenuChoice(way is null ? "Pour fuel here" : "Pour a trail of fuel this way", () => Submit(new PourFuelAction(way)),
+                can.Amount >= FireRules.PourLitresPerTile ? $"{can.Amount} L in the can" : "not enough in the can", can.Amount >= FireRules.PourLitresPerTile));
+
         int burnable = _sim.BurnableAt(tile);
         if (burnable <= 0 && !_sim.FuelAt(tile))
             return;
-        Direction? way = reach == 0 ? null : Directions.FromDelta(tile.X - _playerActor.Position.X, tile.Y - _playerActor.Position.Y);
-        string hint = burnable >= 60 ? "tinder dry: it will go up" : burnable >= 40 ? "it should catch" : "damp: it may not take";
-        choices.Add(new MenuChoice("Set it alight with a flare", () => Submit(new IgniteAction(way)), hint));
+        if (inventory.Has(ItemKind.Flare))
+        {
+            string hint = burnable >= 60 ? "tinder dry: it will go up" : burnable >= 40 ? "it should catch" : "damp: it may not take";
+            choices.Add(new MenuChoice("Set it alight with a flare", () => Submit(new IgniteAction(way)), hint));
+        }
+        foreach (var (kind, tool) in new[] { (ItemKind.Lighter, "the lighter"), (ItemKind.Matches, "a match") })
+        {
+            if (!inventory.All.Any(i => i.Kind == kind && i.Amount > 0))
+                continue;
+            string hint = burnable + FireRules.LighterHeat >= FireRules.IgnitionThreshold + FireRules.IgnitionRoll ? "it should catch"
+                : burnable + FireRules.LighterHeat >= FireRules.IgnitionThreshold - FireRules.IgnitionRoll ? "it might catch"
+                : "too damp or tough for a small flame";
+            choices.Add(new MenuChoice($"Set it alight with {tool}", () => Submit(new IgniteAction(way, kind)), hint));
+        }
     }
 
     /// <summary>Tooltip lines about fire on a tile: burning, how readily it would, fuel and smoke.</summary>
