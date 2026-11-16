@@ -169,12 +169,15 @@ public class ItemUseTests
         Do(sim, drive, new UseItemAction(bandage.Id));
         Assert.Contains("nothing is bleeding", refusals[^1]);
 
-        sim.Injure(you, BodySection.LeftLeg, Severity.Yellow, bleeding: true, "a test");
+        // only a major (red) wound bleeds
+        sim.Injure(you, BodySection.LeftLeg, Severity.Red, bleeding: true, "a test");
         Assert.Equal(1, you.Health.BleedingWounds);
         Do(sim, drive, new UseItemAction(bandage.Id));
 
         Assert.Equal(0, you.Health.BleedingWounds);
-        Assert.Equal(Severity.Yellow, you.Health[BodySection.LeftLeg].Severity);
+        // the bleeding stops, but the wound is still red: it needs a first-aid kit
+        Assert.Equal(Severity.Red, you.Health[BodySection.LeftLeg].Severity);
+        Assert.Equal(BodySection.LeftLeg, you.Health.WorstUntreated());
         Assert.Equal(1, you.Inventory.Count(ItemKind.Bandage));
     }
 
