@@ -227,7 +227,9 @@ public partial class Main
     private void OnItemThrown(Actor actor, ItemKind item, TilePos landed)
     {
         if (actor == _playerActor)
-            Say($"The flare lands at {landed}, hissing and spitting red light.");
+            Say(item == ItemKind.GlowStick
+                ? "The glow stick tumbles away and lies glowing softly where it lands."
+                : $"The flare lands at {landed}, hissing and spitting red light.");
     }
 
     private void OnRappelled(Actor actor, bool slipped)

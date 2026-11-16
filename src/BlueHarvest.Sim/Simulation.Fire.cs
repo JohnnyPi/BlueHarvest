@@ -262,19 +262,22 @@ public sealed partial class Simulation
     /// </summary>
     private int IgniteWithFlame(Actor actor, Direction? direction, ItemKind source)
     {
-        if (source is not (ItemKind.Lighter or ItemKind.Matches))
+        if (source is not (ItemKind.Lighter or ItemKind.Matches or ItemKind.Torch))
             return Refuse(actor, $"you can't light anything with {ItemCatalog.Of(source).WithArticle}");
-        var flame = actor.Inventory.All.FirstOrDefault(i => i.Kind == source && i.Amount > 0);
+        bool torch = source == ItemKind.Torch;
+        var flame = actor.Inventory.All.FirstOrDefault(i => i.Kind == source && (torch ? i.Lit : i.Amount > 0));
         if (flame is null)
-            return Refuse(actor, actor.Inventory.Has(source) ? $"the {ItemCatalog.Of(source).Name} is used up" : $"you have no {ItemCatalog.Of(source).Name}");
+            return Refuse(actor, torch ? "you have no burning torch"
+                : actor.Inventory.Has(source) ? $"the {ItemCatalog.Of(source).Name} is used up" : $"you have no {ItemCatalog.Of(source).Name}");
         TilePos tile = direction is { } d ? actor.Position.Offset(d) : actor.Position;
         if (!Map.InBounds(tile) || Map.CoverAt(tile).BlocksMovement && Cover[tile] != CoverType.Equipment && Cover[tile] != CoverType.Support)
             return Refuse(actor, "nothing there to set alight");
-        flame.Amount--;
+        if (!torch)
+            flame.Amount--; // a torch keeps burning
         if (direction is { } facing)
             actor.Facing = facing;
         actor.LastMovedTick = CurrentTick;
-        bool caught = TryIgnite(tile, FireRules.LighterHeat, actor.Name);
+        bool caught = TryIgnite(tile, torch ? FireRules.HeldFlareHeat : FireRules.LighterHeat, actor.Name);
         Kindled?.Invoke(actor, tile, caught);
         return FireRules.LighterTicks;
     }

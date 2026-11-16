@@ -377,7 +377,7 @@ public static class ItemCatalog
         new(ItemKind.CircuitBoard, "circuit-board", "circuit board", "circuit boards", '#', ItemCategory.Part, ItemSize.Pocket, Grams: 150, Ml: 200, MaxAmount: 5, Stacks: true),
         new(ItemKind.Stick, "stick", "stout stick", "stout sticks", '|', ItemCategory.Part, ItemSize.Hand, Grams: 600, Ml: 1500, MaxAmount: 4, Stacks: true),
         new(ItemKind.Rag, "rag", "rag", "rags", '~', ItemCategory.Part, ItemSize.Pocket, Grams: 50, Ml: 100, MaxAmount: 10, Stacks: true),
-        new(ItemKind.Torch, "torch", "unlit torch", "unlit torches", '|', ItemCategory.Light, ItemSize.Hand, Grams: 800, Ml: 1600, Note: "A rag bound to a stick. Lighting it comes with the lighter."),
+        new(ItemKind.Torch, "torch", "torch", "torches", '|', ItemCategory.Light | ItemCategory.Usable, ItemSize.Hand, Grams: 800, Ml: 1600, Note: "A rag bound to a stick. Light it with a lighter or a match: it burns half an hour."),
     };
 
     private static readonly Dictionary<string, ItemDef> ById = BuildIndex();

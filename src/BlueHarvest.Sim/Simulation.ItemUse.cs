@@ -202,6 +202,12 @@ public sealed partial class Simulation
                 used = 1;
                 Adrenaline(actor);
                 break;
+            case ItemUse.SwitchLight:
+                return SwitchLight(actor, item);
+            case ItemUse.Crack:
+                return CrackGlowStick(actor, item);
+            case ItemUse.LightTorch:
+                return LightTorch(actor, item);
             case ItemUse.StopBleeding:
             {
                 UpdateHealth(actor);

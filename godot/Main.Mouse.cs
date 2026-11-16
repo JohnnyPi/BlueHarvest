@@ -388,6 +388,14 @@ public partial class Main
             choices.Add(new MenuChoice("Throw a flare here", () => Submit(new ThrowAction(ItemKind.Flare, tile)),
                 distance <= range ? $"{distance:0} m" : $"{distance:0} m, lands short", range > 0));
         }
+        if (!self && inventory.All.Any(i => i.Kind == ItemKind.GlowStick && (i.Lit || !i.Spent)))
+        {
+            int range = GearRules.ThrowRange(me.Skills.Throwing, me.Health);
+            int dx = tile.X - here.X, dy = tile.Y - here.Y;
+            double distance = Math.Sqrt(dx * dx + dy * dy);
+            choices.Add(new MenuChoice("Throw a glow stick here", () => Submit(new ThrowAction(ItemKind.GlowStick, tile)),
+                distance <= range ? $"{distance:0} m, it glows where it lands" : $"{distance:0} m, lands short", range > 0));
+        }
 
         AddItemChoices(choices, tile, reach);
         AddPowerChoices(choices, tile);

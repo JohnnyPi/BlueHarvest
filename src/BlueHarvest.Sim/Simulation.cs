@@ -1079,6 +1079,7 @@ public sealed partial class Simulation
         UpdateHealth(actor);
         UpdateNeeds(actor);
         DrainLight(actor);
+        SyncItemLights(); // lights run down or burn out by the time anyone looks
         if (actor.IsGone)
         {
             _scheduler.TryDequeue(out _, out _);
@@ -1108,6 +1109,7 @@ public sealed partial class Simulation
         _scheduler.TryDequeue(out _, out _);
         actor.Charging = false; // only a charging step sets it again
         int cost = Resolve(actor, action);
+        SyncItemLights(); // lights carried, set down, thrown, run down or burnt out
         if (!actor.IsLarge && !actor.IsGone && !actor.OnDeck && ExitAt(actor.Position) is { } exit)
             Escape(actor, exit);
         actor.NextActTick = tick + cost;
@@ -1375,10 +1377,12 @@ public sealed partial class Simulation
     /// </summary>
     private int Throw(Actor actor, ItemKind item, TilePos target)
     {
-        if (item != ItemKind.Flare)
+        if (item is not (ItemKind.Flare or ItemKind.GlowStick))
             return Bump(actor, "that isn't something to throw");
-        if (!actor.Inventory.Has(item))
+        if (item == ItemKind.Flare && !actor.Inventory.Has(item))
             return Bump(actor, "no flares left");
+        if (item == ItemKind.GlowStick && !actor.Inventory.All.Any(i => i.Kind == ItemKind.GlowStick && (i.Lit || !i.Spent)))
+            return Bump(actor, "no glow sticks left");
         if (actor.Inventory.FreeHands == 0)
             return Refuse(actor, "you need a hand free to throw");
         int range = GearRules.ThrowRange(actor.Skills.Throwing, actor.Health);
@@ -1406,6 +1410,21 @@ public sealed partial class Simulation
         int steps = Math.Max(Math.Abs(land.X - from.X), Math.Abs(land.Y - from.Y));
         for (int k = steps; k > 0 && Map.CoverAt(land).BlocksMovement; k--)
             land = new TilePos(from.X + (land.X - from.X) * (k - 1) / k, from.Y + (land.Y - from.Y) * (k - 1) / k);
+
+        if (item == ItemKind.GlowStick)
+        {
+            // a glow stick lands and lies there glowing (one is cracked on the way if none was)
+            if (GlowStickToThrow(actor) is not { } stick)
+                return Bump(actor, "no glow sticks left");
+            actor.Facing = Directions.FromDelta(land.X - from.X, land.Y - from.Y);
+            actor.LastMovedTick = CurrentTick;
+            MoveCarriedLight(actor);
+            PlaceItem(stick, land);
+            TrackLight(stick);
+            EmitNoise(land, 3, NoiseKinds.Thump);
+            ItemThrown?.Invoke(actor, item, land);
+            return GearRules.ThrowTicks;
+        }
 
         actor.Inventory.Use(item);
         actor.Facing = Directions.FromDelta(land.X - from.X, land.Y - from.Y);

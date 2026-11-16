@@ -91,6 +91,7 @@ public partial class DebugPanel : PanelContainer
         Toggle(view, "Roofs", Key.None, () => o.Roofs, v => o.Roofs = v);
         Toggle(view, "Edge markers", Key.None, () => o.EdgeMarkers, v => o.EdgeMarkers = v);
         Toggle(view, "Moving water", Key.None, () => o.Animation, v => o.Animation = v);
+        Toggle(view, "Sense cues", Key.None, () => o.SenseCues, v => o.SenseCues = v);
 
         var weatherRow = new HBoxContainer();
         weatherRow.AddThemeConstantOverride("separation", 10);

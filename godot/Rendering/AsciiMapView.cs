@@ -36,6 +36,9 @@ public sealed class OverlayState
     /// <summary>Water that moves on its own: glints, river streaks, surf (drawn by the AmbientView).</summary>
     public bool Animation = true;
 
+    /// <summary>Sense cues on the map: ripples, wisps and tremors where you sense something, ticks on a ring for what comes from a direction.</summary>
+    public bool SenseCues = true;
+
     /// <summary>The colour of the daylight (or the night) now, multiplied into everything lit. White for none.</summary>
     public Color SkyTint = new(1f, 1f, 1f);
 
@@ -617,14 +620,29 @@ public partial class AsciiMapView : Node2D
                 if (p.X < _x0 || p.X > _x1)
                     continue;
                 var state = FogAt(p);
-                if (state is not (FogState.Visible or FogState.Remembered) || RoofShown(p))
+                // in view: what's there now (remembered tiles show what was seen, below)
+                if (state != FogState.Visible || RoofShown(p))
                     continue;
                 var shown = group.OrderByDescending(i => i.Lying.Item.Def.Is(ItemCategory.Fixture)).ThenBy(i => i.Lying.Item.Id).First();
                 var def = shown.Lying.Item.Def;
                 float top = p.Y * CellSize - Lift(p);
-                DrawGlyphAt(def.Glyph, p.X * CellSize, top, state == FogState.Remembered ? RememberedItem : ItemInk(def));
+                DrawGlyphAt(def.Glyph, p.X * CellSize, top, ItemInk(def));
                 if (group.Count() > 1 || shown.Lying.Item.IsAccessible && shown.Lying.Item.Contents.Count > 0)
-                    DrawRect(new Rect2(p.X * CellSize + CellSize - 4, top + 1, 3, 3), state == FogState.Remembered ? RememberedItem : PaperInk);
+                    DrawRect(new Rect2(p.X * CellSize + CellSize - 4, top + 1, 3, 3), PaperInk);
+            }
+        }
+        // out of view: what you saw there last, which may have gone or moved since
+        if (Fog is { } memory && Overlays.Fog)
+        {
+            for (int x = _x0; x <= _x1; x++)
+            {
+                var p = new TilePos(x, y);
+                if (FogAt(p) != FogState.Remembered || RoofShown(p) || !memory.RememberedItem(p, out var def, out bool more))
+                    continue;
+                float top = p.Y * CellSize - Lift(p);
+                DrawGlyphAt(def.Glyph, p.X * CellSize, top, RememberedItem);
+                if (more)
+                    DrawRect(new Rect2(p.X * CellSize + CellSize - 4, top + 1, 3, 3), RememberedItem);
             }
         }
 

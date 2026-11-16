@@ -114,6 +114,11 @@ public partial class Main
             string hint = burnable >= 60 ? "tinder dry: it will go up" : burnable >= 40 ? "it should catch" : "damp: it may not take";
             choices.Add(new MenuChoice("Set it alight with a flare", () => Submit(new IgniteAction(way)), hint));
         }
+        if (inventory.All.Any(i => i.Kind == ItemKind.Torch && i.Lit))
+        {
+            string hint = burnable >= 60 ? "tinder dry: it will go up" : burnable >= 40 ? "it should catch" : "damp: it may not take";
+            choices.Add(new MenuChoice("Set it alight with the torch", () => Submit(new IgniteAction(way, ItemKind.Torch)), hint));
+        }
         foreach (var (kind, tool) in new[] { (ItemKind.Lighter, "the lighter"), (ItemKind.Matches, "a match") })
         {
             if (!inventory.All.Any(i => i.Kind == kind && i.Amount > 0))

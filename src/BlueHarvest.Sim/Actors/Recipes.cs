@@ -37,6 +37,12 @@ public enum ItemUse : byte
     TreatWater,
     /// <summary>An adrenaline auto-injector: pain shut out and full breath for a little while.</summary>
     Inject,
+    /// <summary>A headlamp or lantern switched on or off.</summary>
+    SwitchLight,
+    /// <summary>A glow stick cracked: it glows for eight hours.</summary>
+    Crack,
+    /// <summary>A torch lit with a lighter, a match or another torch: it burns half an hour.</summary>
+    LightTorch,
 }
 
 /// <summary>What goes with what, and what using a thing does.</summary>
@@ -82,6 +88,9 @@ public static class Recipes
         ItemKind.Painkillers or ItemKind.Antibiotics => ItemUse.TakeMedicine,
         ItemKind.Antiseptic or ItemKind.SutureKit or ItemKind.BurnGel or ItemKind.Splint => ItemUse.DressWounds,
         ItemKind.EpiPen => ItemUse.Inject,
+        ItemKind.Headlamp or ItemKind.Lantern => ItemUse.SwitchLight,
+        ItemKind.GlowStick => ItemUse.Crack,
+        ItemKind.Torch => ItemUse.LightTorch,
         ItemKind.Compass => ItemUse.TakeBearing,
         ItemKind.Radio => ItemUse.Listen,
         ItemKind.WaterTablets => ItemUse.TreatWater,

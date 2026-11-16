@@ -77,6 +77,7 @@ public partial class Main : Node2D
     private readonly Director _director = new();
     private AsciiMapView _map = null!;
     private AmbientView _ambient = null!;
+    private SenseRings _senseRings = null!;
     private WeatherView _weather = null!;
     private Camera2D _camera = null!;
     private ColorRect _flash = null!;
@@ -132,6 +133,11 @@ public partial class Main : Node2D
         _ambient = new AmbientView();
         _ambient.Bind(_sim, _map);
         AddChild(_ambient);
+
+        // where you hear, smell and feel things: ripples, wisps, tremors, and a ring of directions
+        _senseRings = new SenseRings();
+        _senseRings.Bind(_map);
+        AddChild(_senseRings);
 
         _weather = new WeatherView();
         _weather.Bind(_sim);
@@ -251,6 +257,12 @@ public partial class Main : Node2D
         {
             viewport.SetInputAsHandled();
             _help.Visible = false;
+            return;
+        }
+        if (!key.Echo && _mode == InputMode.Normal && (key.Keycode == Key.I || key.Keycode == Key.Escape && _inventory.Visible))
+        {
+            viewport.SetInputAsHandled();
+            ToggleInventory();
             return;
         }
         if (!key.Echo && _debug.TryHotkey(key.Keycode))

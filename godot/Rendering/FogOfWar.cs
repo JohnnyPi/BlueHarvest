@@ -56,6 +56,9 @@ public sealed class FogOfWar
     private long[] _roofSeenTick = Array.Empty<long>();
     private readonly Dictionary<int, Ghost> _ghosts = new();
 
+    /// <summary>What lay on each tile when it was last seen: the most notable thing there, and whether there was more.</summary>
+    private Dictionary<int, (ItemDef Def, bool More)> _rememberedItems = new();
+
     private readonly bool _usePlan;
 
     /// <param name="plan">
@@ -98,6 +101,14 @@ public sealed class FogOfWar
         Scroll(_seenTick, dx, dy, -1L);
         Scroll(_rememberedCover, dx, dy, CoverType.Grass);
         Scroll(_rememberedDoor, dx, dy, DoorState.Open);
+        var items = new Dictionary<int, (ItemDef, bool)>();
+        foreach (var (i, seen) in _rememberedItems)
+        {
+            int x = i % _width - dx, y = i / _width - dy;
+            if (x >= 0 && y >= 0 && x < _width && y < _height)
+                items[y * _width + x] = seen;
+        }
+        _rememberedItems = items;
         for (int y = 0; y < _height; y++)
             for (int x = 0; x < _width; x++)
                 _plan[y * _width + x] = _usePlan ? sim.Cover[new TilePos(x, y)] : CoverType.Grass;
@@ -145,6 +156,19 @@ public sealed class FogOfWar
 
     public DoorState RememberedDoor(TilePos p) => _rememberedDoor[Index(p)];
 
+    /// <summary>What you saw lying on a tile when you last saw it (it may have gone since), if anything.</summary>
+    public bool RememberedItem(TilePos p, out ItemDef def, out bool more)
+    {
+        if (_rememberedItems.TryGetValue(Index(p), out var seen))
+        {
+            (def, more) = seen;
+            return true;
+        }
+        def = null!;
+        more = false;
+        return false;
+    }
+
     public CoverType PlanCover(TilePos p) => _plan[Index(p)];
 
     public int RoofGroupAt(TilePos p) => _roofGroup[Index(p)];
@@ -178,6 +202,15 @@ public sealed class FogOfWar
         var senses = sim.SensesOf(player);
         int range = senses.SightRangeTiles;
         var at = player.Position;
+        // what lies where, to remember on the tiles in view
+        var lying = new Dictionary<int, List<WorldItem>>();
+        foreach (var (item, tile) in sim.ItemsOnMap())
+        {
+            int k = tile.Y * _width + tile.X;
+            if (!lying.TryGetValue(k, out var here))
+                lying[k] = here = new List<WorldItem>();
+            here.Add(item);
+        }
         int bodyHeight = Species.Human.BodyHeightDm;
         for (int y = Math.Max(0, at.Y - range); y <= Math.Min(_height - 1, at.Y + range); y++)
         {
@@ -192,6 +225,15 @@ public sealed class FogOfWar
                 _seenTick[i] = now;
                 _rememberedCover[i] = sim.Cover[p];
                 _rememberedDoor[i] = sim.Cover[p] == CoverType.Door ? sim.Map.Structures.DoorAt(p) : DoorState.Open;
+                if (lying.TryGetValue(i, out var things))
+                {
+                    var top = things.OrderByDescending(t => t.Item.Def.Is(ItemCategory.Fixture)).ThenBy(t => t.Item.Id).First().Item;
+                    _rememberedItems[i] = (top.Def, things.Count > 1 || top.IsAccessible && top.Contents.Count > 0);
+                }
+                else
+                {
+                    _rememberedItems.Remove(i);
+                }
             }
         }
 

@@ -22,6 +22,33 @@ public partial class Main
         _sim.KeycardUsed += OnKeycardUsed;
         _sim.FireDoused += OnFireDoused;
         _sim.FuelPoured += OnFuelPoured;
+        _sim.ItemLightSwitched += OnItemLightSwitched;
+        _sim.ItemLightDied += OnItemLightDied;
+    }
+
+    private void OnItemLightSwitched(Actor actor, Item item, bool lit)
+    {
+        if (actor != _playerActor)
+            return;
+        Say((item.Kind, lit) switch
+        {
+            (ItemKind.GlowStick, _) => "You bend the glow stick until it cracks: a cold green glow.",
+            (ItemKind.Torch, _) => "The rag catches. The torch spits and flares, throwing a ruddy light.",
+            (_, true) => $"You switch the {item.Def.Name} on.",
+            _ => $"You switch the {item.Def.Name} off.",
+        });
+    }
+
+    private void OnItemLightDied(Actor? actor, Item item)
+    {
+        string what = item.Kind switch
+        {
+            ItemKind.Torch => "gutters and goes out: it's burnt down",
+            ItemKind.GlowStick => "fades to nothing",
+            _ => "dims and goes dark: the batteries are flat",
+        };
+        if (actor == _playerActor)
+            Say($"Your {item.Def.Name} {what}.");
     }
 
     private void OnKeycardUsed(Actor actor, Item card, TilePos door)
@@ -113,6 +140,9 @@ public partial class Main
             ItemUse.Listen => "Listen to the radio",
             ItemUse.TreatWater => "Drop a water tablet into your water",
             ItemUse.Inject => $"Inject the {def.Name}",
+            ItemUse.SwitchLight => item.Lit ? $"Switch the {def.Name} off" : $"Switch the {def.Name} on",
+            ItemUse.Crack => "Crack a glow stick",
+            ItemUse.LightTorch => "Light the torch",
             _ => $"Use the {def.Name}",
         };
     }
@@ -152,54 +182,6 @@ public partial class Main
         CombineKind.Fit => $"Fit {c.From.Describe()} into the {c.Into.Def.Name}",
         _ => $"Make {ItemCatalog.Of(c.Recipe!.Makes).WithArticle} ({c.Into.Def.Name} + {c.From.Def.Name})",
     };
-
-    /// <summary>
-    /// What you can do with what you carry, for the menu on your own tile: use things, put pairs
-    /// together, take batteries and magazines out, unload.
-    /// </summary>
-    private void AddCarriedChoices(List<MenuChoice> items)
-    {
-        var inventory = _playerActor.Inventory;
-        var carried = inventory.All.ToList();
-
-        foreach (var item in carried)
-        {
-            if (Recipes.UseOf(item.Def) is { } use)
-            {
-                bool empty = !item.Def.Stacks && item.Def.Unit is not null && item.Amount == 0;
-                items.Add(new MenuChoice(UseLabel(item, use), () => Submit(new UseItemAction(item.Id)), empty ? "empty" : UseHint(item, use), !empty));
-            }
-        }
-
-        var seen = new HashSet<(ItemKind, ItemKind, int)>();
-        for (int i = 0; i < carried.Count; i++)
-        {
-            for (int j = i + 1; j < carried.Count; j++)
-            {
-                if (Recipes.Of(carried[i], carried[j]) is not { } c || !seen.Add((c.From.Kind, c.Into.Kind, c.Into.Id)))
-                    continue;
-                // nothing already fitted, and nothing into a slot or a gun that's full
-                if (inventory.HolderOf(c.From) is { Def.Holds.Only: not null })
-                    continue;
-                string? why = c.Kind switch
-                {
-                    CombineKind.Load => c.Into.Amount >= c.Into.Def.MaxAmount ? "full" : null,
-                    CombineKind.Fit => c.Into.RefusesToHold(c.From),
-                    _ => null,
-                };
-                var (a, b) = (carried[i], carried[j]);
-                items.Add(new MenuChoice(CombineLabel(c), () => Submit(new CombineAction(a.Id, b.Id)), why, why is null));
-            }
-        }
-
-        foreach (var item in carried)
-        {
-            if (item.Def.Fills is not null && item.Amount > 0)
-                items.Add(new MenuChoice($"Unload the {item.Def.Name}", () => Submit(new UnloadAction(item.Id)), $"{item.Amount} {item.Def.Unit}"));
-            else if (inventory.HolderOf(item) is { Def.Holds.Only: not null } slot)
-                items.Add(new MenuChoice($"Take the {item.Def.Name} out of the {slot.Def.Name}", () => Submit(new TakeOutAction(item.Id))));
-        }
-    }
 
     /// <summary>For a locked container within reach: whether your key opens it, or a crowbar can force it.</summary>
     private void AddLockChoices(List<MenuChoice> items, Item container)

@@ -152,22 +152,9 @@ public partial class Main
             }
         }
 
-        if (tile == me.Position)
-        {
-            AddCarriedChoices(items);
-
-            // what you hold or have loose in your pockets can go in a bag you wear
-            var bag = inventory.Carried.FirstOrDefault(c => c.Slot == CarrySlot.Worn && c.Item.IsContainer).Item;
-            foreach (var (held, _) in inventory.Carried.Where(c => c.Slot != CarrySlot.Worn))
-            {
-                if (bag is not null && bag.RefusesToHold(held) is null)
-                    items.Add(new MenuChoice($"Put {held.Describe()} in your {bag.Def.Name}", () => Submit(new PutAction(held.Id, bag.Id))));
-            }
-            // not what's fitted into something (a flashlight's batteries): take that out first
-            foreach (var carried in inventory.All.Where(i => inventory.HolderOf(i) is not { Def.Holds.Only: not null }))
-                items.Add(new MenuChoice($"Put down {carried.Describe()}", () => Submit(new DropAction(carried.Id)),
-                    inventory.HolderOf(carried) is { } holder ? $"from your {holder.Def.Name}" : null));
-        }
+        // what you carry is in the inventory panel now
+        if (tile == me.Position && inventory.Carried.Count > 0)
+            items.Insert(0, new MenuChoice("Inventory…", () => { if (!_inventory.Visible) ToggleInventory(); }, "I"));
 
         choices.AddRange(items.Take(MaxItemChoices));
         if (items.Count > MaxItemChoices)
@@ -180,6 +167,13 @@ public partial class Main
         var state = _map.FogAt(tile);
         if (state is not (FogState.Visible or FogState.Remembered) || _map.RoofShown(tile))
             return;
+        if (state == FogState.Remembered)
+        {
+            // only what you saw, not what's there now
+            if (_map.Fog is { } memory && memory.RememberedItem(tile, out var seen, out bool more))
+                facts.Add(($"You saw {seen.WithArticle} here{(more ? ", and more" : "")}", HudTheme.Muted));
+            return;
+        }
         var lying = _sim.ItemsAt(tile).Where(l => l.OnDeck == _playerActor.OnDeck || !_sim.Map.Structures.HasDeck(tile)).ToList();
         var loose = lying.Where(l => !l.Item.Def.Is(ItemCategory.Fixture)).Select(l => l.Item).ToList();
         foreach (var fixture in lying.Select(l => l.Item).Where(i => i.Def.Is(ItemCategory.Fixture)))
@@ -221,6 +215,7 @@ public partial class Main
             keys.Add($"{KeyCap("X")} light {(lightOn ? $"[color={HudTheme.Hex(HudTheme.Amber)}]on[/color]" : "off")}");
         if (inventory.Has(ItemKind.Rope))
             keys.Add($"{KeyCap("R")} rope");
+        keys.Add($"{KeyCap("I")} items");
         lines.Add(string.Join("  ", keys));
 
         string Items(IEnumerable<Item> items) => HudTheme.Escape(Listing(items));

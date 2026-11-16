@@ -354,7 +354,8 @@ public sealed partial class Simulation
     private static void AddItem(StateHasher hasher, Item item)
     {
         hasher.Add(item.Id).Add((int)item.Kind).Add(item.Amount).Add(item.IsOpen ? 1 : 0).Add(item.Locked ? 1 : 0)
-            .Add(item.Level).Add(item.Tag?.Length ?? -1).Add(item.Contents.Count).Add(item.Unsafe ? 1 : 0);
+            .Add(item.Level).Add(item.Tag?.Length ?? -1).Add(item.Contents.Count).Add(item.Unsafe ? 1 : 0)
+            .Add(item.Lit ? 1 : 0).Add(item.LitUntilTick);
         foreach (var inner in item.Contents)
             AddItem(hasher, inner);
     }

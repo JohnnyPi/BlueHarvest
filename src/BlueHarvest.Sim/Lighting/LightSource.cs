@@ -31,6 +31,22 @@ public sealed record LightSource(
     /// <summary>A road flare on the ground: bright, red, all round, short reach.</summary>
     public static LightSource Flare(TilePos position) => new(position, HeightDm: 2, RadiusTiles: 7, IntensityPercent: 90, Red: true);
 
+    /// <summary>A headlamp: a wider, shorter beam (about 37° either side) from the forehead.</summary>
+    public static LightSource Headlamp(TilePos position, Direction facing) =>
+        new(position, HeightDm: 17, RadiusTiles: 8, IntensityPercent: 60, Facing: facing, ConeCosPermille: 800);
+
+    /// <summary>A lantern: all round, enough to light a room; lower when it's set down.</summary>
+    public static LightSource Lantern(TilePos position, bool carried) =>
+        new(position, HeightDm: carried ? 8 : 3, RadiusTiles: 6, IntensityPercent: 60);
+
+    /// <summary>A glow stick: a faint glow all round.</summary>
+    public static LightSource GlowStick(TilePos position, bool carried) =>
+        new(position, HeightDm: carried ? 8 : 1, RadiusTiles: 3, IntensityPercent: 35);
+
+    /// <summary>A burning torch: a flickering red-gold light all round.</summary>
+    public static LightSource Torch(TilePos position, bool carried) =>
+        new(position, HeightDm: carried ? 14 : 2, RadiusTiles: 5, IntensityPercent: 70, Red: true);
+
     /// <summary>A hand-held flashlight: a narrow beam (about 30° either side) at chest height.</summary>
     public static LightSource Flashlight(TilePos position, Direction facing) =>
         new(position, HeightDm: 12, RadiusTiles: 10, IntensityPercent: 70, Facing: facing, ConeCosPermille: 866);

@@ -165,6 +165,18 @@ public sealed class Item
     /// <summary>Water from a stream or pool, not yet treated with a tablet: it may make you ill.</summary>
     public bool Unsafe { get; internal set; }
 
+    /// <summary>Giving light now: a headlamp or lantern switched on, a cracked glow stick, a burning torch.</summary>
+    public bool Lit { get; internal set; }
+
+    /// <summary>When a glow stick or torch goes out (0: never lit). Once past, it's spent.</summary>
+    public long LitUntilTick { get; internal set; }
+
+    /// <summary>A light that has burnt or glowed itself out.</summary>
+    public bool Spent => LitUntilTick > 0 && !Lit;
+
+    /// <summary>Up to when a switched-on light's batteries have been run down.</summary>
+    internal long DrainedTick { get; set; }
+
     /// <summary>What's inside, in the order it went in. Empty for anything that isn't a container.</summary>
     public IReadOnlyList<Item> Contents => (IReadOnlyList<Item>?)_contents ?? Array.Empty<Item>();
 
@@ -248,7 +260,8 @@ public sealed class Item
 
     /// <summary>Whether <paramref name="other"/> could join this stack: same kind and tag, and the room in it.</summary>
     internal bool StacksWith(Item other) =>
-        other != this && Def.Stacks && other.Kind == Kind && other.Tag == Tag && Amount + other.Amount <= Def.MaxAmount;
+        other != this && Def.Stacks && other.Kind == Kind && other.Tag == Tag && Amount + other.Amount <= Def.MaxAmount
+        && LitUntilTick == 0 && other.LitUntilTick == 0; // a lit or spent glow stick is one of its own
 
     /// <summary>Puts an item in (merging it into a stack of the same if there is one). Rules are checked by the caller.</summary>
     internal void Insert(Item item)
@@ -295,7 +308,7 @@ public sealed class Item
     {
         var def = Def;
         if (def.Stacks)
-            return Amount == 1 ? def.WithArticle : $"{Amount} {def.Plural}";
+            return (Amount == 1 ? def.WithArticle : $"{Amount} {def.Plural}") + LightState();
         string text = def.WithArticle;
         if (def.Unit is { } unit)
             text += Amount == 0 ? " (empty)" : unit == "%" ? $" ({Amount}%)" : $" ({Amount} {unit})";
@@ -307,8 +320,15 @@ public sealed class Item
             text += " (locked)";
         if (Unsafe && Amount > 0)
             text += " (untreated)";
+        text += LightState();
         return text;
     }
+
+    /// <summary>A light's state for its description: " (on)", " (glowing)", " (burning)", " (spent)", " (burnt out)", or nothing.</summary>
+    private string LightState() =>
+        Lit ? Kind switch { ItemKind.Torch => " (burning)", ItemKind.GlowStick => " (glowing)", _ => " (on)" }
+        : Spent ? Kind == ItemKind.Torch ? " (burnt out)" : " (spent)"
+        : "";
 
     /// <summary>What's fitted in a slot container, for its description: " (2 D batteries, 87%)", " (empty)".</summary>
     private string Loaded()

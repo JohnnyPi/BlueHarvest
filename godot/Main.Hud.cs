@@ -118,6 +118,8 @@ public partial class Main
         _help = new HelpPanel();
         root.AddChild(_help);
 
+        BuildInventoryPanel(root);
+
         _tooltip = new TileTooltip();
         root.AddChild(_tooltip);
 
@@ -249,6 +251,9 @@ public partial class Main
         UpdateCamera(snapCamera);
 
         _sidebar.Display(BuildFacts(report));
+        RefreshInventory();
+        _senseRings.Enabled = _map.Overlays.SenseCues;
+        _senseRings.Show(report, _playerActor.Position);
         _edges.Targets = EdgeTargets(report);
         if (_debug.Visible)
         {
