@@ -78,3 +78,18 @@ public sealed record PutAction(int ItemId, int ContainerId) : ActorAction;
 
 /// <summary>Opens a container with a door or lid within reach (a locker, a crate, a fridge), or shuts it if it's open.</summary>
 public sealed record OpenAction(int ItemId) : ActorAction;
+
+/// <summary>Puts two carried things together: loads rounds, fits batteries or a magazine, or makes something (see Recipes).</summary>
+public sealed record CombineAction(int ItemId, int WithId) : ActorAction;
+
+/// <summary>Takes a carried item out of what it's in (a battery from a flashlight, a can from your pack) into your hands or pockets.</summary>
+public sealed record TakeOutAction(int ItemId) : ActorAction;
+
+/// <summary>Empties what something is loaded with: rounds out of a magazine or a gun, a magazine out of a pistol, batteries out of a light.</summary>
+public sealed record UnloadAction(int ItemId) : ActorAction;
+
+/// <summary>Uses a carried item on its own: eats it, drinks from it, puts it on a wound, reads it (see Recipes.UseOf).</summary>
+public sealed record UseItemAction(int ItemId) : ActorAction;
+
+/// <summary>Forces a locked container within reach with a crowbar: slow and loud.</summary>
+public sealed record PryAction(int ItemId) : ActorAction;

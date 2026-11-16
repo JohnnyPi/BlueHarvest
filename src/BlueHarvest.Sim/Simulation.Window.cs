@@ -187,6 +187,7 @@ public sealed partial class Simulation
         {
             _lights[carried] = _lights[carried] with { Position = home, Facing = actor.Facing };
             if (actor.ParkedLightOn) SetLightOn(carried, true);
+            actor.LightDrainTick = CurrentTick; // no drain for the time it was away
         }
         return true;
     }

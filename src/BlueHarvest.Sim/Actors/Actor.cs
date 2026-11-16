@@ -105,6 +105,9 @@ public sealed class Actor
     /// <summary>Index in Simulation.Lights of the flashlight it carries (on or off), once it has switched one on.</summary>
     public int? CarriedLight { get; internal set; }
 
+    /// <summary>Up to when the carried flashlight's batteries have been run down (while it's off, it follows the clock).</summary>
+    public long LightDrainTick { get; internal set; }
+
     /// <summary>Standing on the deck over its tile rather than the ground. Always false for large bodies.</summary>
     public bool OnDeck { get; internal set; }
 

@@ -40,4 +40,10 @@ public static class NoiseKinds
 
     /// <summary>A locker, crate, drawer or fridge opening or shutting.</summary>
     public const string Opening = "a door or lid opening";
+
+    /// <summary>A lock wrenched open with a crowbar.</summary>
+    public const string Prying = "metal wrenched apart";
+
+    /// <summary>A radio switched on: hiss and crackle.</summary>
+    public const string RadioStatic = "radio static";
 }

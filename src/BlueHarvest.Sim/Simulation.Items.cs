@@ -51,9 +51,9 @@ public sealed partial class Simulation
 
     // ---------- setup ----------
 
-    /// <summary>Makes an item (setup, tests, loot). It lies nowhere until laid, given or stowed.</summary>
-    public Item CreateItem(ItemKind kind, int? amount = null, string? tag = null, int level = 0) =>
-        _items.Create(kind, amount, tag, level);
+    /// <summary>Makes an item (setup, tests, loot), fitted with what it comes with unless not <paramref name="fitted"/>. It lies nowhere until laid, given or stowed.</summary>
+    public Item CreateItem(ItemKind kind, int? amount = null, string? tag = null, int level = 0, bool fitted = true) =>
+        _items.Create(kind, amount, tag, level, fitted);
 
     /// <summary>Lays an item on a tile of the map (on its deck if <paramref name="onDeck"/>).</summary>
     public void PlaceItem(Item item, TilePos at, bool onDeck = false)
@@ -96,7 +96,7 @@ public sealed partial class Simulation
             int copies = def.Stacks ? 1 : spec.Count;
             for (int i = 0; i < copies; i++)
             {
-                var item = CreateItem(spec.Kind, def.Stacks ? spec.Count : spec.Amount, spec.Tag, spec.Level);
+                var item = CreateItem(spec.Kind, def.Stacks ? spec.Count : spec.Empty ? 0 : spec.Amount, spec.Tag, spec.Level, fitted: !spec.Empty);
                 item.Locked = spec.Locked && def.Holds is { Closes: true };
                 item.IsOpen = spec.Open && !item.Locked && def.Holds is { Closes: true };
                 if (spec.Inside)
@@ -297,14 +297,22 @@ public sealed partial class Simulation
         var container = reach.Item;
         if (container.Def.Holds is not { Closes: true } holds)
             return Refuse(actor, $"the {container.Def.Name} has nothing to open");
+        int extra = 0;
         if (!container.IsOpen && container.Locked)
-            return Refuse(actor, $"the {container.Def.Name} is locked");
+        {
+            if (KeyFor(actor, container) is not { } key)
+                return Refuse(actor, actor.Inventory.Has(ItemKind.Crowbar)
+                    ? $"the {container.Def.Name} is locked (you could force it)" : $"the {container.Def.Name} is locked");
+            container.Locked = false;
+            extra = ItemRules.UnlockTicks;
+            ContainerUnlocked?.Invoke(actor, container, key);
+        }
 
         container.IsOpen = !container.IsOpen;
         if (holds.OpenLoudness > 0)
             EmitNoise(reach.At, holds.OpenLoudness, NoiseKinds.Opening, actor.Id);
         ContainerOpened?.Invoke(actor, container, container.IsOpen);
-        return Math.Max(RefuseTicks, container.IsOpen ? holds.OpenTicks : holds.OpenTicks / 2);
+        return Math.Max(RefuseTicks, container.IsOpen ? holds.OpenTicks : holds.OpenTicks / 2) + extra;
     }
 
     /// <summary>After something left an actor's hands: a flashlight that was their last one goes out with it.</summary>
@@ -334,7 +342,7 @@ public sealed partial class Simulation
         }
         foreach (var actor in _actors)
         {
-            hasher.Add(actor.Inventory.Carried.Count);
+            hasher.Add(actor.LightDrainTick).Add(actor.Inventory.Carried.Count);
             foreach (var (item, slot) in actor.Inventory.Carried)
             {
                 hasher.Add((int)slot);
@@ -346,7 +354,7 @@ public sealed partial class Simulation
     private static void AddItem(StateHasher hasher, Item item)
     {
         hasher.Add(item.Id).Add((int)item.Kind).Add(item.Amount).Add(item.IsOpen ? 1 : 0).Add(item.Locked ? 1 : 0)
-            .Add(item.Contents.Count);
+            .Add(item.Level).Add(item.Tag?.Length ?? -1).Add(item.Contents.Count);
         foreach (var inner in item.Contents)
             AddItem(hasher, inner);
     }

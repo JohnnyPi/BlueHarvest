@@ -28,13 +28,25 @@ public sealed class ItemLedger
 
     /// <summary>
     /// Makes a new item: a stack of one, or at its kind's starting fill, unless an amount is given
-    /// (clamped to the kind's maximum). It lies nowhere until it is laid, carried or put in something.
+    /// (clamped to the kind's maximum), and <paramref name="fitted"/> with what it comes with (a
+    /// flashlight's batteries: they are made right after it). It lies nowhere until it is laid,
+    /// carried or put in something.
     /// </summary>
-    public Item Create(ItemKind kind, int? amount = null, string? tag = null, int level = 0)
+    public Item Create(ItemKind kind, int? amount = null, string? tag = null, int level = 0, bool fitted = true)
     {
         var def = ItemCatalog.Of(kind);
         int fill = Math.Clamp(amount ?? (def.Stacks ? 1 : def.StartAmount), def.Stacks ? 1 : 0, def.MaxAmount);
-        return new Item(++_lastId, kind, fill) { Tag = tag, Level = level };
+        var item = new Item(++_lastId, kind, fill) { Tag = tag, Level = level };
+        if (fitted && def.Comes is { } comes)
+        {
+            foreach (var (inner, count) in comes)
+            {
+                var innerDef = ItemCatalog.Of(inner);
+                for (int i = 0; i < (innerDef.Stacks ? 1 : count); i++)
+                    item.Insert(Create(inner, innerDef.Stacks ? count : null));
+            }
+        }
+        return item;
     }
 
     /// <summary>What lies at a spot (both levels), in the order it was put there.</summary>

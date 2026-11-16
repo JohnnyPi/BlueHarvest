@@ -67,7 +67,8 @@ public enum CarrySlot : byte { RightHand, LeftHand, BothHands, Pocket, Worn }
 /// <paramref name="Accepts"/> (any category if None). <paramref name="Closes"/> if it has a door or
 /// lid that must be opened before you can see in or reach in (lockers, crates, fridges); bags and
 /// trays don't. Opening it makes <paramref name="OpenLoudness"/> of noise and takes
-/// <paramref name="OpenTicks"/>.
+/// <paramref name="OpenTicks"/>. <paramref name="Only"/>, if given, is the only kinds it takes: a
+/// flashlight's battery slot, a pistol's magazine well.
 /// </summary>
 public sealed record ContainerSpec(
     int CapacityMl,
@@ -76,7 +77,8 @@ public sealed record ContainerSpec(
     ItemCategory Accepts = ItemCategory.None,
     bool Closes = false,
     int OpenLoudness = 0,
-    int OpenTicks = 0);
+    int OpenTicks = 0,
+    IReadOnlyList<ItemKind>? Only = null);
 
 /// <summary>
 /// What a kind of item is: data, like Species. Weight in grams, volume in millilitres, all integers.
@@ -86,6 +88,12 @@ public sealed record ContainerSpec(
 /// full or charged it is (ml of water, uses of a lighter, rounds in a magazine), 0 to
 /// <paramref name="MaxAmount"/>, in <paramref name="Unit"/>; each unit adds
 /// <paramref name="MilligramsPerUnit"/> to the weight and nothing to the volume.
+/// </para>
+/// <para>
+/// <paramref name="Fills"/>: the stacking kind its fill is made of (a magazine fills with 9 mm
+/// rounds); loading moves rounds from a stack into it. <paramref name="Comes"/>: what a new one
+/// comes fitted with (a flashlight's two D batteries), unless made empty. <paramref name="Dose"/>:
+/// how much one use takes (250 ml of water, 2 pills); <paramref name="UseTicks"/>: how long.
 /// </para>
 /// </summary>
 public sealed record ItemDef(
@@ -105,7 +113,11 @@ public sealed record ItemDef(
     string? Unit = null,
     WearSlot Wear = WearSlot.None,
     ContainerSpec? Holds = null,
-    string? Note = null)
+    string? Note = null,
+    ItemKind? Fills = null,
+    IReadOnlyList<(ItemKind Kind, int Count)>? Comes = null,
+    int Dose = 1,
+    int UseTicks = 0)
 {
     public bool Is(ItemCategory category) => (Categories & category) != 0;
 
@@ -214,6 +226,8 @@ public sealed class Item
             return $"the {item.Def.Name} doesn't move";
         if (holds.Accepts != ItemCategory.None && (item.Def.Categories & holds.Accepts) == 0)
             return $"the {item.Def.Name} doesn't go in the {Def.Name}";
+        if (holds.Only is { } only && !only.Contains(item.Kind))
+            return $"the {item.Def.Name} doesn't fit the {Def.Name}";
         if (item.TotalMl > holds.MaxItemMl)
             return $"the {item.Def.Name} is too big for the {Def.Name}";
         if (Contents.Count >= holds.MaxItems && !CanMerge(item))
@@ -270,7 +284,10 @@ public sealed class Item
         return null;
     }
 
-    /// <summary>"a flashlight", "3 flares", "a water bottle (750 ml)", "a locker (locked)".</summary>
+    /// <summary>
+    /// "a flashlight (2 D batteries, 87%)", "3 flares", "a water bottle (750 ml)", "a 9 mm pistol
+    /// (magazine, 12 rounds)", "a locker (locked)".
+    /// </summary>
     public string Describe()
     {
         var def = Def;
@@ -278,13 +295,33 @@ public sealed class Item
             return Amount == 1 ? def.WithArticle : $"{Amount} {def.Plural}";
         string text = def.WithArticle;
         if (def.Unit is { } unit)
-            text += Amount == 0 ? " (empty)" : $" ({Amount} {unit})";
+            text += Amount == 0 ? " (empty)" : unit == "%" ? $" ({Amount}%)" : $" ({Amount} {unit})";
+        if (def.Holds is { Only: not null })
+            text += Loaded();
         if (Tag is { } tag && def.Is(ItemCategory.Key))
             text += Level > 0 ? $" ({tag}, level {Level})" : $" ({tag})";
         if (Locked)
             text += " (locked)";
         return text;
     }
+
+    /// <summary>What's fitted in a slot container, for its description: " (2 D batteries, 87%)", " (empty)".</summary>
+    private string Loaded()
+    {
+        if (_contents is not { Count: > 0 })
+            return " (empty)";
+        var first = _contents[0];
+        string what = _contents.Count == 1 ? first.Def.Name : $"{_contents.Count} {first.Def.Plural}";
+        if (first.Def.Is(ItemCategory.Power))
+            return $" ({what}, {_contents.Min(i => i.Amount)}%)";
+        if (first.Def.Fills is not null && first.Def.Unit is { } unit)
+            return $" ({first.Def.Name}, {first.Amount} {unit})";
+        return $" ({what})";
+    }
+
+    /// <summary>Whether it's loaded and charged enough to work, for something powered: every slot filled, every battery with charge.</summary>
+    public bool Charged => Def.Holds is { Only: not null } holds && Contents.Count >= holds.MaxItems
+        && Contents.All(i => !i.Def.Is(ItemCategory.Power) || i.Amount > 0);
 
     public override string ToString() => $"#{Id} {Describe()}";
 }

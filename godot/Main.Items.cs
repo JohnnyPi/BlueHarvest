@@ -14,7 +14,7 @@ namespace BlueHarvest.Game;
 public partial class Main
 {
     /// <summary>The most item entries the right-click menu lists (it doesn't scroll).</summary>
-    private const int MaxItemChoices = 12;
+    private const int MaxItemChoices = 16;
 
     private void SubscribeToItemEvents()
     {
@@ -22,6 +22,7 @@ public partial class Main
         _sim.ItemDropped += OnItemDropped;
         _sim.ItemStowed += OnItemStowed;
         _sim.ContainerOpened += OnContainerOpened;
+        SubscribeToItemUseEvents();
     }
 
     private void OnItemPickedUp(Actor actor, Item item)
@@ -132,7 +133,8 @@ public partial class Main
                     items.Add(new MenuChoice($"Shut the {def.Name}", () => Submit(new OpenAction(item.Id))));
                 else
                     items.Add(new MenuChoice($"Open the {def.Name}", () => Submit(new OpenAction(item.Id)),
-                        item.Locked ? "locked" : null, !item.Locked));
+                        item.Locked ? LockHint(item) : null, !item.Locked || Simulation.KeyFor(me, item) is not null));
+                AddLockChoices(items, item);
             }
             if (def.Size != ItemSize.Fixed)
                 items.Add(new MenuChoice($"Pick up {item.Describe()}", () => Submit(new PickUpAction(item.Id)),
@@ -152,6 +154,8 @@ public partial class Main
 
         if (tile == me.Position)
         {
+            AddCarriedChoices(items);
+
             // what you hold or have loose in your pockets can go in a bag you wear
             var bag = inventory.Carried.FirstOrDefault(c => c.Slot == CarrySlot.Worn && c.Item.IsContainer).Item;
             foreach (var (held, _) in inventory.Carried.Where(c => c.Slot != CarrySlot.Worn))
@@ -159,7 +163,8 @@ public partial class Main
                 if (bag is not null && bag.RefusesToHold(held) is null)
                     items.Add(new MenuChoice($"Put {held.Describe()} in your {bag.Def.Name}", () => Submit(new PutAction(held.Id, bag.Id))));
             }
-            foreach (var carried in inventory.All)
+            // not what's fitted into something (a flashlight's batteries): take that out first
+            foreach (var carried in inventory.All.Where(i => inventory.HolderOf(i) is not { Def.Holds.Only: not null }))
                 items.Add(new MenuChoice($"Put down {carried.Describe()}", () => Submit(new DropAction(carried.Id)),
                     inventory.HolderOf(carried) is { } holder ? $"from your {holder.Def.Name}" : null));
         }

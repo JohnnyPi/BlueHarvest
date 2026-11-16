@@ -43,11 +43,15 @@ public sealed class Inventory
         _ => 0,
     });
 
-    /// <summary>The containers carried that you can put things in: worn first, then in hand, then pockets.</summary>
+    /// <summary>
+    /// The containers carried that things can be stowed in: worn first, then in hand, then pockets.
+    /// Not slots that take one kind of thing (a flashlight's batteries, a pistol's magazine): those are
+    /// filled on purpose, by combining.
+    /// </summary>
     public IEnumerable<Item> Containers => _carried
         .OrderBy(c => c.Slot == CarrySlot.Worn ? 0 : c.Slot == CarrySlot.Pocket ? 2 : 1)
         .SelectMany(c => c.Item.SelfAndNested())
-        .Where(i => i.IsContainer);
+        .Where(i => i.Def.Holds is { Only: null });
 
     /// <summary>What's worn in a slot, or null.</summary>
     public Item? WornOn(WearSlot slot) =>

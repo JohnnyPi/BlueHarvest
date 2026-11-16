@@ -1075,6 +1075,7 @@ public sealed partial class Simulation
         AdvanceFire();
         var actor = _actors[id];
         UpdateHealth(actor);
+        DrainLight(actor);
         if (actor.IsGone)
         {
             _scheduler.TryDequeue(out _, out _);
@@ -1267,6 +1268,11 @@ public sealed partial class Simulation
         DropAction drop => Drop(actor, drop.ItemId),
         PutAction put => Put(actor, put.ItemId, put.ContainerId),
         OpenAction open => OpenOrShut(actor, open.ItemId),
+        CombineAction combine => Combine(actor, combine.ItemId, combine.WithId),
+        TakeOutAction takeOut => TakeOut(actor, takeOut.ItemId),
+        UnloadAction unload => Unload(actor, unload.ItemId),
+        UseItemAction useItem => UseItem(actor, useItem.ItemId),
+        PryAction pry => Pry(actor, pry.ItemId),
         _ => throw new ArgumentOutOfRangeException(nameof(action), $"Unknown action {action}."),
     };
 
@@ -1393,6 +1399,11 @@ public sealed partial class Simulation
     {
         if (!actor.Inventory.Has(ItemKind.Flashlight))
             return Bump(actor, "no flashlight");
+        bool lit = actor.CarriedLight is { } current && _lights[current].On;
+        if (!lit && WorkingFlashlight(actor) is null)
+            return Refuse(actor, actor.Inventory.All.Any(i => i.Kind == ItemKind.Flashlight && i.Contents.Count > 0)
+                ? "the flashlight's batteries are flat" : "the flashlight has no batteries");
+        actor.LightDrainTick = CurrentTick;
         if (actor.CarriedLight is { } index)
         {
             SetLightOn(index, !_lights[index].On);

@@ -91,7 +91,7 @@ public class ItemTests
         Assert.Equal(2, inventory.FreeHands);
         Assert.Equal(new[] { ItemKind.Flare, ItemKind.Flashlight },
             inventory.Carried.Where(c => c.Slot == CarrySlot.Pocket).Select(c => c.Item.Kind));
-        Assert.Equal(1000 + 600 + 3 * 200 + 400 + 2500, inventory.Grams);
+        Assert.Equal(1000 + 600 + 3 * 200 + (400 + 2 * 140) + 2500, inventory.Grams); // the flashlight has its two D batteries
         Assert.Equal(Load.Light, inventory.Load);
         // the count API still sees everything
         Assert.Equal(3, inventory.Count(ItemKind.Flare));
@@ -304,7 +304,8 @@ public class ItemTests
         }
 
         Assert.Equal(Ids(), Ids());
-        Assert.Equal(Enumerable.Range(1, 8), Ids().Order());
+        // the survivor's 7 (pack, kit, flares, flashlight and its 2 batteries, rope), then the desk and its 2
+        Assert.Equal(Enumerable.Range(1, 10), Ids().Order());
     }
 
     [Fact]
