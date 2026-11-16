@@ -21,7 +21,8 @@ public partial class HelpPanel : PanelContainer
         "[color=#e9b04c]Left-click[/color]      walk there (stops if something big comes into view;\n" +
         "                any key or click stops it too)\n" +
         "[color=#e9b04c]Right-click[/color]     actions for that tile: walk, sprint, throw a flare,\n" +
-        "                rope down, doors, ladders, first aid, orders\n" +
+        "                rope down, doors, ladders, first aid, orders,\n" +
+        "                pick up, open lockers, search bodies, put down\n" +
         "\n" +
         "[color=#e9b04c]Flare[/color]           f, then click a tile (or move the cursor, Enter)\n" +
         "[color=#e9b04c]Rope down[/color]       r, then a direction\n" +

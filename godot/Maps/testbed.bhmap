@@ -300,4 +300,11 @@ exit 6 44 jungle trail
 exit 77 53 floor hatch
 exit 70 16 culvert
 sparks 22 22
+item 40 28 crowbar
+item 50 28 hard-case; >battery-d x4
+item 67 48 locker; >energy-bar x3; >water-bottle; >knife
+item 72 48 desk; >notebook; >painkillers
+item 78 49 medicine-cabinet; >bandage x4
+item 75 50 crate locked; >canned-food x4
+item 70 54 field-pack
 end

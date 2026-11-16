@@ -31,4 +31,13 @@ public static class NoiseKinds
 
     /// <summary>Someone hurt cries out. A creature that hears it knows it's prey.</summary>
     public const string Scream = "a scream";
+
+    /// <summary>Picking things up, stowing them, searching a body.</summary>
+    public const string Rummaging = "rummaging";
+
+    /// <summary>Something put down.</summary>
+    public const string Thump = "a soft thump";
+
+    /// <summary>A locker, crate, drawer or fridge opening or shutting.</summary>
+    public const string Opening = "a door or lid opening";
 }

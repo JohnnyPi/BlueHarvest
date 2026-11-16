@@ -388,6 +388,7 @@ public partial class Main
                 distance <= range ? $"{distance:0} m" : $"{distance:0} m, lands short", range > 0));
         }
 
+        AddItemChoices(choices, tile, reach);
         AddPowerChoices(choices, tile);
         AddFireChoices(choices, tile, reach);
         choices.Add(new MenuChoice("Look", () => Say(LookText(tile))));
@@ -460,6 +461,7 @@ public partial class Main
         if (Chebyshev(me.Position, tile) == 1
             && _sim.MoveBlockReason(me, Directions.FromDelta(tile.X - me.Position.X, tile.Y - me.Position.Y)) is { } why)
             facts.Add(($"Can't step here: {why}", HudTheme.Danger));
+        AddItemFacts(facts, tile);
         AddPowerFacts(facts, tile);
         AddWaterFacts(facts, tile);
         AddFireFacts(facts, tile);

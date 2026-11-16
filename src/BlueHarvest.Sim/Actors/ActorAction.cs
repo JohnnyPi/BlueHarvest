@@ -63,3 +63,18 @@ public sealed record OperateAction(int DeviceId, PowerOp Op, int Arg = -1) : Act
 
 /// <summary>Holds a lit flare to the tile that way (or the actor's own, with no direction) to set it alight. Uses up a flare.</summary>
 public sealed record IgniteAction(Direction? Direction = null) : ActorAction;
+
+/// <summary>
+/// Picks up an item within reach (your tile or the next, at your level): lying on the ground, in an
+/// open container, or on a body. It goes where the inventory has room (see Inventory.PlaceFor).
+/// </summary>
+public sealed record PickUpAction(int ItemId) : ActorAction;
+
+/// <summary>Puts down a carried item (from a hand, a pocket or a bag) on your own tile.</summary>
+public sealed record DropAction(int ItemId) : ActorAction;
+
+/// <summary>Puts a carried item into a container: one you carry, or an open one within reach.</summary>
+public sealed record PutAction(int ItemId, int ContainerId) : ActorAction;
+
+/// <summary>Opens a container with a door or lid within reach (a locker, a crate, a fridge), or shuts it if it's open.</summary>
+public sealed record OpenAction(int ItemId) : ActorAction;

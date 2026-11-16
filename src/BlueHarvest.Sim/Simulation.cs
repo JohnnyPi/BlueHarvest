@@ -449,8 +449,7 @@ public sealed partial class Simulation
             Skills = (loadout ?? Loadout.Empty).Skills,
         };
         actor.Health.LastUpdatedTick = CurrentTick;
-        foreach (var (kind, count) in (loadout ?? Loadout.Empty).Items)
-            actor.Inventory.Add(kind, count);
+        Equip(actor, loadout ?? Loadout.Empty);
         if (onDeck && (actor.IsLarge || !Map.InBounds(position) || !Map.Structures.HasDeck(position)))
             throw new ArgumentException($"{name} can't start on a deck at {position}.", nameof(onDeck));
         foreach (var tile in CoreTiles(actor.Body))
@@ -1193,6 +1192,7 @@ public sealed partial class Simulation
         foreach (var sparks in _sparks)
             hasher.Add(sparks.Live ? 1 : 0);
         hasher.Add(FenceBreachTick ?? -1);
+        AddItemsTo(hasher);
         hasher.Add(_scent.Count).Add(_vibrations.Count);
         if (_scent.Count > 0)
             hasher.Add(_scent[^1].Tick).Add(_scent[^1].Position.X).Add(_scent[^1].Position.Y);
@@ -1263,6 +1263,10 @@ public sealed partial class Simulation
         RappelAction rappel => Rappel(actor, rappel.Direction),
         OperateAction operate => Operate(actor, operate.DeviceId, operate.Op, operate.Arg),
         IgniteAction ignite => Ignite(actor, ignite.Direction),
+        PickUpAction pickUp => PickUp(actor, pickUp.ItemId),
+        DropAction drop => Drop(actor, drop.ItemId),
+        PutAction put => Put(actor, put.ItemId, put.ContainerId),
+        OpenAction open => OpenOrShut(actor, open.ItemId),
         _ => throw new ArgumentOutOfRangeException(nameof(action), $"Unknown action {action}."),
     };
 
@@ -1294,7 +1298,10 @@ public sealed partial class Simulation
             return WorkDoor(actor, to, DoorState.Open);
 
         int step = Map.SurfaceHeight(to, toDeck) - StandHeight(actor);
+        if (step > actor.Movement.MaxStepUpDm && LoadStopsClimbing(actor) is { } laden)
+            return Bump(actor, laden);
         var cover = toDeck ? Covers.Deck : Map.CoverAt(to);
+        var load = actor.Inventory.Load;
         if (actor.Health.BleedingWounds > 0)
             DropBlood(actor.Position);
         Place(actor, to, direction, toDeck);
@@ -1307,10 +1314,11 @@ public sealed partial class Simulation
             // A climb: hands and feet, slow and noisy, sprinting or not.
             EmitNoise(to, loudness + GearRules.ClimbLoudnessBonus, NoiseKinds.Scrambling, actor.Id);
             EmitVibration(to, actor.Species.VibrationStrength, actor.Id, toDeck);
-            return GearRules.ClimbStepTicks(step, actor.Skills.Climbing) * actor.Health.ClimbCostPercent / 100;
+            return GearRules.ClimbStepTicks(step, actor.Skills.Climbing) * actor.Health.ClimbCostPercent / 100
+                * (load == Load.Burdened ? ItemRules.BurdenedClimbPercent : 100) / 100;
         }
 
-        bool running = sprint && actor.Health.CanSprint;
+        bool running = sprint && actor.Health.CanSprint && load != Load.Heavy;
         EmitNoise(to, loudness + (running ? GearRules.SprintLoudnessBonus : 0), NoiseKinds.Footsteps, actor.Id);
         EmitVibration(to, actor.Species.VibrationStrength * (running ? ScentRules.SprintVibrationPercent : 100) / 100,
             actor.Id, toDeck);
@@ -1319,7 +1327,10 @@ public sealed partial class Simulation
         if (!toDeck)
             cost = cost * WadeCostPercent(to, direction) / 100;
         if (running)
-            cost = cost * (actor.Health.SprintWinded ? GearRules.WindedSprintCostPercent : GearRules.SprintCostPercent) / 100;
+            cost = cost * (actor.Health.SprintWinded ? GearRules.WindedSprintCostPercent : GearRules.SprintCostPercent) / 100
+                * (load == Load.Burdened ? ItemRules.BurdenedSprintPercent : 100) / 100;
+        else if (load == Load.Heavy)
+            cost = cost * ItemRules.HeavyWalkPercent / 100;
         if (!toDeck)
             cost += SweepDownstream(actor);
         return Math.Max(1, cost);
@@ -1335,6 +1346,8 @@ public sealed partial class Simulation
             return Bump(actor, "that isn't something to throw");
         if (!actor.Inventory.Has(item))
             return Bump(actor, "no flares left");
+        if (actor.Inventory.FreeHands == 0)
+            return Refuse(actor, "you need a hand free to throw");
         int range = GearRules.ThrowRange(actor.Skills.Throwing, actor.Health);
         if (range <= 0)
             return Bump(actor, "both arms are useless");
@@ -1404,6 +1417,8 @@ public sealed partial class Simulation
             return Bump(actor, "no rope");
         if (!actor.Health.CanRappel)
             return Bump(actor, "too badly hurt to rappel");
+        if (LoadStopsClimbing(actor) is { } laden)
+            return Refuse(actor, laden);
 
         var to = actor.Position.Offset(direction);
         if (!Map.InBounds(to))
@@ -1526,6 +1541,8 @@ public sealed partial class Simulation
             return Bump(actor, "there's no ladder here");
         if (!actor.Health.CanClimb)
             return Bump(actor, "too badly hurt to climb");
+        if (LoadStopsClimbing(actor) is { } laden)
+            return Refuse(actor, laden);
 
         bool up = !actor.OnDeck;
         if (ActorAt(p, onDeck: up) is { } inTheWay)

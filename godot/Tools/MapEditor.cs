@@ -291,7 +291,13 @@ public partial class MapEditor : Node2D
                 GD.PushWarning($"Skipping marker at {position}: outside the map or not a marker tile.");
                 continue;
             }
-            list.Add(new MapMarker((MarkerKind)kind, position, MarkerNames.TryGetValue(cell, out var name) ? name : null));
+            string? name = MarkerNames.TryGetValue(cell, out var named) ? named : null;
+            if ((MarkerKind)kind == MarkerKind.Item && string.IsNullOrWhiteSpace(name))
+            {
+                GD.PushWarning($"Skipping item marker at {position}: give it a spec in Marker Names (\"locker; >flashlight\").");
+                continue;
+            }
+            list.Add(new MapMarker((MarkerKind)kind, position, name));
         }
 
         // Stable order so the file only changes when the map does.

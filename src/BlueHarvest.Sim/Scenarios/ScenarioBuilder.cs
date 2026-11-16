@@ -14,7 +14,8 @@ public static class ScenarioBuilder
     /// a HumanBrain, with traits and kit from the NpcRoster by name. Vehicles get their names and
     /// integrity from the map; headlights on them are mounted and move with them. People whose marker
     /// is on a deck tile start on the deck. The player gets the testbed survivor's skills and kit.
-    /// Exit markers become escape hatches; sparks markers make their sagging-fence tile crackle.
+    /// Exit markers become escape hatches; sparks markers make their sagging-fence tile crackle; item
+    /// markers lay out their items (on the deck, if the tile has one).
     /// </summary>
     /// <param name="rexFacing">Which way the Rex starts facing (south if left out).</param>
     public static Simulation Build(MapData data, ulong seed, IActorController? player = null, Direction? rexFacing = null)
@@ -78,6 +79,10 @@ public static class ScenarioBuilder
 
                 case MarkerKind.Sparks:
                     sim.AddSparks(marker.Position);
+                    break;
+
+                case MarkerKind.Item:
+                    sim.PlaceItems(ItemCatalog.ParseSpec(marker.Name ?? ""), marker.Position, OnDeck(data.Map, marker.Position));
                     break;
             }
         }

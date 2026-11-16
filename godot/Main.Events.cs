@@ -48,6 +48,7 @@ public partial class Main
         _sim.Kindled += OnKindled;
         _sim.TanksBurst += OnTanksBurst;
         _sim.LightningHitGround += OnLightningHitGround;
+        SubscribeToItemEvents();
         // what the weather is at the start, without saying so
         _weatherQuiet = true;
         OnWeatherChanged(_sim.Weather.Settings);

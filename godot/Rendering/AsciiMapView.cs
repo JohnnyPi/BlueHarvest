@@ -151,6 +151,17 @@ public partial class AsciiMapView : Node2D
     private static readonly Color SparkInk = new(0.85f, 0.95f, 1f);
     private static readonly Color SparkDim = new(0.45f, 0.65f, 1f, 0.8f);
     private static readonly Color ExitInk = new(0.45f, 1f, 0.55f);
+
+    // Items lying about, by what they are.
+    private static readonly Color FixtureInk = new(0.72f, 0.66f, 0.55f);
+    private static readonly Color MedicalInk = new(1f, 0.55f, 0.55f);
+    private static readonly Color FoodInk = new(0.6f, 0.85f, 0.45f);
+    private static readonly Color GearInk = new(0.65f, 0.8f, 0.95f);
+    private static readonly Color PaperInk = new(0.95f, 0.92f, 0.8f);
+    private static readonly Color RememberedItem = new(0.6f, 0.6f, 0.55f, 0.55f);
+
+    /// <summary>The items on the map this redraw, by row: built once per redraw, drawn row by row.</summary>
+    private readonly Dictionary<int, List<(WorldItem Lying, TilePos At)>> _itemRows = new();
     private static readonly Color ExitBacking = new(0.05f, 0.35f, 0.12f, 0.85f);
     private static readonly Color PreviewDot = new(1f, 1f, 0.94f, 0.75f);
     private static readonly Color HoverEdge = new(1f, 1f, 1f, 0.8f);
@@ -388,6 +399,14 @@ public partial class AsciiMapView : Node2D
             }
         }
 
+        _itemRows.Clear();
+        foreach (var (lying, at) in sim.ItemsOnMap())
+        {
+            if (!_itemRows.TryGetValue(at.Y, out var row))
+                _itemRows[at.Y] = row = new List<(WorldItem, TilePos)>();
+            row.Add((lying, at));
+        }
+
         // only the tiles in (and a little around) the view are drawn; see SetView
         _x0 = Math.Clamp(_drawn.Position.X, 0, width - 1);
         _y0 = Math.Clamp(_drawn.Position.Y, 0, height - 1);
@@ -587,6 +606,26 @@ public partial class AsciiMapView : Node2D
             float top = p.Y * CellSize - Lift(p);
             DrawRect(new Rect2(p.X * CellSize + 1, top + 1, CellSize - 2, CellSize - 2), ExitBacking);
             DrawGlyphAt('>', p.X * CellSize, top, ExitInk);
+        }
+
+        // Items: on each tile the most notable thing (a fixture over what lies by it), a dot if there's more.
+        if (_itemRows.TryGetValue(y, out var items))
+        {
+            foreach (var group in items.GroupBy(i => i.At.X))
+            {
+                var p = new TilePos(group.Key, y);
+                if (p.X < _x0 || p.X > _x1)
+                    continue;
+                var state = FogAt(p);
+                if (state is not (FogState.Visible or FogState.Remembered) || RoofShown(p))
+                    continue;
+                var shown = group.OrderByDescending(i => i.Lying.Item.Def.Is(ItemCategory.Fixture)).ThenBy(i => i.Lying.Item.Id).First();
+                var def = shown.Lying.Item.Def;
+                float top = p.Y * CellSize - Lift(p);
+                DrawGlyphAt(def.Glyph, p.X * CellSize, top, state == FogState.Remembered ? RememberedItem : ItemInk(def));
+                if (group.Count() > 1 || shown.Lying.Item.IsAccessible && shown.Lying.Item.Contents.Count > 0)
+                    DrawRect(new Rect2(p.X * CellSize + CellSize - 4, top + 1, 3, 3), state == FogState.Remembered ? RememberedItem : PaperInk);
+            }
         }
 
         // People: on the ground first, then up on a deck.
@@ -1028,6 +1067,15 @@ public partial class AsciiMapView : Node2D
     }
 
     /// <summary>A glyph centred in the cell whose top-left corner is (<paramref name="left"/>, <paramref name="top"/>).</summary>
+    /// <summary>The colour an item is drawn in, by what it is.</summary>
+    private static Color ItemInk(ItemDef def) =>
+        def.Is(ItemCategory.Fixture) || def.Size == ItemSize.TwoHanded && def.Is(ItemCategory.Container) ? FixtureInk
+        : def.Is(ItemCategory.Medical) ? MedicalInk
+        : def.Is(ItemCategory.Edible | ItemCategory.Potable) ? FoodInk
+        : def.Is(ItemCategory.Light) ? FlareInk
+        : def.Is(ItemCategory.Document) ? PaperInk
+        : GearInk;
+
     private void DrawGlyphAt(char glyph, float left, float top, Color color)
     {
         string text = glyph.ToString();

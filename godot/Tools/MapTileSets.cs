@@ -80,7 +80,7 @@ public static class MapTileSets
         return Build(image, count);
     }
 
-    /// <summary>One tile per marker kind: player, NPC, Rex, light, headlight, exit, sparks.</summary>
+    /// <summary>One tile per marker kind: player, NPC, Rex, light, headlight, exit, sparks, item.</summary>
     public static TileSet Markers()
     {
         var looks = new (Color Color, char Label)[]
@@ -92,6 +92,7 @@ public static class MapTileSets
             (new Color(1f, 1f, 0.75f), '>'),     // Headlight: put it on a vehicle's front tile
             (new Color(0.45f, 1f, 0.55f), 'E'),  // Exit: name it ("culvert") in Marker Names
             (new Color(0.55f, 0.75f, 1f), 'z'),  // Sparks: on a sagging fence tile ('w')
+            (new Color(0.85f, 0.75f, 0.55f), 'i'), // Item: its Marker Name is the spec ("locker; >flashlight")
         };
 
         var image = NewImage(looks.Length);

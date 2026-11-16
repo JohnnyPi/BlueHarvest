@@ -101,7 +101,7 @@ public partial class Sidebar : PanelContainer
         exits.AddChild(_exits);
 
         var gear = Section(stack);
-        gear.AddChild(HudTheme.Heading("Gear"));
+        gear.AddChild(HudTheme.Heading("Inventory"));
         _gear = HudTheme.Rich(HudTheme.SmallSize);
         gear.AddChild(_gear);
 

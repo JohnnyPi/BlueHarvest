@@ -14,6 +14,11 @@ public enum MarkerKind : byte
     Exit,
     /// <summary>A shorted fence tile that crackles and flickers until it's broken: it draws the Rex.</summary>
     Sparks,
+    /// <summary>
+    /// Items lying on a tile; the name is an item spec ("locker locked; &gt;flashlight; &gt;energy-bar x3"),
+    /// one marker for everything on the tile (see ItemCatalog.ParseSpec).
+    /// </summary>
+    Item,
 }
 
 public sealed record MapMarker(MarkerKind Kind, TilePos Position, string? Name = null);
@@ -59,7 +64,7 @@ public sealed record MapData(
 /// 2 0 closed
 /// vehicles         (optional; 'x y integrity [name]' for the vehicle covering x y)
 /// 2 1 100 Jeep A
-/// markers          (kind x y [name]; kinds: player npc rex light headlight exit sparks)
+/// markers          (kind x y [name]; kinds: player npc rex light headlight exit sparks item; an item's name is its spec)
 /// player 0 1 Survivor
 /// end
 /// </code>
@@ -265,7 +270,20 @@ public static class MapFile
             if (!map.InBounds(position))
                 throw new FormatException($"Line {i}: marker at {position} is outside the {width}x{height} map.");
 
-            markers.Add(new MapMarker(kind, position, parts.Length == 4 ? parts[3].Trim() : null));
+            string? name = parts.Length == 4 ? parts[3].Trim() : null;
+            if (kind == MarkerKind.Item)
+            {
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(name) || BlueHarvest.Sim.Actors.ItemCatalog.ParseSpec(name).Count == 0)
+                        throw new FormatException("no items listed");
+                }
+                catch (FormatException e)
+                {
+                    throw new FormatException($"Line {i}: item marker at {position}: {e.Message}", e);
+                }
+            }
+            markers.Add(new MapMarker(kind, position, name));
         }
 
         return new MapData(map, markers, ambient, vehicles, weather);
@@ -450,6 +468,7 @@ public static class MapFile
         MarkerKind.Headlight => "headlight",
         MarkerKind.Exit => "exit",
         MarkerKind.Sparks => "sparks",
+        MarkerKind.Item => "item",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -462,6 +481,7 @@ public static class MapFile
         "headlight" => MarkerKind.Headlight,
         "exit" => MarkerKind.Exit,
         "sparks" => MarkerKind.Sparks,
+        "item" => MarkerKind.Item,
         _ => null,
     };
 

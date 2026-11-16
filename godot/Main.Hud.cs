@@ -330,7 +330,7 @@ public partial class Main
             Health: _playerActor.Health,
             BodyNotes: BodyNotes(now),
             Exits: ExitFacts(here),
-            Gear: GearText(),
+            Gear: InventoryText(),
             People: PeopleText());
     }
 
@@ -398,24 +398,6 @@ public partial class Main
         "NW" => "↖",
         _ => "•",
     };
-
-    private string GearText()
-    {
-        var inventory = _playerActor.Inventory;
-        string muted = HudTheme.Hex(HudTheme.Muted);
-        string KeyCap(string k) => $"[color={muted}][lb]{k}[rb][/color]";
-        bool lightOn = _playerActor.CarriedLight is { } light && _sim.Lights[light].On;
-        var lines = new List<string>
-        {
-            $"{KeyCap("T")} first-aid kits: {inventory.Count(ItemKind.FirstAidKit)}",
-            $"{KeyCap("F")} flares: {inventory.Count(ItemKind.Flare)}",
-        };
-        if (inventory.Has(ItemKind.Flashlight))
-            lines.Add($"{KeyCap("X")} flashlight: {(lightOn ? $"[color={HudTheme.Hex(HudTheme.Amber)}]on[/color]" : "off")}");
-        lines.Add(inventory.Has(ItemKind.Rope) ? $"{KeyCap("R")} rope: {Units.FormatMeters(GearRules.RopeLengthDm)}" : $"[color={muted}]rope: used[/color]");
-        lines.Add($"{KeyCap("Shift")} sprint while moving");
-        return string.Join("\n", lines);
-    }
 
     private string PeopleText()
     {
