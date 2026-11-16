@@ -30,7 +30,7 @@ public static class FireRules
     public const int FuelBurnable = 90;
 
     /// <summary>Spilled fuel lasts this long before it has evaporated (three game hours), less in rain.</summary>
-    public const int FuelLastsTicks = 3 * WorldClock.TicksPerGameHour;
+    public const long FuelLastsTicks = 3 * WorldClock.TicksPerGameHour;
 
     /// <summary>Fuel burns this many steps on top of what is under it, at full heat.</summary>
     public const int FuelSteps = 5;
