@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using BlueHarvest.Game.Ui;
+using BlueHarvest.Sim;
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.World;
 using Sky = BlueHarvest.Sim.World.Sky; // Godot has a Sky of its own
@@ -12,12 +13,23 @@ namespace BlueHarvest.Game;
 /// <summary>
 /// Waiting for the light to change: Z sits the player down until the next dawn or dusk, a game minute
 /// at a time, and gets them up early for the same things that stop a click-to-walk. It only ever
-/// submits ordinary waits, so the simulation knows nothing about it.
+/// submits ordinary waits, so the simulation knows nothing about it. Shift+Z (or the menu on your own
+/// tile) sleeps instead, half a minute at a time so every noise is listened for: the simulation wakes
+/// you when you're rested, at a loud noise, when you're hurt, or when thirst or hunger gets bad.
 /// </summary>
 public partial class Main
 {
     /// <summary>How long each wait is: one game minute (six action seconds). One is taken per frame.</summary>
     private const int RestStepTicks = WorldClock.TicksPerGameMinute;
+
+    /// <summary>Sleep goes in half minutes: noises are kept that long, so none goes unheard.</summary>
+    private const int SleepStepTicks = Simulation.NoiseMemoryTicks;
+
+    /// <summary>The longest sleep: twelve hours.</summary>
+    private const long MaxSleepTicks = 12L * 60 * WorldClock.TicksPerGameMinute;
+
+    /// <summary>Getting up from sleep when you choose to.</summary>
+    private const int GetUpTicks = 50;
 
     private Resting? _rest;
 
@@ -39,6 +51,26 @@ public partial class Main
         public int WoundsAtStart { get; }
         public bool SpottedAtStart { get; }
         public bool FireCloseAtStart { get; init; }
+
+        /// <summary>Asleep rather than waiting.</summary>
+        public bool Sleeping { get; init; }
+    }
+
+    /// <summary>Lies down to sleep until rested (or something wakes you), if you can.</summary>
+    private void StartSleep()
+    {
+        if (_sim.SleepBlock(_playerActor) is { } why)
+        {
+            Say($"You can't sleep: {why}.");
+            return;
+        }
+        _rest = new Resting(_sim.CurrentTick + MaxSleepTicks, "rested", LargeActorsInView(), WoundScore(), _spotted)
+        {
+            FireCloseAtStart = FireClose(),
+            Sleeping = true,
+        };
+        Say("You lie down and close your eyes.");
+        SetPrompt("Asleep. Any key or click gets you up.");
     }
 
     /// <summary>Starts waiting for dawn (06:00) or dusk (18:00), whichever comes first.</summary>
@@ -68,6 +100,22 @@ public partial class Main
             return;
         }
 
+        if (rest.Sleeping)
+        {
+            Submit(new SleepAction((int)Math.Min(left, SleepStepTicks)));
+            if (_rest != rest)
+                return; // woken (the simulation said why), or the run is over
+            if (_playerActor.Needs is not { Asleep: true })
+                StopRest(null); // it wouldn't let you sleep (the log says why)
+            else if (_spotted && !rest.SpottedAtStart)
+                StopRest($"You wake with a start: {SpottedBy()}.");
+            else if (FireClose() && !rest.FireCloseAtStart)
+                StopRest("You wake to the heat of a fire.");
+            else if (_sim.CurrentTick >= rest.UntilTick)
+                StopRest("You've slept twelve hours.");
+            return;
+        }
+
         Submit(new WaitAction((int)Math.Min(left, RestStepTicks)));
         if (_rest != rest)
             return; // the turn ended it (the run is over)
@@ -87,11 +135,14 @@ public partial class Main
 
     private void StopRest(string? why)
     {
-        if (_rest is null)
+        if (_rest is not { } rest)
             return;
         _rest = null;
         SetPrompt(null);
         if (why is not null)
             Say(why);
+        // getting up when you choose to (woken, the simulation already has you up)
+        if (rest.Sleeping && why is not null && _playerActor.Needs is { Asleep: true } && !_playerActor.IsGone)
+            Submit(new WaitAction(GetUpTicks));
     }
 }

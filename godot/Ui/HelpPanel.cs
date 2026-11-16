@@ -11,6 +11,8 @@ public partial class HelpPanel : PanelContainer
         "[color=#e9b04c]Sprint[/color]          hold Shift while moving or clicking\n" +
         "[color=#e9b04c]Wait[/color]            .  numpad 5  Space\n" +
         "[color=#e9b04c]Wait for light[/color]  z  until dawn or dusk (any key or click stops)\n" +
+        "[color=#e9b04c]Sleep[/color]           Shift+Z, or right-click yourself: until rested or woken\n" +
+        "[color=#e9b04c]Needs[/color]           eat, drink, sleep; painkillers dull pain; sprinting costs breath\n" +
         "[color=#e9b04c]Power[/color]           right-click in a switch room, generator room,\n" +
         "                battery room or control room, or by the fuel tanks\n" +
         "                (a jerry can, tool kit or spare parts adds choices there)\n" +

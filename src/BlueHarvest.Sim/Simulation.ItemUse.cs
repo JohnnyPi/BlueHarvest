@@ -178,11 +178,23 @@ public sealed partial class Simulation
             case ItemUse.Eat:
                 UseUp(inventory, item, 1);
                 used = 1;
+                Nourish(actor, Nutrition.Food(def.Kind));
                 break;
             case ItemUse.Drink:
+                used = Math.Min(def.Dose, item.Amount);
+                item.Amount -= used;
+                Nourish(actor, Nutrition.Drink(def.Kind, used));
+                break;
             case ItemUse.TakeMedicine:
                 used = Math.Min(def.Dose, item.Amount);
                 item.Amount -= used;
+                if (def.Kind == ItemKind.Painkillers)
+                    TakePainkillers(actor);
+                break;
+            case ItemUse.Inject:
+                UseUp(inventory, item, 1);
+                used = 1;
+                Adrenaline(actor);
                 break;
             case ItemUse.StopBleeding:
             {

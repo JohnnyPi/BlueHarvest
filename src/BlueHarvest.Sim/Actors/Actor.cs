@@ -111,6 +111,9 @@ public sealed class Actor
     /// <summary>Standing on the deck over its tile rather than the ground. Always false for large bodies.</summary>
     public bool OnDeck { get; internal set; }
 
+    /// <summary>Hunger, thirst, sleep, pain and breath, or null for those that don't have needs (all but the player, for now).</summary>
+    public Needs? Needs { get; internal set; }
+
     /// <summary>Its most recent bite, or null if it has never bitten.</summary>
     public BiteResult? LastBite { get; internal set; }
 

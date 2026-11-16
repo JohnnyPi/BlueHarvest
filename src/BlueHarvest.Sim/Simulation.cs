@@ -649,7 +649,7 @@ public sealed partial class Simulation
     /// <summary>An actor's senses as its wounds leave them (a hurt head blurs vision and dulls hearing).</summary>
     public SenseProfile SensesOf(Actor actor)
     {
-        var senses = actor.Health.Adjust(actor.Species.Senses);
+        var senses = AdjustForNeeds(actor, actor.Health.Adjust(actor.Species.Senses));
         int percent = Weather.SightRangePercent;
         return percent >= 100 ? senses : senses with { SightRangeTiles = senses.SightRangeTiles * percent / 100 };
     }
@@ -687,6 +687,8 @@ public sealed partial class Simulation
             var now = current.Severity == Severity.Yellow ? Severity.Red : Severity.Yellow;
             health.Set(section, new Wound(now, false, CurrentTick));
         }
+        if (actor.Needs is { Asleep: true } sleeper)
+            Wake(actor, sleeper, "pain");
         ActorInjured?.Invoke(actor, section, health[section].Severity, cause);
     }
 
@@ -1075,6 +1077,7 @@ public sealed partial class Simulation
         AdvanceFire();
         var actor = _actors[id];
         UpdateHealth(actor);
+        UpdateNeeds(actor);
         DrainLight(actor);
         if (actor.IsGone)
         {
@@ -1089,10 +1092,17 @@ public sealed partial class Simulation
         if (action is null)
             return StepResult.AwaitingInput;
 
+        if (actor.Needs is { Asleep: true } sleeper && action is not SleepAction)
+            sleeper.Asleep = false; // getting up
         if (actor.Health.Concussed && _injuryRng.Chance(InjuryRules.BlackoutPercent, 100))
         {
             action = new WaitAction(InjuryRules.BlackoutTicks);
             ActorBlackedOut?.Invoke(actor);
+        }
+        else if (NeedBlackout(actor) is { } faint)
+        {
+            action = new WaitAction(NeedRules.BlackoutTicks);
+            NeedBlackedOut?.Invoke(actor, faint);
         }
 
         _scheduler.TryDequeue(out _, out _);
@@ -1194,6 +1204,7 @@ public sealed partial class Simulation
             hasher.Add(sparks.Live ? 1 : 0);
         hasher.Add(FenceBreachTick ?? -1);
         AddItemsTo(hasher);
+        AddNeedsTo(hasher);
         hasher.Add(_scent.Count).Add(_vibrations.Count);
         if (_scent.Count > 0)
             hasher.Add(_scent[^1].Tick).Add(_scent[^1].Position.X).Add(_scent[^1].Position.Y);
@@ -1252,6 +1263,7 @@ public sealed partial class Simulation
     private int Resolve(Actor actor, ActorAction action) => action switch
     {
         WaitAction wait => Math.Max(1, wait.Ticks),
+        SleepAction sleep => Sleep(actor, sleep.Ticks),
         MoveAction move => actor.IsLarge ? TryMoveLarge(actor, move.Direction, move.Shove, move.Sprint) : TryMove(actor, move.Direction, move.Sprint),
         BiteAction bite => ResolveBite(actor, bite.Investigative),
         UseDoorAction door => UseDoor(actor, door.Direction),
@@ -1325,16 +1337,20 @@ public sealed partial class Simulation
             // A climb: hands and feet, slow and noisy, sprinting or not.
             EmitNoise(to, loudness + GearRules.ClimbLoudnessBonus, NoiseKinds.Scrambling, actor.Id);
             EmitVibration(to, actor.Species.VibrationStrength, actor.Id, toDeck);
-            return GearRules.ClimbStepTicks(step, actor.Skills.Climbing) * actor.Health.ClimbCostPercent / 100
+            int climb = GearRules.ClimbStepTicks(step, actor.Skills.Climbing) * actor.Health.ClimbCostPercent / 100
                 * (load == Load.Burdened ? ItemRules.BurdenedClimbPercent : 100) / 100;
+            SpendBreath(actor, NeedRules.ClimbStepCost, climb);
+            return climb;
         }
 
-        bool running = sprint && actor.Health.CanSprint && load != Load.Heavy;
+        bool running = sprint && actor.Health.CanSprint && load != Load.Heavy && HasBreathToSprint(actor);
         EmitNoise(to, loudness + (running ? GearRules.SprintLoudnessBonus : 0), NoiseKinds.Footsteps, actor.Id);
         EmitVibration(to, actor.Species.VibrationStrength * (running ? ScentRules.SprintVibrationPercent : 100) / 100,
             actor.Id, toDeck);
         int cost = actor.Movement.CostTicks(step, direction.IsDiagonal()) * cover.MoveCostPercent / 100
             * actor.Health.StepCostPercent / 100;
+        if (actor.Needs is not null)
+            cost = cost * NeedEffectsOf(actor).StepCostPercent / 100;
         if (!toDeck)
             cost = cost * WadeCostPercent(to, direction) / 100;
         if (running)
@@ -1344,6 +1360,8 @@ public sealed partial class Simulation
             cost = cost * ItemRules.HeavyWalkPercent / 100;
         if (!toDeck)
             cost += SweepDownstream(actor);
+        if (running)
+            SpendBreath(actor, NeedRules.SprintStepCost, cost);
         return Math.Max(1, cost);
     }
 
@@ -1569,7 +1587,9 @@ public sealed partial class Simulation
         Place(actor, p, actor.Facing, up);
         actor.LastMovedTick = CurrentTick;
         EmitNoise(p, ClimbLoudness, NoiseKinds.Climbing, actor.Id);
-        return Math.Max(1, Map.Structures.DeckDm(p) * actor.Movement.ClimbTicksPerDm * actor.Health.ClimbCostPercent / 100);
+        int ladder = Math.Max(1, Map.Structures.DeckDm(p) * actor.Movement.ClimbTicksPerDm * actor.Health.ClimbCostPercent / 100);
+        SpendBreath(actor, NeedRules.ClimbStepCost, ladder);
+        return ladder;
     }
 
     private int UseDoor(Actor actor, Direction direction)

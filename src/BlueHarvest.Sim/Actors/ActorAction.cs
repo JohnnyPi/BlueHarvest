@@ -99,3 +99,6 @@ public sealed record ExtinguishAction(Direction Direction) : ActorAction;
 
 /// <summary>Pours fuel from a carried jerry can: on your own tile, or a trail of up to four tiles in a direction (a fuse).</summary>
 public sealed record PourFuelAction(Direction? Direction = null) : ActorAction;
+
+/// <summary>Sleeps (or sleeps on) for a while: needs someone tired enough, and not in too much pain, thirst or hunger. Those without needs just wait.</summary>
+public sealed record SleepAction(int Ticks) : ActorAction;

@@ -21,6 +21,7 @@ public partial class Sidebar : PanelContainer
     private readonly RichTextLabel _senses;
     private readonly BodyDoll _doll;
     private readonly RichTextLabel _bodyNotes;
+    private readonly RichTextLabel _condition;
     private readonly RichTextLabel _exits;
     private readonly RichTextLabel _gear;
     private readonly RichTextLabel _people;
@@ -94,6 +95,12 @@ public partial class Sidebar : PanelContainer
         bodyRow.AddChild(_bodyNotes);
         body.AddChild(bodyRow);
 
+        // Hunger, thirst, sleep, pain, breath.
+        var condition = Section(stack);
+        condition.AddChild(HudTheme.Heading("Condition"));
+        _condition = HudTheme.Rich(HudTheme.SmallSize);
+        condition.AddChild(_condition);
+
         // Exits, gear, people.
         var exits = Section(stack);
         exits.AddChild(HudTheme.Heading("Exits"));
@@ -140,6 +147,7 @@ public partial class Sidebar : PanelContainer
 
         _doll.ShowHealth(f.Health);
         _bodyNotes.Text = f.BodyNotes;
+        _condition.Text = f.Condition;
 
         _exits.Text = string.Join("\n", f.Exits.Select(e =>
             $"[color={HudTheme.Hex(HudTheme.Safe)}]{e.Arrow}[/color] {HudTheme.Escape(e.Name)}  [color={muted}]{e.Distance} m {e.Compass}[/color]"));

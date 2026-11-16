@@ -24,9 +24,9 @@ public enum ItemUse : byte
     Drink,
     /// <summary>A bandage or tourniquet on a bleeding wound: it stops the bleeding (a red wound still needs a kit).</summary>
     StopBleeding,
-    /// <summary>Pills swallowed (their effect comes with the needs and pain steps).</summary>
+    /// <summary>Pills swallowed: painkillers dull pain for four game hours (antibiotics wait for sickness).</summary>
     TakeMedicine,
-    /// <summary>Antiseptic, stitches, burn gel, a splint, an injection on your wounds (effects to come).</summary>
+    /// <summary>Antiseptic, stitches, burn gel, a splint on your wounds (effects to come).</summary>
     DressWounds,
     Read,
     /// <summary>A compass: which way you face.</summary>
@@ -35,6 +35,8 @@ public enum ItemUse : byte
     Listen,
     /// <summary>A tablet dropped into the water you carry.</summary>
     TreatWater,
+    /// <summary>An adrenaline auto-injector: pain shut out and full breath for a little while.</summary>
+    Inject,
 }
 
 /// <summary>What goes with what, and what using a thing does.</summary>
@@ -78,7 +80,8 @@ public static class Recipes
     {
         ItemKind.Bandage or ItemKind.Tourniquet => ItemUse.StopBleeding,
         ItemKind.Painkillers or ItemKind.Antibiotics => ItemUse.TakeMedicine,
-        ItemKind.Antiseptic or ItemKind.SutureKit or ItemKind.BurnGel or ItemKind.Splint or ItemKind.EpiPen => ItemUse.DressWounds,
+        ItemKind.Antiseptic or ItemKind.SutureKit or ItemKind.BurnGel or ItemKind.Splint => ItemUse.DressWounds,
+        ItemKind.EpiPen => ItemUse.Inject,
         ItemKind.Compass => ItemUse.TakeBearing,
         ItemKind.Radio => ItemUse.Listen,
         ItemKind.WaterTablets => ItemUse.TreatWater,

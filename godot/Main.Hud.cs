@@ -331,7 +331,8 @@ public partial class Main
             BodyNotes: BodyNotes(now),
             Exits: ExitFacts(here),
             Gear: InventoryText(),
-            People: PeopleText());
+            People: PeopleText(),
+            Condition: ConditionText());
     }
 
     private string? ShelterText(TilePos here)

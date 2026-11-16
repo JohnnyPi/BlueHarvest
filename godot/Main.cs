@@ -112,6 +112,7 @@ public partial class Main : Node2D
         _player = new PlayerController();
         LoadSimulation();
         _playerActor = _sim.Actors.First(a => a.Controller == _player);
+        _sim.UseNeeds(_playerActor); // hunger, thirst, sleep, pain and breath: the player's alone, for now
         KeepSelection();
         SubscribeToEvents();
 
@@ -294,7 +295,10 @@ public partial class Main : Node2D
         if (!key.Echo && key.Keycode == Key.Z)
         {
             viewport.SetInputAsHandled();
-            StartRest();
+            if (key.ShiftPressed)
+                StartSleep();
+            else
+                StartRest();
             return;
         }
 

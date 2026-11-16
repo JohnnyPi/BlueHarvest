@@ -35,4 +35,5 @@ public sealed record HudFacts(
     string BodyNotes,
     IReadOnlyList<ExitFact> Exits,
     string Gear,
-    string People);
+    string People,
+    string Condition = "");

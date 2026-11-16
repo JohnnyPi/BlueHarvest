@@ -70,6 +70,7 @@ public partial class Main
             ItemUse.TakeBearing => $"The needle settles: you're facing {_playerActor.Facing.Compass()}.",
             ItemUse.Listen => "Static. Under it, for a moment, a voice, then nothing.",
             ItemUse.TreatWater => "You drop a tablet into your water.",
+            ItemUse.Inject => "You jab the auto-injector into your thigh. Your heart hammers; the pain drops away.",
             _ => $"You use the {def.Name}.",
         });
     }
@@ -109,8 +110,31 @@ public partial class Main
             ItemUse.TakeBearing => "Check the compass",
             ItemUse.Listen => "Listen to the radio",
             ItemUse.TreatWater => "Drop a water tablet into your water",
+            ItemUse.Inject => $"Inject the {def.Name}",
             _ => $"Use the {def.Name}",
         };
+    }
+
+    /// <summary>What a use would do for you, for the menu: food's kcal, water's ml, painkillers' relief.</summary>
+    private static string? UseHint(Item item, ItemUse use)
+    {
+        var def = item.Def;
+        switch (use)
+        {
+            case ItemUse.Eat:
+                var (kcal, water, _) = Nutrition.Food(def.Kind);
+                if (kcal <= 0)
+                    return null;
+                return water > 0 ? $"{kcal} kcal, {water} ml" : $"{kcal} kcal";
+            case ItemUse.Drink:
+                return $"{System.Math.Min(def.Dose, item.Amount)} ml of {item.Amount}";
+            case ItemUse.TakeMedicine when def.Kind == ItemKind.Painkillers:
+                return "dulls pain for 4 h";
+            case ItemUse.Inject:
+                return "30 s: no pain, full breath";
+            default:
+                return null;
+        }
     }
 
     /// <summary>The menu's words for two carried items going together.</summary>
@@ -135,7 +159,7 @@ public partial class Main
             if (Recipes.UseOf(item.Def) is { } use)
             {
                 bool empty = !item.Def.Stacks && item.Def.Unit is not null && item.Amount == 0;
-                items.Add(new MenuChoice(UseLabel(item, use), () => Submit(new UseItemAction(item.Id)), empty ? "empty" : null, !empty));
+                items.Add(new MenuChoice(UseLabel(item, use), () => Submit(new UseItemAction(item.Id)), empty ? "empty" : UseHint(item, use), !empty));
             }
         }
 

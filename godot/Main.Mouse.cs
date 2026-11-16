@@ -313,6 +313,7 @@ public partial class Main
         {
             choices.Add(new MenuChoice("Wait a moment", () => Submit(new WaitAction(me.Movement.StepTicks)),
                 $"{me.Movement.StepTicks / (double)Ticks.PerSecond:0.0} s"));
+            AddNeedChoices(choices);
             if (me.Health.WorstUntreated() is { } wound)
                 choices.Add(new MenuChoice($"First aid on your {InjuryRules.Name(wound)}", () => Submit(new TreatAction()),
                     $"{inventory.Count(ItemKind.FirstAidKit)} kit(s)", inventory.Has(ItemKind.FirstAidKit) && me.Health.CanTreat));
