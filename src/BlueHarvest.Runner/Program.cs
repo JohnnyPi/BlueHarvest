@@ -5,9 +5,13 @@ using BlueHarvest.Sim.Demo;
 using BlueHarvest.Sim.Scenarios;
 using BlueHarvest.Sim.Testing;
 using BlueHarvest.Sim.World;
+using Gen = BlueHarvest.Sim.World.Generation;
 
 // Usage: BlueHarvest.Runner [seed] [seconds] [map file] [weather]
 //    or: BlueHarvest.Runner batch [runs per option] [minutes] [weather] [options] [map file]
+//    or: BlueHarvest.Runner island validate [first seed] [count] [scale]
+// Island mode generates islands from count seeds starting at first seed (defaults 1, 200, 75% scale),
+// measures each one and writes reports/island-<time>/report.md and seeds.csv under the repo.
 // Batch mode plays the testbed with a scripted player per escape option (with and without NPCs) and
 // writes reports/batch-<time>/report.md and runs.csv under the repo. Use "-" for any default:
 // runs 30, minutes 5, the map's own weather, all options (or a comma list: vehicle,jungle,building,
@@ -19,6 +23,11 @@ using BlueHarvest.Sim.World;
 if (args.Length > 0 && args[0] == "batch")
 {
     RunBatch(args.Skip(1).ToArray());
+    return;
+}
+if (args.Length > 0 && args[0] == "island")
+{
+    RunIsland(args.Skip(1).ToArray());
     return;
 }
 
@@ -198,6 +207,61 @@ static void RunBatch(string[] args)
     Console.WriteLine($"Done in {clock.Elapsed.TotalSeconds:0}s.");
     Console.WriteLine($"Report: {reportPath}");
     Console.WriteLine($"Runs:   {csvPath}");
+}
+
+static void RunIsland(string[] args)
+{
+    string Arg(int i) => i < args.Length ? args[i] : "-";
+    if (Arg(0) != "validate")
+        throw new ArgumentException($"Unknown island command '{Arg(0)}'; use: island validate [first seed] [count] [scale].");
+    var invariant = System.Globalization.CultureInfo.InvariantCulture;
+    uint first = uint.TryParse(Arg(1), out uint f) ? f : 1;
+    int count = int.TryParse(Arg(2), out int c) && c > 0 ? c : 200;
+    double scale = double.TryParse(Arg(3), System.Globalization.NumberStyles.Float, invariant, out double s) && s > 0 ? s : 75;
+
+    Console.WriteLine($"Island validation: {count} seeds from {first} at {scale.ToString("0.#", invariant)}% scale, "
+        + $"{Environment.ProcessorCount} at a time");
+    var clock = System.Diagnostics.Stopwatch.StartNew();
+    var results = new Gen.IslandSeedResult[count];
+    int done = 0;
+    var gate = new object();
+    Parallel.For(0, count, i =>
+    {
+        uint islandSeed = unchecked(first + (uint)i);
+        var one = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var world = Gen.IslandWorld.Generate(new Gen.IslandParams { Seed = islandSeed, Scale = scale });
+            results[i] = new Gen.IslandSeedResult(islandSeed, Gen.IslandStats.Measure(world), one.Elapsed.TotalSeconds);
+        }
+        catch (Exception e)
+        {
+            results[i] = new Gen.IslandSeedResult(islandSeed, null, one.Elapsed.TotalSeconds, $"{e.GetType().Name}: {e.Message}");
+        }
+        int now = Interlocked.Increment(ref done);
+        lock (gate)
+        {
+            if (now % 10 == 0 || now == count)
+                Console.WriteLine($"  {now,4}/{count}  ({clock.Elapsed.TotalSeconds:0}s)");
+        }
+    });
+    clock.Stop();
+
+    var settings = new Gen.IslandReportSettings(first, count, scale, clock.Elapsed.TotalSeconds);
+    string root = Path.GetDirectoryName(FindUp("BlueHarvest.sln") ?? Path.Combine(Directory.GetCurrentDirectory(), "x")) ?? ".";
+    string folder = Path.Combine(root, "reports", $"island-{DateTime.Now:yyyyMMdd-HHmmss}");
+    Directory.CreateDirectory(folder);
+    string reportPath = Path.Combine(folder, "report.md");
+    string csvPath = Path.Combine(folder, "seeds.csv");
+    File.WriteAllText(reportPath, Gen.IslandReport.Markdown(results, settings));
+    File.WriteAllText(csvPath, Gen.IslandReport.Csv(results));
+
+    Console.WriteLine();
+    Console.Write(Gen.IslandReport.ConsoleSummary(results));
+    Console.WriteLine();
+    Console.WriteLine($"Done in {clock.Elapsed.TotalSeconds:0}s.");
+    Console.WriteLine($"Report: {reportPath}");
+    Console.WriteLine($"Seeds:  {csvPath}");
 }
 
 static string? FindUp(string relativePath)

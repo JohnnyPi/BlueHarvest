@@ -60,6 +60,17 @@ public sealed partial class IslandWorks
     public Monorail? Monorail { get; private set; }
     public List<Objective> Objectives { get; } = [];
 
+    /// <summary>Cells across the walking model's coarse grid (the grid <see cref="Walk"/> is timed on).</summary>
+    public int WalkNx => _cnx;
+    /// <summary>Cells down the walking model's coarse grid.</summary>
+    public int WalkNy => _cny;
+    /// <summary>Size of a walking-grid cell, metres (256 m with the default 128 m island cell).</summary>
+    public double WalkCellM => _cs;
+    /// <summary>The walking-grid cell (index y * <see cref="WalkNx"/> + x) holding a point in island metres.</summary>
+    public int WalkCellAt(double x, double y) => CoarseAt(x, y);
+    /// <summary>Whether people can walk a walking-grid cell: mostly dry, not mostly cliff, or on a road.</summary>
+    public bool WalkPassable(int walkCell) => _pass[walkCell] != 0;
+
     // walking speed factor by biome
     private static readonly double[] BiomeSpeed = [0, 0.85, 0.35, 0.85, 1, 0.8, 0.6, 0.45, 0.45, 0.7, 0.25, 0.55, 0];
 
