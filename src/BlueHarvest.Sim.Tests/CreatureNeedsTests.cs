@@ -187,11 +187,19 @@ public class CreatureNeedsTests
         var brain = new CreatureBrain(AiProfile.Rex, sim.Rng.Fork("ai:r"));
         var raptor = sim.AddActor("Raptor", 'R', new TilePos(20, 15), Species.Raptor, brain, Direction.East);
         sim.UseNeeds(raptor, new NeedsStart(HungerKcal: 0, ThirstMl: 1500, AwakeMinutes: 60));
+        // where it stood and where it drank, each time (once it's had enough it wanders off again)
+        var drinks = new List<(TilePos From, TilePos At)>();
+        sim.DrankWater += (who, at) => { if (who == raptor) drinks.Add((who.Position, at)); };
         long until = sim.CurrentTick + 2 * Hour;
         while (sim.CurrentTick < until && raptor.Needs!.ThirstMl >= 800)
             sim.RunUntil(sim.CurrentTick + Minute);
         Assert.True(raptor.Needs!.ThirstMl < 800);
-        Assert.True(Math.Max(Math.Abs(raptor.Position.X - water.X), Math.Abs(raptor.Position.Y - water.Y)) <= 1);
+        Assert.InRange(drinks.Count, 2, 3); // 1500 ml short, half a litre a drink: two (three if the walk was long)
+        Assert.All(drinks, d =>
+        {
+            Assert.Equal(water, d.At);
+            Assert.True(Math.Max(Math.Abs(d.From.X - water.X), Math.Abs(d.From.Y - water.Y)) <= 1);
+        });
     }
 
     // ---------- survivors ----------
