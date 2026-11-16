@@ -128,6 +128,13 @@ public static class PerceptionSystem
     }
 
     /// <summary>
+    /// The trails an observer would smell with the given nose (not necessarily its own): the player's
+    /// sense report uses a human nose that the brains don't have.
+    /// </summary>
+    public static IReadOnlyList<SmelledTrail> SmellTrails(Simulation sim, Actor observer, SenseProfile nose) =>
+        nose.ScentRangeTiles > 0 ? Smell(sim, observer, nose) : Array.Empty<SmelledTrail>();
+
+    /// <summary>
     /// Every actor's trail the observer can smell: for each, the freshest mark strong enough to smell
     /// from here, and whether any of what it smells of them is blood. Walks the marks newest first and
     /// stops checking an actor's older body scent once it has their freshest mark.
@@ -175,7 +182,8 @@ public static class PerceptionSystem
     public static int ScentLevel(Simulation sim, Actor observer, TilePos source, int strengthNow) =>
         ScentLevel(sim, observer, sim.SensesOf(observer), source, strengthNow);
 
-    private static int ScentLevel(Simulation sim, Actor observer, SenseProfile senses, TilePos source, int strengthNow)
+    /// <summary>As <see cref="ScentLevel(Simulation, Actor, TilePos, int)"/>, smelling with the given nose.</summary>
+    public static int ScentLevel(Simulation sim, Actor observer, SenseProfile senses, TilePos source, int strengthNow)
     {
         var nose = sim.EyeTile(observer);
         int dx = nose.X - source.X, dy = nose.Y - source.Y; // from the scent to the nose

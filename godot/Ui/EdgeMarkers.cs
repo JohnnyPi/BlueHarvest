@@ -6,12 +6,12 @@ using Godot;
 
 namespace BlueHarvest.Game.Ui;
 
-/// <summary>Something worth pointing at when it's off screen: an exit, the Rex, or where you last saw it.</summary>
+/// <summary>Something worth pointing at when it's off screen: an exit, a big animal, a tread, a fire, a sound, or where you last saw something.</summary>
 public readonly record struct EdgeTarget(TilePos At, string Text, Color Color);
 
 /// <summary>
 /// Arrows at the edge of the map area pointing at targets that are off screen, each with a short label
-/// ("floor hatch 47 m", "Rex 14 m", "heavy footfalls"). Kept clear of the log panel. Never catches clicks.
+/// ("floor hatch 47 m", "The Rex 14 m", "heavy footfalls"). Kept clear of the log panel. Never catches clicks.
 /// </summary>
 public partial class EdgeMarkers : Control
 {

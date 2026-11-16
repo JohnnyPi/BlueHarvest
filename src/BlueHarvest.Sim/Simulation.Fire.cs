@@ -72,6 +72,9 @@ public sealed partial class Simulation
     /// <summary>The tiles burning now.</summary>
     public IReadOnlyCollection<Fire> Fires => _fires.Values;
 
+    /// <summary>Where flares lie burning on the ground now (thrown or held to something).</summary>
+    public IEnumerable<TilePos> GroundFlares => _groundFlares.Where(f => f.OffTick > CurrentTick).Select(f => f.Tile);
+
     /// <summary>How many tiles have burnt out so far.</summary>
     public int TilesBurnt { get; private set; }
 

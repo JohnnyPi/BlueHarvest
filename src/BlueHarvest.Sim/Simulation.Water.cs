@@ -280,6 +280,10 @@ public sealed partial class Simulation
         int At(int x, int y) => x < 0 || y < 0 || x >= w || y >= h ? 0 : mask[y * w + x];
     }
 
+    /// <summary>Whether surf breaks on this tile: the sea's edge, with dry ground beside it.</summary>
+    public bool IsSurfEdge(TilePos p) =>
+        Map.Water[p].ShoreFacing is not null && Cover[p] is CoverType.ShallowWater or CoverType.DeepWater && HasDryNeighbour(p);
+
     private bool HasDryNeighbour(TilePos p)
     {
         foreach (Direction d in Directions.Cardinal)

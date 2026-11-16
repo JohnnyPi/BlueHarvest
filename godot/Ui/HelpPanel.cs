@@ -18,7 +18,7 @@ public partial class HelpPanel : PanelContainer
         "[color=#e9b04c]Pan the map[/color]     W A S D   ·   Home recentres\n" +
         "[color=#e9b04c]Zoom[/color]            mouse wheel  ·  + −\n" +
         "\n" +
-        "[color=#e9b04c]Left-click[/color]      walk there (stops if the Rex comes into view;\n" +
+        "[color=#e9b04c]Left-click[/color]      walk there (stops if something big comes into view;\n" +
         "                any key or click stops it too)\n" +
         "[color=#e9b04c]Right-click[/color]     actions for that tile: walk, sprint, throw a flare,\n" +
         "                rope down, doors, ladders, first aid, orders\n" +

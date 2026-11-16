@@ -5,7 +5,7 @@ namespace BlueHarvest.Game.Ui;
 
 /// <summary>
 /// A bar for a score with a threshold: green while well under it, amber close to it, red at or past it,
-/// with a white tick where the threshold sits. Used for the Rex's sight score on you.
+/// with a white tick where the threshold sits. (The sidebar's exposure is words now; kept for later use.)
 /// </summary>
 public partial class Meter : Control
 {

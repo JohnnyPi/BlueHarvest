@@ -39,8 +39,11 @@ public partial class Main
     /// <summary>What the player perceived on the last refresh; click-to-walk compares against it.</summary>
     private Percepts? _playerPercepts;
 
-    /// <summary>Whether the Rex had the player spotted on the last refresh.</summary>
-    private bool _rexSeesYou;
+    /// <summary>What the player sensed on the last refresh: four senses, placed around them, and exposure.</summary>
+    private SenseReport? _report;
+
+    /// <summary>Whether anything had the player spotted on the last refresh (walking and resting stop when it starts).</summary>
+    private bool _spotted;
 
     private void BuildHud(CanvasLayer layer, Font font)
     {
@@ -90,6 +93,11 @@ public partial class Main
         _debug = new DebugPanel { OffsetTop = 60f, OffsetBottom = 60f };
         _debug.Bind(_map.Overlays, WeatherChoices(), TimePresets.Select(p => p.Name).ToList());
         _debug.OverlaysChanged += () => Refresh(snapCamera: false);
+        _debug.CreatureCycled += step =>
+        {
+            CycleSelection(step);
+            Refresh(snapCamera: false);
+        };
         _debug.HuntToggled += on =>
         {
             SetHunt(on);
@@ -164,10 +172,11 @@ public partial class Main
     }
 
     /// <summary>
-    /// What the edge arrows point at: every exit, and the Rex if you can see it; otherwise its tread if
-    /// you feel it, otherwise where you last saw it.
+    /// What the edge arrows point at: every exit; every large creature you can see; for those you
+    /// can't, the strongest tread you feel, else where you last saw them; the nearest fire; and the
+    /// loudest alarming sound you can place. At most <see cref="MaxEdgeTargets"/>.
     /// </summary>
-    private IReadOnlyList<EdgeTarget> EdgeTargets(Percepts mine)
+    private IReadOnlyList<EdgeTarget> EdgeTargets(SenseReport report)
     {
         var here = _playerActor.Position;
         var targets = new List<EdgeTarget>();
@@ -176,30 +185,43 @@ public partial class Main
             var (distance, _) = DistanceAndCompass(here, exit.Position);
             targets.Add(new EdgeTarget(exit.Position, $"{exit.Name} {distance} m", HudTheme.Safe));
         }
-        if (_rex is null || _rex.IsDead)
-            return targets;
 
-        if (mine.Detects(_rex))
+        var placed = new HashSet<int>();
+        foreach (var cue in report.Sight.Where(c => c.Kind == CueKind.Creature && c.At is not null && c.ActorId is not null))
         {
-            var (distance, _) = DistanceAndCompass(here, _rex.Position);
-            targets.Add(new EdgeTarget(_rex.Position, $"Rex {distance} m", HudTheme.Danger));
-            return targets;
+            var creature = _sim.Actors[cue.ActorId!.Value];
+            if (!creature.IsLarge)
+                continue;
+            placed.Add(creature.Id);
+            targets.Add(new EdgeTarget(cue.At!.Value, $"{Capitalize(SenseWords.Called(creature))} {cue.Distance} m", HudTheme.Danger));
         }
-        var felt = mine.Felt
-            .Where(f => f.Vibration.ActorId == _rex.Id)
-            .OrderByDescending(f => f.Perceived)
-            .FirstOrDefault();
-        if (felt is not null)
+        var tread = report.Feel.FirstOrDefault(c => c.Kind == CueKind.Tremor && c.At is not null && c.Danger
+            && (c.ActorId is null || !placed.Contains(c.ActorId.Value)));
+        if (tread is not null)
         {
-            string words = felt.Perceived >= 25 ? "the ground shudders" : felt.Perceived >= 15 ? "heavy footfalls" : "a faint tremor";
-            targets.Add(new EdgeTarget(felt.Vibration.Position, words, HudTheme.Earth));
+            if (tread.ActorId is { } id)
+                placed.Add(id);
+            targets.Add(new EdgeTarget(tread.At!.Value, SenseWords.What(_sim, tread), HudTheme.Earth));
         }
-        else if (_map.Overlays.Fog && _map.Fog is { } fog && fog.Ghosts.TryGetValue(_rex.Id, out var ghost))
+        if (_map.Overlays.Fog && _map.Fog is { } fog)
         {
-            targets.Add(new EdgeTarget(ghost.Tip, $"Rex, last seen {Clock(ghost.Tick)}", HudTheme.Muted));
+            foreach (var ghost in fog.Ghosts.Values)
+            {
+                var creature = _sim.Actors[ghost.ActorId];
+                if (placed.Contains(ghost.ActorId) || creature.IsDead || !creature.IsLarge)
+                    continue;
+                targets.Add(new EdgeTarget(ghost.Tip, $"{Capitalize(SenseWords.Called(creature))}, last seen {Clock(ghost.Tick)}", HudTheme.Muted));
+            }
         }
-        return targets;
+        if (report.Sight.FirstOrDefault(c => c.Kind == CueKind.Fire) is { At: { } fire } fireCue)
+            targets.Add(new EdgeTarget(fire, $"fire {fireCue.Distance} m", HudTheme.Amber));
+        if (report.Sound.FirstOrDefault(c => c.Danger && c.At is not null && (c.ActorId is null || !placed.Contains(c.ActorId.Value))) is { At: { } heard } soundCue)
+            targets.Add(new EdgeTarget(heard, SenseWords.What(_sim, soundCue), HudTheme.Amber));
+        return targets.Take(MaxEdgeTargets + _sim.Exits.Count).ToList();
     }
+
+    /// <summary>How many edge arrows besides the exits.</summary>
+    private const int MaxEdgeTargets = 6;
 
     /// <summary>m:ss on the game clock.</summary>
     private static string Clock(long ticks)
@@ -211,8 +233,11 @@ public partial class Main
     private void Refresh(bool snapCamera)
     {
         _playerPercepts = PerceptionSystem.Perceive(_sim, _playerActor, _lastTurnTick);
-        var rexPercepts = _rex is null ? null : PerceptionSystem.Perceive(_sim, _rex, _lastTurnTick);
-        _rexSeesYou = rexPercepts?.Detects(_playerActor) ?? false;
+        var report = SenseReport.For(_sim, _playerActor, _playerPercepts, _lastTurnTick);
+        _report = report;
+        _spotted = report.Exposure.Stage >= ExposureStage.Spotted;
+        KeepSelection();
+        var selectedPercepts = _selected is null ? null : PerceptionSystem.Perceive(_sim, _selected, _lastTurnTick);
         _map.Fog?.Update(_sim, _playerActor, _playerPercepts);
 
         // the colour of the light goes with the hour, where there is a clock
@@ -223,17 +248,17 @@ public partial class Main
         _map.QueueRedraw();
         UpdateCamera(snapCamera);
 
-        _sidebar.Display(BuildFacts(_playerPercepts, rexPercepts));
-        _edges.Targets = EdgeTargets(_playerPercepts);
+        _sidebar.Display(BuildFacts(report));
+        _edges.Targets = EdgeTargets(report);
         if (_debug.Visible)
         {
-            _debug.Sync(_rexHunt is not null, WeatherPresetIndex());
-            _debug.ShowReadout(DebugReadout(rexPercepts));
+            _debug.Sync(_hunt is not null, WeatherPresetIndex());
+            _debug.ShowReadout(DebugReadout(selectedPercepts, report));
         }
         _previewStale = true;
     }
 
-    private HudFacts BuildFacts(Percepts mine, Percepts? rex)
+    private HudFacts BuildFacts(SenseReport report)
     {
         long now = _sim.CurrentTick;
         var here = _playerActor.Position;
@@ -276,52 +301,32 @@ public partial class Main
             + (weather.SightRangePercent < 100 ? $" Sight {weather.SightRangePercent}%." : "")
             + moon;
 
-        // How close the Rex is to spotting you.
+        // How exposed you feel, and what shows you up.
+        var exposure = report.Exposure;
         int light = _sim.Light.LevelAt(here);
         bool moving = _playerActor.MovedRecently(now, PerceptionSystem.MotionWindowTicks);
-        int threshold = _rex?.Species.Senses.DetectThreshold ?? 10;
-        var contact = rex?.ContactWith(_playerActor);
-        int score = contact?.Score ?? 0;
-        var (verdict, alarm) = _rex is null ? ("no Rex here", Alarm.Calm)
-            : _rex.IsDead ? ("dead", Alarm.Calm)
-            : contact is { Detected: true } ? ("sees you", Alarm.Spotted)
-            : contact is not null ? ("can't make you out", score >= threshold * 6 / 10 ? Alarm.Close : Alarm.Calm)
-            : ("no view of you", Alarm.Calm);
-        var detail = new List<string> { $"[color={muted}]light {light}% · {(moving ? "moving" : "still")}[/color]" };
+        var alarm = exposure.Stage switch
+        {
+            ExposureStage.Seen or ExposureStage.Spotted => Alarm.Spotted,
+            ExposureStage.Watched => Alarm.Close,
+            _ => Alarm.Calm,
+        };
+        var detail = new List<string> { $"[color={muted}]{(light >= 50 ? "in the light" : light >= 20 ? "in half light" : "in the dark")} · {(moving ? "moving" : "still")}[/color]" };
         if (ShelterText(here) is { } shelter)
             detail.Add(shelter);
-        if (rex is not null && rex.Hears(_playerActor))
-            detail.Add($"[color={HudTheme.Hex(HudTheme.Amber)}]It heard you.[/color]");
-        var trail = rex?.Smelled.FirstOrDefault(t => t.ActorId == _playerActor.Id);
-        if (trail is not null)
-            detail.Add(trail.Blood
-                ? $"[color={HudTheme.Hex(HudTheme.Danger)}]It smells your blood.[/color]"
-                : $"[color={HudTheme.Hex(HudTheme.Amber)}]It smells your trail.[/color]");
-
-        // Senses.
-        string see;
-        if (_rex is not null && !_rex.IsDead && mine.Detects(_rex))
-        {
-            var (distance, compass) = DistanceAndCompass(here, _rex.Position);
-            see = $"[color={HudTheme.Hex(HudTheme.Danger)}]the Rex[/color], {distance} m {compass}";
-        }
-        else
-        {
-            see = $"[color={muted}]no sign of the Rex[/color]";
-        }
 
         return new HudFacts(
             Clock: _sim.Clock is { } worldClock ? worldClock.Describe(now) : Clock(now),
             WeatherBadge: badge,
             Weather: weatherText,
-            SightScore: score,
-            SightThreshold: threshold,
-            SightVerdict: verdict,
-            SightAlarm: alarm,
-            SightDetail: string.Join("\n", detail),
-            See: see,
-            Hear: HearingText(mine),
-            Feel: FeelText(mine),
+            ExposureVerdict: SenseWords.Verdict(exposure),
+            ExposureAlarm: alarm,
+            Exposure: HudTheme.Escape(SenseWords.ExposureLine(_sim, exposure)),
+            ExposureDetail: string.Join("\n", detail),
+            Sight: SenseWords.Line(_sim, _playerActor, report.Sight, Sense.Sight),
+            Sound: SenseWords.Line(_sim, _playerActor, report.Sound, Sense.Sound),
+            Smell: SenseWords.Line(_sim, _playerActor, report.Smell, Sense.Smell),
+            Feel: SenseWords.Line(_sim, _playerActor, report.Feel, Sense.Feel),
             Health: _playerActor.Health,
             BodyNotes: BodyNotes(now),
             Exits: ExitFacts(here),
@@ -334,66 +339,19 @@ public partial class Main
         if (_playerActor.OnDeck)
         {
             int up = _sim.StandHeight(_playerActor) - _sim.Terrain[here];
-            return $"On a platform {Units.FormatMeters(up)} up, above the Rex's reach until it brings it down.";
+            return $"On a platform {Units.FormatMeters(up)} up, above a big animal's reach until it brings it down.";
         }
         if (_sim.VehicleAt(here) is { } vehicle)
             return vehicle.Breached
                 ? $"[color={HudTheme.Hex(HudTheme.Danger)}]In {HudTheme.Escape(vehicle.Name)}: BREACHED, no protection.[/color]"
                 : $"In {HudTheme.Escape(vehicle.Name)} ({vehicle.Integrity}%): the cab hides you and stops bites.";
-        return _sim.Map.IsIndoor(here) ? "Indoors, under a roof the Rex can't reach under." : null;
+        return _sim.Map.IsIndoor(here) ? "Indoors, under a roof nothing big can reach under." : null;
     }
 
     private (int Distance, string Compass) DistanceAndCompass(TilePos from, TilePos to)
     {
         int dx = to.X - from.X, dy = to.Y - from.Y;
         return ((int)Math.Round(Math.Sqrt(dx * dx + dy * dy)), Directions.FromDelta(dx, dy).Compass());
-    }
-
-    private string HearingText(Percepts percepts)
-    {
-        var sounds = percepts.Heard
-            .Where(h => h.Noise.ActorId is not null && h.Noise.ActorId != _playerActor.Id)
-            .GroupBy(h => h.Noise.ActorId!.Value)
-            .Select(g => g.OrderByDescending(h => h.Perceived).First())
-            .OrderByDescending(h => h.Perceived)
-            .Select(Describe)
-            .ToList();
-        if (sounds.Count > 0)
-            return string.Join("; ", sounds);
-        string quiet = _sim.Weather.Settings.RainPercent > 0 ? "only the rain" : "nothing close";
-        return $"[color={HudTheme.Hex(HudTheme.Muted)}]{quiet}[/color]";
-    }
-
-    private string Describe(HeardNoise heard)
-    {
-        var noise = heard.Noise;
-        string who = noise.ActorId is { } id ? _sim.Actors[id].Name : "something";
-        var here = _playerActor.Position;
-        string where = Directions.FromDelta(noise.Position.X - here.X, noise.Position.Y - here.Y).Compass();
-        string loudness = heard.Perceived >= 20 ? "loud " : heard.Perceived <= 6 ? "faint " : "";
-        return HudTheme.Escape($"{loudness}{noise.Kind} ({who}, {where})");
-    }
-
-    /// <summary>What shakes the ground under you: the Rex's tread long before you see it.</summary>
-    private string FeelText(Percepts percepts)
-    {
-        var shakes = percepts.Felt
-            .GroupBy(f => f.Vibration.ActorId ?? -1)
-            .Select(g => g.OrderByDescending(f => f.Perceived).First())
-            .OrderByDescending(f => f.Perceived)
-            .Select(f =>
-            {
-                var v = f.Vibration;
-                string who = v.ActorId is { } id ? _sim.Actors[id].Name : "something";
-                var here = _playerActor.Position;
-                string where = Directions.FromDelta(v.Position.X - here.X, v.Position.Y - here.Y).Compass();
-                string how = f.Perceived >= 25 ? "the ground shudders" : f.Perceived >= 15 ? "heavy footfalls" : "a faint tremor";
-                return HudTheme.Escape($"{how} ({who}, {where})");
-            })
-            .ToList();
-        return shakes.Count == 0
-            ? $"[color={HudTheme.Hex(HudTheme.Muted)}]the ground is still[/color]"
-            : $"[color={HudTheme.Hex(HudTheme.Earth)}]{string.Join("; ", shakes)}[/color]";
     }
 
     private string BodyNotes(long now)
@@ -479,7 +437,7 @@ public partial class Main
         text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 
     /// <summary>The numbers behind the HUD, for the debug panel.</summary>
-    private string DebugReadout(Percepts? rex)
+    private string DebugReadout(Percepts? selected, SenseReport report)
     {
         var here = _playerActor.Position;
         bool moving = _playerActor.MovedRecently(_sim.CurrentTick, PerceptionSystem.MotionWindowTicks);
@@ -504,49 +462,61 @@ public partial class Main
                 ? $"Away from here: {island.Changes.TileCount} changed tiles kept in {island.Changes.ChunkCount} chunks, " +
                   $"{_sim.Actors.Count(a => a.LeftBehind)} left behind\n"
                 : "") +
-            RexLine(rex) + "\n" +
+            ExposureLine(report.Exposure) + "\n" +
+            CreatureLine(selected) + "\n" +
             MindLine();
         return HudTheme.Escape(text);
     }
 
-    private string RexLine(Percepts? rex)
+    /// <summary>The numbers behind the exposure feeling.</summary>
+    private string ExposureLine(Exposure e)
     {
-        if (rex is null || _rex is null)
-            return "No Rex on this map.";
-
-        int threshold = _rex.Species.Senses.DetectThreshold;
-        var contact = rex.ContactWith(_playerActor);
-        string sight = contact switch
-        {
-            { Detected: true } c => $"Rex SEES you (score {c.Score}, needs {threshold})",
-            { } c => $"Rex can't make you out (score {c.Score}, needs {threshold})",
-            null => "Rex has no view of you",
-        };
-        string hearing = rex.Hears(_playerActor) ? ", HEARD you" : "";
-        var trail = rex.Smelled.FirstOrDefault(t => t.ActorId == _playerActor.Id);
-        string smell = trail is null ? "" : trail.Blood ? ", SMELLS your blood" : ", SMELLS your trail";
-        return $"{sight}{hearing}{smell}.   It sees {rex.Lights.Count} light(s).";
+        string who = e.WatcherId is { } id ? _sim.Actors[id].Name : "nobody";
+        return $"Exposure {e.Stage}: watcher {who}, sight score {e.Score} (needs {e.Threshold})" +
+            $"{(e.Heard ? ", heard you" : "")}{(e.Smelled ? ", has your scent" : "")}";
     }
 
-    /// <summary>What the Rex is doing and whether you've escaped it (out of reach and not its focus).</summary>
+    /// <summary>The selected creature's senses on you ([ and ] pick another while the panel is open).</summary>
+    private string CreatureLine(Percepts? percepts)
+    {
+        if (percepts is null || _selected is null)
+            return "No creature on this map ([ ] pick one).";
+
+        string name = Capitalize(SenseWords.Called(_selected));
+        int threshold = _selected.Species.Senses.DetectThreshold;
+        var contact = percepts.ContactWith(_playerActor);
+        string sight = contact switch
+        {
+            { Detected: true } c => $"{name} SEES you (score {c.Score}, needs {threshold})",
+            { } c => $"{name} can't make you out (score {c.Score}, needs {threshold})",
+            null => $"{name} has no view of you",
+        };
+        string hearing = percepts.Hears(_playerActor) ? ", HEARD you" : "";
+        var trail = percepts.Smelled.FirstOrDefault(t => t.ActorId == _playerActor.Id);
+        string smell = trail is null ? "" : trail.Blood ? ", SMELLS your blood" : ", SMELLS your trail";
+        var (distance, compass) = DistanceAndCompass(_playerActor.Position, _selected.Position);
+        return $"[selected: {name}, {distance} m {compass}]  {sight}{hearing}{smell}.   It sees {percepts.Lights.Count} light(s).";
+    }
+
+    /// <summary>What the selected creature is doing and whether you've escaped it (out of reach and not its focus).</summary>
     private string MindLine()
     {
-        if (_rex is null)
+        if (_selected is null)
             return "";
 
-        string mind = _rexHunt is not null
+        string mind = _hunt is not null
             ? "DEBUG: walking straight at you"
-            : _rexBrain?.Describe(_sim) ?? "no brain";
+            : _selectedBrain?.Describe(_sim) ?? "no brain";
         string calm = _director.InCalmWindow(_sim.CurrentTick) ? " (calm window)" : "";
         string escape = "";
-        if (_rexHunt is null && _rexBrain is not null)
+        if (_hunt is null && _selectedBrain is not null)
         {
-            var status = EscapeCheck.Evaluate(_sim, _rex, _rexBrain, _playerActor);
+            var status = EscapeCheck.Evaluate(_sim, _selected, _selectedBrain, _playerActor);
             escape = status.Escaped
                 ? "   ESCAPED"
                 : $"   out of reach: {(status.OutOfReach ? "yes" : "no")}, attention elsewhere: {(status.AttentionElsewhere ? "yes" : "no")}";
         }
-        return $"Rex is {mind}.\nTension {_director.Tension}{calm}{escape}";
+        return $"{Capitalize(SenseWords.Called(_selected))} is {mind}.\nTension {_director.Tension}{calm}{escape}";
     }
 
     private void UpdateOverlays(Percepts playerPercepts)
@@ -555,13 +525,14 @@ public partial class Main
         int width = _sim.Map.Width, height = _sim.Map.Height;
         o.Noises = _sim.RecentNoises.Where(n => n.Tick >= _lastTurnTick).ToList();
         o.Vibrations = _sim.RecentVibrations.Where(v => v.Tick >= _lastTurnTick).ToList();
-        var rexPath = _rexHunt?.RemainingPath ?? _rexBrain?.PlannedPath ?? Array.Empty<Direction>();
-        o.RexPathTiles = _rex is not null
-            ? Pathfinder.Trace(_rex, rexPath).Select(p => p.Anchor).Distinct().ToList()
+        // the debug views follow the selected creature
+        var path = _hunt?.RemainingPath ?? _selectedBrain?.PlannedPath ?? Array.Empty<Direction>();
+        o.RexPathTiles = _selected is not null
+            ? Pathfinder.Trace(_selected, path).Select(p => p.Anchor).Distinct().ToList()
             : (IReadOnlyList<TilePos>)Array.Empty<TilePos>();
 
         long now = _sim.CurrentTick;
-        var brain = _rexHunt is null ? _rexBrain : null;
+        var brain = _hunt is null ? _selectedBrain : null;
         if (brain is not null)
         {
             var profile = brain.Profile;
@@ -592,17 +563,17 @@ public partial class Main
             o.PlayerVisibleTiles = visible;
         }
 
-        if (o.RexView && _rex is not null)
+        if (o.RexView && _selected is not null)
         {
             var scores = new int[width * height];
-            int range = _rex.Species.Senses.SightRangeTiles;
-            var at = _rex.Position;
+            int range = _selected.Species.Senses.SightRangeTiles;
+            var at = _selected.Position;
             for (int y = Math.Max(0, at.Y - range); y <= Math.Min(height - 1, at.Y + range); y++)
                 for (int x = Math.Max(0, at.X - range); x <= Math.Min(width - 1, at.X + range); x++)
                     scores[y * width + x] = PerceptionSystem.SightScore(
-                        _sim, _rex, new TilePos(x, y), Species.Human.BodyHeightDm, moving: true);
+                        _sim, _selected, new TilePos(x, y), Species.Human.BodyHeightDm, moving: true);
             o.RexScores = scores;
-            o.RexThreshold = _rex.Species.Senses.DetectThreshold;
+            o.RexThreshold = _selected.Species.Senses.DetectThreshold;
         }
     }
 

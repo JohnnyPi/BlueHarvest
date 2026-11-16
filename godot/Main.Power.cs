@@ -87,8 +87,8 @@ public partial class Main
     {
         if (actor == _playerActor)
             Say("The fence bites back: a jolt throws you off it, your arm numb.");
-        else if (actor == _rex && Shown(actor))
-            Say("The Rex flinches back from the live fence with a crack of sparks.");
+        else if (actor.IsLarge && Shown(actor))
+            Say($"{Capitalize(SenseWords.Called(actor))} flinches back from the live fence with a crack of sparks.");
         else if (Shown(actor))
             Say($"{actor.Name} touches the live fence and is thrown back.");
         else if (Chebyshev(_playerActor.Position, fence) <= 40)

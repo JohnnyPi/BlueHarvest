@@ -10,6 +10,7 @@ using BlueHarvest.Sim.Ai;
 using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.Navigation;
+using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 using Godot;
 using Direction = BlueHarvest.Sim.World.Direction;
@@ -53,6 +54,8 @@ public partial class Main
         public HashSet<int> SeenAtStart { get; }
         public int WoundsAtStart { get; }
         public bool SpottedAtStart { get; }
+        /// <summary>Whether a fire was already close when it set off (it stops when one comes close).</summary>
+        public bool FireCloseAtStart { get; init; }
         public int Next { get; set; }
         public double Wait { get; set; }
     }
@@ -214,7 +217,7 @@ public partial class Main
         if (moves.Count == 0)
             return;
 
-        _walk = new Walk(moves.ToList(), sprint, LargeActorsInView(), WoundScore(), _rexSeesYou);
+        _walk = new Walk(moves.ToList(), sprint, LargeActorsInView(), WoundScore(), _spotted) { FireCloseAtStart = FireClose() };
         UpdatePathPreview(null);
         _map.QueueRedraw();
         SetPrompt(sprint ? "Sprinting there. Any key or click stops." : "Walking there. Any key or click stops.");
@@ -253,9 +256,11 @@ public partial class Main
 
         var newlySeen = LargeActorsInView().Except(walk.SeenAtStart).ToList();
         if (newlySeen.Count > 0)
-            StopWalk($"You stop: {(_sim.Actors[newlySeen[0]] == _rex ? "the Rex" : _sim.Actors[newlySeen[0]].Name)} is in view.");
-        else if (_rexSeesYou && !walk.SpottedAtStart)
-            StopWalk("You stop: the Rex has seen you.");
+            StopWalk($"You stop: {SenseWords.Called(_sim.Actors[newlySeen[0]])} is in view.");
+        else if (_spotted && !walk.SpottedAtStart)
+            StopWalk($"You stop: {SpottedBy()}.");
+        else if (FireClose() && !walk.FireCloseAtStart)
+            StopWalk("You stop: fire, close ahead.");
         else if (WoundScore() > walk.WoundsAtStart)
             StopWalk("You stop: you're hurt.");
         else if (walk.Next >= walk.Moves.Count)
@@ -272,6 +277,15 @@ public partial class Main
             Say(why);
         _previewStale = true;
     }
+
+    /// <summary>Whether a fire is close enough to feel its heat.</summary>
+    private bool FireClose() => _report?.Feel.Any(c => c.Kind == CueKind.Heat) ?? false;
+
+    /// <summary>Who has spotted you, as far as you can tell: "the raptor has seen you", or "something has spotted you" if you can't see it.</summary>
+    private string SpottedBy() =>
+        _report?.Exposure is { Stage: ExposureStage.Seen, WatcherId: { } id }
+            ? $"{SenseWords.Called(_sim.Actors[id])} has seen you"
+            : "something has spotted you";
 
     /// <summary>Ids of large creatures the player can make out right now.</summary>
     private HashSet<int> LargeActorsInView() =>
@@ -419,8 +433,8 @@ public partial class Main
 
         if (tile == me.Position)
             facts.Add(("You", HudTheme.Ink));
-        else if (_rex is not null && !_rex.IsDead && Shown(_rex) && _rex.Body.Any(b => b.Position == tile))
-            facts.Add(("The Rex", HudTheme.Danger));
+        else if (_sim.Actors.FirstOrDefault(a => a.IsLarge && !a.IsGone && Shown(a) && a.Body.Any(b => b.Position == tile)) is { } big)
+            facts.Add((Capitalize(SenseWords.Called(big)), HudTheme.Danger));
         else if (_sim.Actors.FirstOrDefault(a => a != me && a.Position == tile && !a.HasEscaped && !a.LeftBehind && !a.IsLarge && Shown(a)) is { } other)
             facts.Add((other.IsDead ? $"{other.Name}, dead"
                 : other.Controller is HumanBrain brain ? $"{other.Name}, {brain.Describe()}"
@@ -434,11 +448,11 @@ public partial class Main
 
         var cover = _sim.Map.CoverAt(tile);
         if (_sim.VehicleAt(tile) is null && !cover.BlocksMovement && cover.StopsLargeBody(Species.Rex.Force))
-            facts.Add(("The Rex can't push through", HudTheme.Safe));
+            facts.Add(("Too thick for anything big to push through", HudTheme.Safe));
         else if (cover.IsSmashedBy(Species.Rex.Force) && !cover.BlocksMovement)
-            facts.Add(("The Rex smashes through", HudTheme.Muted));
+            facts.Add(("Something big would smash through it", HudTheme.Muted));
         if (_sim.Map.IsIndoor(tile))
-            facts.Add(("Under a roof: out of the Rex's reach", HudTheme.Safe));
+            facts.Add(("Under a roof: out of a big animal's reach", HudTheme.Safe));
         if (_sim.ExitAt(tile) is not null)
             facts.Add(("Reach it to get away", HudTheme.Safe));
         if (_sim.Map.Structures.HasLadder(tile))
@@ -486,7 +500,7 @@ public partial class Main
         var state = _map.FogAt(tile);
         if (_map.RoofShown(tile))
         {
-            var facts = new List<(string Text, Color? Color)> { ("Under a roof: out of the Rex's reach", HudTheme.Safe) };
+            var facts = new List<(string Text, Color? Color)> { ("Under a roof: out of a big animal's reach", HudTheme.Safe) };
             if (state == FogState.Plan)
                 facts.Add(("On the park plan; you haven't seen it yet.", HudTheme.Muted));
             return facts;

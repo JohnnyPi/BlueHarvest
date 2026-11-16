@@ -4,7 +4,7 @@ using BlueHarvest.Sim.Injuries;
 
 namespace BlueHarvest.Game.Ui;
 
-/// <summary>How worried the Rex's sight score should make you: well under, close to, or at its threshold.</summary>
+/// <summary>How worried your exposure should make you: nothing, a feeling of being watched, or found.</summary>
 public enum Alarm
 {
     Calm,
@@ -23,13 +23,13 @@ public sealed record HudFacts(
     string Clock,
     string WeatherBadge,
     string Weather,
-    int SightScore,
-    int SightThreshold,
-    string SightVerdict,
-    Alarm SightAlarm,
-    string SightDetail,
-    string See,
-    string Hear,
+    string ExposureVerdict,
+    Alarm ExposureAlarm,
+    string Exposure,
+    string ExposureDetail,
+    string Sight,
+    string Sound,
+    string Smell,
     string Feel,
     Health Health,
     string BodyNotes,

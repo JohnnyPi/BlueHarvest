@@ -63,12 +63,17 @@ public partial class Main : Node2D
     private Simulation _sim = null!;
     private PlayerController _player = null!;
     private Actor _playerActor = null!;
-    private Actor? _rex;
+
+    /// <summary>
+    /// Debug only: the creature the F9 readout and the creature overlays follow, and the omniscient
+    /// hunt drives. The nearest large creature unless [ or ] picked another. Play never reads it.
+    /// </summary>
+    private Actor? _selected;
+    private CreatureBrain? _selectedBrain;
 
     /// <summary>On the island: the streamed map the simulation runs on. Null on the testbed.</summary>
     private IslandWindow? _island;
     private bool _windowShifted;
-    private CreatureBrain? _rexBrain;
     private readonly Director _director = new();
     private AsciiMapView _map = null!;
     private AmbientView _ambient = null!;
@@ -82,7 +87,7 @@ public partial class Main : Node2D
 
     private long _lastTurnTick;
     private int _turn;
-    private GoToController? _rexHunt;
+    private GoToController? _hunt;
     private InputMode _mode = InputMode.Normal;
     private TilePos _cursor;
     private Actor? _orderTarget;
@@ -107,8 +112,7 @@ public partial class Main : Node2D
         _player = new PlayerController();
         LoadSimulation();
         _playerActor = _sim.Actors.First(a => a.Controller == _player);
-        _rex = _sim.Actors.FirstOrDefault(a => a.Species == Species.Rex);
-        _rexBrain = _rex?.Controller as CreatureBrain;
+        KeepSelection();
         SubscribeToEvents();
 
         _map = new AsciiMapView();
@@ -116,7 +120,7 @@ public partial class Main : Node2D
         _sim.WindowShifted += OnWindowShifted;
         var overlays = _map.Overlays;
         overlays.PlayerId = _playerActor.Id;
-        // The Rex's path, memory, noise and vibration rings are debug views now (F9).
+        // The creature's path, memory, noise and vibration rings are debug views now (F9).
         overlays.Noise = false;
         overlays.RexPath = false;
         overlays.RexMemory = false;
@@ -618,29 +622,70 @@ public partial class Main : Node2D
     }
 
     /// <summary>
-    /// Debug: the Rex walks straight at you by pathfinding, knowing where you are without perceiving
-    /// you. Switched off, it goes back to its own brain, which keeps what it remembered.
+    /// Debug: the selected creature walks straight at you by pathfinding, knowing where you are without
+    /// perceiving you. Switched off, it goes back to its own brain, which keeps what it remembered.
     /// </summary>
     private void SetHunt(bool on)
     {
-        if (_rex is null || on == (_rexHunt is not null))
+        if (_selected is null || on == (_hunt is not null))
             return;
 
+        string name = SenseWords.Called(_selected);
         if (on)
         {
             var player = _playerActor;
-            _rexHunt = new GoToController(() => player.Position, tolerance: 3);
-            _sim.SetController(_rex, _rexHunt);
-            Say("DEBUG: the Rex is coming for you.");
+            _hunt = new GoToController(() => player.Position, tolerance: 3);
+            _sim.SetController(_selected, _hunt);
+            Say($"DEBUG: {name} is coming for you.");
         }
         else
         {
-            _rexHunt = null;
-            _sim.SetController(_rex, _rexBrain is not null
-                ? (IActorController)_rexBrain
-                : new RandomWalker(_sim.Rng.Fork($"ai:rex-wander:{_sim.CurrentTick}")));
-            Say("DEBUG: the Rex is back on its own senses.");
+            _hunt = null;
+            _sim.SetController(_selected, _selectedBrain is not null
+                ? (IActorController)_selectedBrain
+                : new RandomWalker(_sim.Rng.Fork($"ai:creature-wander:{_selected.Id}:{_sim.CurrentTick}")));
+            Say($"DEBUG: {name} is back on its own senses.");
         }
+    }
+
+    /// <summary>The creatures the debug tools can follow: every living one that isn't a person, nearest first.</summary>
+    private List<Actor> SelectableCreatures()
+    {
+        var here = _playerActor.Position;
+        return _sim.Actors
+            .Where(a => !a.IsGone && a.Species != Species.Human)
+            .OrderByDescending(a => a.IsLarge)
+            .ThenBy(a => Math.Max(Math.Abs(a.Position.X - here.X), Math.Abs(a.Position.Y - here.Y)))
+            .ThenBy(a => a.Id)
+            .ToList();
+    }
+
+    /// <summary>Keeps the debug selection on a living creature: the nearest large one if there's none yet.</summary>
+    private void KeepSelection()
+    {
+        if (_selected is { IsGone: false })
+            return;
+        if (_hunt is not null && _selected is not null)
+            _hunt = null; // it died hunting
+        Select(SelectableCreatures().FirstOrDefault());
+    }
+
+    /// <summary>Debug: moves the selection to the next (+1) or previous (−1) creature.</summary>
+    private void CycleSelection(int step)
+    {
+        var all = SelectableCreatures();
+        if (all.Count == 0)
+            return;
+        SetHunt(false);
+        int at = _selected is null ? -1 : all.IndexOf(_selected);
+        Select(all[((at + step) % all.Count + all.Count) % all.Count]);
+        Say($"DEBUG: following {SenseWords.Called(_selected!)}.");
+    }
+
+    private void Select(Actor? creature)
+    {
+        _selected = creature;
+        _selectedBrain = creature?.Controller as CreatureBrain;
     }
 
     /// <summary>The debug panel's weather list: the island's own weather first, then the fixed presets.</summary>

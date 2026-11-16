@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using BlueHarvest.Game.Ui;
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.World;
 using Sky = BlueHarvest.Sim.World.Sky; // Godot has a Sky of its own
@@ -37,6 +38,7 @@ public partial class Main
         public HashSet<int> SeenAtStart { get; }
         public int WoundsAtStart { get; }
         public bool SpottedAtStart { get; }
+        public bool FireCloseAtStart { get; init; }
     }
 
     /// <summary>Starts waiting for dawn (06:00) or dusk (18:00), whichever comes first.</summary>
@@ -50,7 +52,7 @@ public partial class Main
         long now = _sim.CurrentTick;
         long toDawn = clock.TicksUntil(now, Sky.Sunrise / 60), toDusk = clock.TicksUntil(now, Sky.Sunset / 60);
         string goal = toDawn < toDusk ? "dawn" : "dusk";
-        _rest = new Resting(now + Math.Min(toDawn, toDusk), goal, LargeActorsInView(), WoundScore(), _rexSeesYou);
+        _rest = new Resting(now + Math.Min(toDawn, toDusk), goal, LargeActorsInView(), WoundScore(), _spotted) { FireCloseAtStart = FireClose() };
         Say($"You settle down to wait for {goal}.");
         SetPrompt($"Waiting for {goal}. Any key or click stops.");
     }
@@ -72,9 +74,11 @@ public partial class Main
 
         var newlySeen = LargeActorsInView().Except(rest.SeenAtStart).ToList();
         if (newlySeen.Count > 0)
-            StopRest($"You get up: {(_sim.Actors[newlySeen[0]] == _rex ? "the Rex" : _sim.Actors[newlySeen[0]].Name)} is in view.");
-        else if (_rexSeesYou && !rest.SpottedAtStart)
-            StopRest("You get up: the Rex has seen you.");
+            StopRest($"You get up: {SenseWords.Called(_sim.Actors[newlySeen[0]])} is in view.");
+        else if (_spotted && !rest.SpottedAtStart)
+            StopRest($"You get up: {SpottedBy()}.");
+        else if (FireClose() && !rest.FireCloseAtStart)
+            StopRest("You get up: you can feel the heat of a fire.");
         else if (WoundScore() > rest.WoundsAtStart)
             StopRest("You get up: you're hurt.");
         else if (_sim.CurrentTick >= rest.UntilTick)

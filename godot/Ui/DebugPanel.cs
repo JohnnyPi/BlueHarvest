@@ -7,9 +7,9 @@ using Godot;
 namespace BlueHarvest.Game.Ui;
 
 /// <summary>
-/// Everything that isn't the game: the map overlays, the omniscient Rex, the weather presets and a
+/// Everything that isn't the game: the map overlays, the omniscient creature, the weather presets and a
 /// readout of the numbers behind the HUD. F9 opens it; while it's open, 1-8 toggle the overlays and
-/// G the omniscient Rex.
+/// G the omniscient creature, [ and ] pick which creature the creature views follow.
 /// </summary>
 public partial class DebugPanel : PanelContainer
 {
@@ -24,8 +24,11 @@ public partial class DebugPanel : PanelContainer
     /// <summary>An overlay was switched on or off.</summary>
     public event Action? OverlaysChanged;
 
-    /// <summary>The omniscient Rex was switched on (true) or off.</summary>
+    /// <summary>The omniscient creature was switched on (true) or off.</summary>
     public event Action<bool>? HuntToggled;
+
+    /// <summary>[ (−1) or ] (+1): follow the previous or next creature.</summary>
+    public event Action<int>? CreatureCycled;
 
     /// <summary>A weather preset was picked, by index.</summary>
     public event Action<int>? WeatherChosen;
@@ -65,14 +68,14 @@ public partial class DebugPanel : PanelContainer
         var o = overlays;
         Toggle(grid, "1  Lighting", Key.Key1, () => o.Lighting, v => o.Lighting = v);
         Toggle(grid, "2  Your view", Key.Key2, () => o.PlayerView, v => o.PlayerView = v);
-        Toggle(grid, "3  Rex view", Key.Key3, () => o.RexView, v => o.RexView = v);
+        Toggle(grid, "3  Creature view", Key.Key3, () => o.RexView, v => o.RexView = v);
         Toggle(grid, "4  Noise rings", Key.Key4, () => o.Noise, v => o.Noise = v);
-        Toggle(grid, "5  Rex path", Key.Key5, () => o.RexPath, v => o.RexPath = v);
-        Toggle(grid, "6  Rex memory", Key.Key6, () => o.RexMemory, v => o.RexMemory = v);
+        Toggle(grid, "5  Creature path", Key.Key5, () => o.RexPath, v => o.RexPath = v);
+        Toggle(grid, "6  Creature memory", Key.Key6, () => o.RexMemory, v => o.RexMemory = v);
         Toggle(grid, "7  Scent", Key.Key7, () => o.Scent, v => o.Scent = v);
         Toggle(grid, "8  Vibration", Key.Key8, () => o.Vibration, v => o.Vibration = v);
 
-        _hunt = new CheckBox { Text = "G  Omniscient Rex", FocusMode = FocusModeEnum.None };
+        _hunt = new CheckBox { Text = "G  Omniscient creature", FocusMode = FocusModeEnum.None };
         _hunt.Toggled += on => HuntToggled?.Invoke(on);
         grid.AddChild(_hunt);
 
@@ -124,11 +127,16 @@ public partial class DebugPanel : PanelContainer
         column.AddChild(_readout);
     }
 
-    /// <summary>Handles 1-8 and G while the panel is open. True if the key was one of them.</summary>
+    /// <summary>Handles 1-8, G, [ and ] while the panel is open. True if the key was one of them.</summary>
     public bool TryHotkey(Key key)
     {
         if (!Visible || key == Key.None)
             return false;
+        if (key is Key.Bracketleft or Key.Bracketright)
+        {
+            CreatureCycled?.Invoke(key == Key.Bracketleft ? -1 : 1);
+            return true;
+        }
         if (key == Key.G)
         {
             _hunt.ButtonPressed = !_hunt.ButtonPressed; // raises Toggled

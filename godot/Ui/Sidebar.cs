@@ -5,9 +5,9 @@ using Godot;
 namespace BlueHarvest.Game.Ui;
 
 /// <summary>
-/// The field sidebar on the right: the clock and weather, how close the Rex is to spotting you,
-/// what you see, hear and feel, your body, the exits, your gear and the other people. Each block
-/// keeps its place so the eye learns where to look. It only lays out <see cref="HudFacts"/>.
+/// The field sidebar on the right: the clock and weather, how exposed you feel, what you see, hear,
+/// smell and feel around you, your body, the exits, your gear and the other people. Each block keeps
+/// its place so the eye learns where to look. It only lays out <see cref="HudFacts"/>.
 /// </summary>
 public partial class Sidebar : PanelContainer
 {
@@ -17,8 +17,7 @@ public partial class Sidebar : PanelContainer
     private readonly Label _badge;
     private readonly Label _weather;
     private readonly Label _verdict;
-    private readonly Meter _meter;
-    private readonly RichTextLabel _sightDetail;
+    private readonly RichTextLabel _exposure;
     private readonly RichTextLabel _senses;
     private readonly BodyDoll _doll;
     private readonly RichTextLabel _bodyNotes;
@@ -63,23 +62,21 @@ public partial class Sidebar : PanelContainer
         _weather = HudTheme.Text("", HudTheme.SmallSize, HudTheme.Muted);
         top.AddChild(_weather);
 
-        // How close the Rex is to spotting you.
-        var sight = Section(stack);
-        var sightRow = new HBoxContainer();
-        var sightHeading = HudTheme.Heading("Rex sight on you");
-        sightHeading.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        // How exposed you feel: a feeling, not a measurement.
+        var exposure = Section(stack);
+        var exposureRow = new HBoxContainer();
+        var exposureHeading = HudTheme.Heading("Exposure");
+        exposureHeading.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         _verdict = HudTheme.Text("", HudTheme.SmallSize);
         _verdict.AutowrapMode = TextServer.AutowrapMode.Off;
         _verdict.Uppercase = true;
-        sightRow.AddChild(sightHeading);
-        sightRow.AddChild(_verdict);
-        sight.AddChild(sightRow);
-        _meter = new Meter();
-        sight.AddChild(_meter);
-        _sightDetail = HudTheme.Rich(HudTheme.SmallSize);
-        sight.AddChild(_sightDetail);
+        exposureRow.AddChild(exposureHeading);
+        exposureRow.AddChild(_verdict);
+        exposure.AddChild(exposureRow);
+        _exposure = HudTheme.Rich();
+        exposure.AddChild(_exposure);
 
-        // Senses.
+        // Senses: what's around you, and where.
         var senses = Section(stack);
         senses.AddChild(HudTheme.Heading("Senses"));
         _senses = HudTheme.Rich();
@@ -123,21 +120,23 @@ public partial class Sidebar : PanelContainer
         _badge.Text = f.WeatherBadge;
         _weather.Text = f.Weather;
 
-        _verdict.Text = f.SightVerdict;
-        _verdict.AddThemeColorOverride("font_color", f.SightAlarm switch
+        var tone = f.ExposureAlarm switch
         {
             Alarm.Spotted => HudTheme.Danger,
             Alarm.Close => HudTheme.Amber,
             _ => HudTheme.Safe,
-        });
-        _meter.Set(f.SightScore, f.SightThreshold * 3, f.SightThreshold);
-        _sightDetail.Text = $"[color={HudTheme.Hex(HudTheme.Muted)}]score {f.SightScore} · spots you at {f.SightThreshold}[/color]\n{f.SightDetail}";
+        };
+        _verdict.Text = f.ExposureVerdict;
+        _verdict.AddThemeColorOverride("font_color", tone);
+        _exposure.Text = $"[color={HudTheme.Hex(f.ExposureAlarm == Alarm.Calm ? HudTheme.Muted : tone)}]{f.Exposure}[/color]\n" +
+            $"[font_size={HudTheme.SmallSize}]{f.ExposureDetail}[/font_size]";
 
         string muted = HudTheme.Hex(HudTheme.Muted);
         _senses.Text =
-            $"[color={muted}]See [/color] {f.See}\n" +
-            $"[color={muted}]Hear[/color] {f.Hear}\n" +
-            $"[color={muted}]Feel[/color] {f.Feel}";
+            $"[color={muted}]Sight[/color]  {f.Sight}\n" +
+            $"[color={muted}]Sound[/color]  {f.Sound}\n" +
+            $"[color={muted}]Smell[/color]  {f.Smell}\n" +
+            $"[color={muted}]Feel [/color]  {f.Feel}";
 
         _doll.ShowHealth(f.Health);
         _bodyNotes.Text = f.BodyNotes;
