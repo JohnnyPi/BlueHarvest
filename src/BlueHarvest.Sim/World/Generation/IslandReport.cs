@@ -3,8 +3,9 @@ using System.Text;
 
 namespace BlueHarvest.Sim.World.Generation;
 
-/// <summary>One seed of an island validation run: its measures and key-site routes, or why the island could not be generated.</summary>
-public sealed record IslandSeedResult(uint Seed, IslandStats? Stats, double Seconds, string? Error = null, IslandReach? Reach = null);
+/// <summary>One seed of an island validation run: its measures, key-site routes and checks, or why the island could not be generated.</summary>
+public sealed record IslandSeedResult(uint Seed, IslandStats? Stats, double Seconds, string? Error = null, IslandReach? Reach = null,
+    IslandValidation? Validation = null);
 
 /// <summary>How a validation run was set up, for the report's header.</summary>
 public sealed record IslandReportSettings(uint FirstSeed, int Count, double Scale, double WallSeconds);
@@ -12,12 +13,12 @@ public sealed record IslandReportSettings(uint FirstSeed, int Count, double Scal
 /// <summary>
 /// Turns island measures over many seeds into a Markdown report (each measure's spread across the seeds,
 /// then shortfalls worth a look), a CSV with one row per seed, and a short console summary.
-/// Step 24a: measures; step 24b: walking routes between key sites. The pass/fail checks arrive in step 24c.
+/// Step 24a: measures; step 24b: walking routes between key sites; step 24c: the checks (<see cref="IslandChecks"/>).
 /// </summary>
 public static class IslandReport
 {
     /// <summary>The decided minimum beach share of the coast (design: "at least about 15%").</summary>
-    public const double DecidedBeachShare = 0.15;
+    public const double DecidedBeachShare = IslandChecks.BeachMinShare;
 
     /// <summary>How many seeds a list in the report names before it says "and N more".</summary>
     public const int ListedSeeds = 20;
@@ -101,8 +102,7 @@ public static class IslandReport
             + $"{ok.Count} of {results.Count} islands generated in {F(settings.WallSeconds, "0")} s"
             + (ok.Count > 0 ? $" ({F(ok.Average(r => r.Seconds), "0.0")} s per island on average, {F(ok.Max(r => r.Seconds), "0.0")} s the slowest)." : "."));
         sb.AppendLine();
-        sb.AppendLine("Measures and key-site routes only: the pass/fail checks arrive in step 24c, with thresholds set from these numbers. "
-            + "Every seed's numbers are in `seeds.csv` beside this report.");
+        sb.AppendLine("Every seed's numbers are in `seeds.csv` beside this report.");
         sb.AppendLine();
 
         if (failed.Count > 0)
@@ -115,6 +115,8 @@ public static class IslandReport
             sb.AppendLine();
         }
         if (ok.Count == 0) return sb.ToString();
+
+        ChecksSection(sb, ok);
 
         sb.AppendLine("## Measures across the seeds");
         sb.AppendLine();
@@ -169,6 +171,51 @@ public static class IslandReport
         return sb.ToString();
     }
 
+    private static void ChecksSection(StringBuilder sb, List<IslandSeedResult> ok)
+    {
+        var checkedSeeds = ok.Where(r => r.Validation is not null).ToList();
+        if (checkedSeeds.Count == 0) return;
+        int passed = checkedSeeds.Count(r => r.Validation!.Passed);
+        int warned = checkedSeeds.Count(r => r.Validation!.Warnings.Count > 0);
+        sb.AppendLine("## Checks");
+        sb.AppendLine();
+        sb.AppendLine($"**{passed} of {checkedSeeds.Count} seeds pass.** {warned} have warnings (reported only; warnings never reject a seed).");
+        sb.AppendLine();
+        sb.AppendLine("| Check | Severity | Seeds not passing | Seeds |");
+        sb.AppendLine("|---|---|---:|---|");
+        foreach (IslandCheck check in IslandChecks.All)
+        {
+            var seeds = checkedSeeds.Where(r => Results(r.Validation!).Any(x => x.Key == check.Key)).Select(r => r.Seed).ToList();
+            sb.AppendLine($"| {check.Name} (`{check.Key}`) | {check.Severity} | {seeds.Count} | {SeedList(seeds)} |");
+        }
+        sb.AppendLine();
+
+        var failing = checkedSeeds.Where(r => !r.Validation!.Passed).ToList();
+        if (failing.Count > 0)
+        {
+            sb.AppendLine("### Failing seeds");
+            sb.AppendLine();
+            sb.AppendLine("| Seed | Why |");
+            sb.AppendLine("|---:|---|");
+            foreach (IslandSeedResult r in failing.Take(ListedSeeds)) sb.AppendLine($"| {r.Seed} | {Cell(r.Validation!.FailureSummary)} |");
+            if (failing.Count > ListedSeeds) sb.AppendLine($"| | and {failing.Count - ListedSeeds} more seeds (see `seeds.csv`) |");
+            sb.AppendLine();
+        }
+        var warnings = checkedSeeds.Where(r => r.Validation!.Warnings.Count > 0).ToList();
+        if (warnings.Count > 0)
+        {
+            sb.AppendLine("### Warnings");
+            sb.AppendLine();
+            sb.AppendLine("| Seed | Warning |");
+            sb.AppendLine("|---:|---|");
+            foreach (IslandSeedResult r in warnings.Take(ListedSeeds)) sb.AppendLine($"| {r.Seed} | {Cell(r.Validation!.WarningSummary)} |");
+            if (warnings.Count > ListedSeeds) sb.AppendLine($"| | and {warnings.Count - ListedSeeds} more seeds (see `seeds.csv`) |");
+            sb.AppendLine();
+        }
+    }
+
+    private static IEnumerable<CheckResult> Results(IslandValidation v) => v.Failures.Concat(v.Warnings);
+
     private static void RoutesSection(StringBuilder sb, List<IslandSeedResult> ok)
     {
         var withReach = ok.Where(r => r.Reach is not null).ToList();
@@ -187,6 +234,9 @@ public static class IslandReport
         int pairs = withReach.Max(r => r.Reach!.Routes.Count);
         sb.AppendLine($"- **Pairs that must ford a river** (every river floods past wading in heavy rain): median {F(Median(ford), "0.#")} "
             + $"of {pairs} pairs, {F(ford.Min(), "0")}–{F(ford.Max(), "0")} across the seeds.");
+        var detour = withReach.Select(r => (r.Seed, Detour: r.Reach!.WorstDryDetour)).OrderBy(x => x.Detour).ToList();
+        sb.AppendLine($"- **Worst detour when rivers flood** (the dry route against today's walk, per seed): median ×{F(Median(detour.Select(x => x.Detour)), "0.00")}, "
+            + $"worst ×{F(detour[^1].Detour, "0.00")} (seed {detour[^1].Seed}).");
         var slow = withReach.Select(r => r.Reach!.SlowestMinutes).ToList();
         sb.AppendLine($"- **Slowest walk between two key sites:** {F(slow.Min(), "0")}–{F(slow.Max(), "0")} minutes, median {F(Median(slow), "0")}.");
         sb.AppendLine();
@@ -265,29 +315,38 @@ public static class IslandReport
 
     /// <summary>The CSV keys of the route part of a row (step 24b).</summary>
     public static string ReachHeader() =>
-        "anchors,anchor_pairs,anchor_gaps,tunnel_gaps,deep_gaps,no_ground_gaps,must_ford_pairs,slowest_anchor_minutes";
+        "anchors,anchor_pairs,anchor_gaps,tunnel_gaps,deep_gaps,no_ground_gaps,must_ford_pairs,slowest_anchor_minutes,worst_dry_detour";
 
     /// <summary>The routes as one CSV row matching <see cref="ReachHeader"/>. The golden-island tests pin these rows.</summary>
     public static string ReachRow(IslandReach r) => string.Join(",",
         r.Anchors.Count.ToString(CultureInfo.InvariantCulture), r.Routes.Count.ToString(CultureInfo.InvariantCulture),
         r.Gaps.ToString(CultureInfo.InvariantCulture), r.TunnelGaps.ToString(CultureInfo.InvariantCulture),
         r.DeepGaps.ToString(CultureInfo.InvariantCulture), r.GroundGaps.ToString(CultureInfo.InvariantCulture),
-        r.MustFord.ToString(CultureInfo.InvariantCulture), F(r.SlowestMinutes, "0.######"));
+        r.MustFord.ToString(CultureInfo.InvariantCulture), F(r.SlowestMinutes, "0.######"), F(r.WorstDryDetour, "0.######"));
 
-    /// <summary>One row per seed: seed, seconds, the stats and the routes (empty when missing), then the error, if any.</summary>
+    /// <summary>The CSV keys of the checks part of a row (step 24c).</summary>
+    public static string ChecksHeader() => "passed,failed_checks,warned_checks";
+
+    /// <summary>The checks as one CSV row matching <see cref="ChecksHeader"/>; check keys joined with ';'.</summary>
+    public static string ChecksRow(IslandValidation v) =>
+        $"{(v.Passed ? 1 : 0)},{string.Join(";", v.Failures.Select(f => f.Key))},{string.Join(";", v.Warnings.Select(f => f.Key))}";
+
+    /// <summary>One row per seed: seed, seconds, the stats, routes and checks (empty when missing), then the error, if any.</summary>
     public static string Csv(IReadOnlyList<IslandSeedResult> results)
     {
         int statsFields = StatsHeader().Split(',').Length;
         int reachFields = ReachHeader().Split(',').Length;
+        int checkFields = ChecksHeader().Split(',').Length;
         var sb = new StringBuilder();
-        sb.Append("seed,seconds,").Append(StatsHeader()).Append(',').Append(ReachHeader()).AppendLine(",error");
+        sb.Append("seed,seconds,").Append(StatsHeader()).Append(',').Append(ReachHeader()).Append(',').Append(ChecksHeader()).AppendLine(",error");
         foreach (IslandSeedResult r in results)
         {
             string stats = r.Stats is null ? new string(',', statsFields - 1) : StatsRow(r.Stats);
             string reach = r.Reach is null ? new string(',', reachFields - 1) : ReachRow(r.Reach);
+            string checks = r.Validation is null ? new string(',', checkFields - 1) : ChecksRow(r.Validation);
             string error = (r.Error ?? "").Replace(",", ";").Replace("\"", "'").Replace("\r", " ").Replace("\n", " ");
             sb.Append(r.Seed).Append(',').Append(F(r.Seconds, "0.00")).Append(',').Append(stats).Append(',')
-                .Append(reach).Append(',').AppendLine(error);
+                .Append(reach).Append(',').Append(checks).Append(',').AppendLine(error);
         }
         return sb.ToString();
     }
@@ -317,6 +376,18 @@ public static class IslandReport
             sb.AppendLine($"Key-site routes: every pair walkable in {withReach.Count(r => r.Reach!.FullyConnected)} of {withReach.Count} seeds; "
                 + $"seeds with a pair needing a tunnel: {withReach.Count(r => r.Reach!.TunnelGaps > 0)}; crossing deep water: "
                 + $"{withReach.Count(r => r.Reach!.DeepGaps > 0)}; with no ground or no route: {withReach.Count(r => r.Reach!.GroundGaps > 0)}.");
+        var checkedSeeds = ok.Where(r => r.Validation is not null).ToList();
+        if (checkedSeeds.Count > 0)
+        {
+            string Counts(Func<IslandValidation, IReadOnlyList<CheckResult>> pick)
+            {
+                var keys = checkedSeeds.SelectMany(r => pick(r.Validation!).Select(x => x.Key)).GroupBy(k => k)
+                    .Select(g => $"{g.Key} {g.Count()}").ToList();
+                return keys.Count == 0 ? "none" : string.Join(", ", keys);
+            }
+            sb.AppendLine($"Checks: {checkedSeeds.Count(r => r.Validation!.Passed)} of {checkedSeeds.Count} seeds pass; "
+                + $"failing: {Counts(v => v.Failures)}; warnings: {Counts(v => v.Warnings)}.");
+        }
         return sb.ToString();
     }
 

@@ -21,9 +21,11 @@ public enum RouteStatus : byte
 /// One pair of key sites. Minutes is the walk today (tunnels and deep rivers shut), infinity unless Ok;
 /// MinutesAnyWay lets tunnels and deep rivers be walked, as the island's Walk table does.
 /// MustFord: walkable today, but only across a river, and every river floods past wading in heavy rain.
+/// DryMinutes: the walk with every river over 1 m³/s shut as well (bridges stay open), as in a flood;
+/// infinity unless Ok and not MustFord.
 /// </summary>
 public sealed record AnchorRoute(int FromSite, int ToSite, string From, string To, RouteStatus Status,
-    double Minutes, double MinutesAnyWay, bool MustFord);
+    double Minutes, double MinutesAnyWay, bool MustFord, double DryMinutes);
 
 /// <summary>
 /// Walking routes between every pair of the key sites (step 24b). AnchorSites are indices into
@@ -43,6 +45,13 @@ public sealed record IslandReach(IReadOnlyList<int> AnchorSites, IReadOnlyList<s
 
     /// <summary>The longest walk between two key sites today, minutes (0 when no pair is walkable).</summary>
     public double SlowestMinutes => Routes.Where(r => r.Status == RouteStatus.Ok).Select(r => r.Minutes).DefaultIfEmpty(0).Max();
+
+    /// <summary>
+    /// How much longer the dry route (no river crossings, as in a flood) is than today's walk, at worst:
+    /// 1 when no walkable pair needs a detour, over pairs that are walkable and have a dry route.
+    /// </summary>
+    public double WorstDryDetour => Routes.Where(r => r.Status == RouteStatus.Ok && !r.MustFord && r.Minutes > 0)
+        .Select(r => r.DryMinutes / r.Minutes).DefaultIfEmpty(1).Max();
 
     /// <summary>Key sites that no other key site can walk to today.</summary>
     public IReadOnlyList<string> Unreached

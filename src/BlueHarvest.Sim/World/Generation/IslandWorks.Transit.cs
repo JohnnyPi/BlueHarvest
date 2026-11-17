@@ -154,7 +154,9 @@ public sealed partial class IslandWorks
 
     /// <summary>
     /// Minutes between the listed sites (walk[i][j] from sites[i] to sites[j]). Cells marked in blocked can't be
-    /// entered or started from. With every site listed and nothing blocked this is exactly the original timing.
+    /// entered or started from, and a diagonal step can't squeeze between two corner cells that are both closed
+    /// when at least one of them is blocked (so a shut river running diagonally holds). With every site listed
+    /// and nothing blocked this is exactly the original timing.
     /// wd, wdone and wh are scratch (sized to the walking grid; the heap to 8 entries per cell).
     /// </summary>
     private double[][] TravelCore(int[] sites, Dictionary<int, List<(int To, double Seconds)>>? extra, byte[]? blocked,
@@ -188,7 +190,7 @@ public sealed partial class IslandWorks
                     if (xx < 0 || yy < 0 || xx >= cnx || yy >= cny) continue;
                     int j = yy * cnx + xx;
                     if (_pass[j] == 0 || wdone[j] != 0) continue;
-                    if (blocked != null && blocked[j] != 0) continue;
+                    if (blocked != null && (blocked[j] != 0 || (k % 2 == 1 && CutsShutCorner(blocked, x, y, xx, yy)))) continue;
                     double d = GenGrid.DL[k] * cs, sl = (_ch[j] - _ch[c]) / d;
                     bool roads = _onRoad[c] != 0 && _onRoad[j] != 0;
                     if (Math.Abs(sl) > 0.8 && !roads) continue;
@@ -207,6 +209,17 @@ public sealed partial class IslandWorks
             }
         }
         return walk;
+    }
+
+    /// <summary>
+    /// Whether a diagonal step from (x, y) to (xx, yy) passes between two closed corner cells, at least one shut.
+    /// "Closed" is shut or impassable; two impassable corners alone don't stop it, as in the island's own timing.
+    /// </summary>
+    private bool CutsShutCorner(byte[] blocked, int x, int y, int xx, int yy)
+    {
+        int a = y * _cnx + xx, b = yy * _cnx + x;
+        bool shutA = blocked[a] != 0, shutB = blocked[b] != 0;
+        return (shutA || shutB) && (shutA || _pass[a] == 0) && (shutB || _pass[b] == 0);
     }
 
     /// <summary>
@@ -293,8 +306,10 @@ public sealed partial class IslandWorks
                 else if (!double.IsPositiveInfinity(noDeep[a][b])) status = RouteStatus.NeedsTunnel;
                 else status = RouteStatus.NeedsBoth;
                 bool ok = status == RouteStatus.Ok;
+                bool mustFord = ok && double.IsPositiveInfinity(dry[a][b]);
                 routes.Add(new AnchorRoute(sites[a], sites[b], Sites[sites[a]].Name, Sites[sites[b]].Name, status,
-                    ok ? neither[a][b] : double.PositiveInfinity, any[a][b], ok && double.IsPositiveInfinity(dry[a][b])));
+                    ok ? neither[a][b] : double.PositiveInfinity, any[a][b], mustFord,
+                    ok && !mustFord ? dry[a][b] : double.PositiveInfinity));
             }
         }
         return new IslandReach(sites, sites.Select(s => Sites[s].Name).ToList(), routes);

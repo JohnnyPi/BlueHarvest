@@ -5,8 +5,9 @@ using Xunit.Abstractions;
 namespace BlueHarvest.Sim.Tests;
 
 /// <summary>
-/// Step 24b: walking routes between the key sites (docks, airstrip, comms relay, control centre, watch posts).
-/// Everything here is asserted except <see cref="GoldenRoutes_Print"/>, the establishing run that step 24c pins.
+/// Steps 24b and 24c: walking routes between the key sites (docks, airstrip, comms relay, control centre, watch posts).
+/// Everything here is asserted except <see cref="GoldenRoutes_Print"/>, the establishing run for the route
+/// columns step 24c's corner rule can change (pinned in step 24d).
 /// </summary>
 public class IslandReachTests
 {
@@ -21,6 +22,56 @@ public class IslandReachTests
             kv => new Lazy<IslandReach>(() => TestIslands.World(kv.Key).Works.Reachability(IslandReach.AnchorKinds)));
 
     private static IslandReach Reach(string name) => Walked[name].Value;
+
+    // from the step 24b establishing run (16 Nov 2026): the columns step 24c's corner rule can't change,
+    // since they come from the route search with nothing shut
+    private const string PinnedColumns = "anchors,anchor_pairs,no_ground_gaps";
+
+    private static readonly Dictionary<string, string> Pinned = new()
+    {
+        ["Default"] = "8,28,0",
+        ["Seed12"] = "8,28,0",
+        ["SmallNoCliffs"] = "8,28,0",
+        ["CoolWet"] = "8,28,0",
+    };
+
+    [Theory]
+    [MemberData(nameof(CaseNames))]
+    public void Routes_MatchTheEstablishingRun(string name)
+    {
+        var got = IslandReport.ReachHeader().Split(',')
+            .Zip(IslandReport.ReachRow(Reach(name)).Split(','))
+            .ToDictionary(p => p.First, p => p.Second);
+        string[] keys = PinnedColumns.Split(','), want = Pinned[name].Split(',');
+        for (int k = 0; k < keys.Length; k++) Assert.True(want[k] == got[keys[k]], $"{name} {keys[k]}: pinned {want[k]}, now {got[keys[k]]}");
+    }
+
+    [Fact]
+    public void ADiagonalWall_CantBeSlippedThroughAtItsCorners()
+    {
+        // a wall one cell thick along a diagonal of the walking grid splits it in two: stepping diagonally
+        // across it means squeezing between two wall cells, which the corner rule refuses
+        IslandWorks works = TestIslands.World("Default").Works;
+        int nx = works.WalkNx, ny = works.WalkNy;
+        foreach (bool falling in new[] { true, false })
+        {
+            int k = falling ? nx / 2 - ny / 2 : nx / 2 + ny / 2;
+            int Side(int cell) => falling ? cell % nx - cell / nx - k : cell % nx + cell / nx - k;
+            int SiteSide(int site) => Side(works.WalkCellAt(works.Sites[site].X, works.Sites[site].Y));
+            IslandReach reach = works.Reachability(IslandReach.AnchorKinds, cell => Side(cell) == 0);
+            // well clear of the wall: a site walks from a cell up to 5 cells from it, which moves Side by up to 10
+            var across = reach.Routes.Where(r =>
+            {
+                int a = SiteSide(r.FromSite), b = SiteSide(r.ToSite);
+                return Math.Sign(a) != Math.Sign(b) && Math.Abs(a) > 12 && Math.Abs(b) > 12;
+            }).ToList();
+            if (across.Count == 0) continue;
+            Assert.All(across, r => Assert.True(r.Status is RouteStatus.NoRoute or RouteStatus.NoGround,
+                $"{r.From} – {r.To} got across the wall: {r.Status}"));
+            return;
+        }
+        Assert.Fail("neither diagonal wall had key sites well apart on both sides");
+    }
 
     [Theory]
     [MemberData(nameof(CaseNames))]
@@ -57,11 +108,14 @@ public class IslandReachTests
             {
                 Assert.False(double.IsPositiveInfinity(r.Minutes));
                 Assert.True(r.Minutes >= r.MinutesAnyWay - 1e-9, $"{r.From} – {r.To}: shutting cells made it faster");
+                if (r.MustFord) Assert.True(double.IsPositiveInfinity(r.DryMinutes));
+                else Assert.True(r.DryMinutes >= r.Minutes - 1e-9, $"{r.From} – {r.To}: the dry route is faster");
             }
             else
             {
                 Assert.True(double.IsPositiveInfinity(r.Minutes));
                 Assert.False(r.MustFord);
+                Assert.True(double.IsPositiveInfinity(r.DryMinutes));
             }
             if (r.Status is RouteStatus.NoGround or RouteStatus.NoRoute) Assert.True(double.IsPositiveInfinity(r.MinutesAnyWay));
             else Assert.False(double.IsPositiveInfinity(r.MinutesAnyWay));
@@ -125,7 +179,7 @@ public class IslandReachTests
     [Fact]
     public void GoldenRoutes_Print()
     {
-        _output.WriteLine("// Step 24b establishing run: IslandReach rows for the golden islands.");
+        _output.WriteLine("// IslandReach rows for the golden islands (all current columns).");
         _output.WriteLine("// Columns: " + IslandReport.ReachHeader());
         foreach (string name in TestIslands.Cases.Keys)
             _output.WriteLine($"[\"{name}\"] = \"{IslandReport.ReachRow(Reach(name))}\",");

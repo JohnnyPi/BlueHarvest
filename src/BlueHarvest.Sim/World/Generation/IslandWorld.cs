@@ -17,6 +17,34 @@ public sealed class IslandWorld
     public double WidthM => Shape.Nx * Shape.Cell;
     public double HeightM => Shape.Ny * Shape.Cell;
 
+    private readonly object _checkGate = new();
+    private IslandCheckContext? _measures;
+    private IslandValidation? _validation;
+
+    /// <summary>
+    /// The island's measures and key-site routes, worked out on first use and then kept (seed validation,
+    /// step 24). Thread-safe. Measuring only reads the island.
+    /// </summary>
+    public IslandCheckContext Measures()
+    {
+        lock (_checkGate)
+        {
+            _measures ??= new IslandCheckContext(IslandStats.Measure(this), Works.Reachability(IslandReach.AnchorKinds));
+            return _measures;
+        }
+    }
+
+    /// <summary>Runs <see cref="IslandChecks.All"/> on the island, once; later calls return the same result.</summary>
+    public IslandValidation Validate()
+    {
+        IslandCheckContext measures = Measures();
+        lock (_checkGate)
+        {
+            _validation ??= IslandChecks.Run(measures);
+            return _validation;
+        }
+    }
+
     /// <summary>
     /// Generates the island for these settings. The same settings always give the same island.
     /// progress, if given, is told what stage is starting (it may be called from a worker thread).
