@@ -3,8 +3,8 @@ using System.Text;
 
 namespace BlueHarvest.Sim.World.Generation;
 
-/// <summary>One seed of an island validation run: its measures, or why the island could not be generated.</summary>
-public sealed record IslandSeedResult(uint Seed, IslandStats? Stats, double Seconds, string? Error = null);
+/// <summary>One seed of an island validation run: its measures and key-site routes, or why the island could not be generated.</summary>
+public sealed record IslandSeedResult(uint Seed, IslandStats? Stats, double Seconds, string? Error = null, IslandReach? Reach = null);
 
 /// <summary>How a validation run was set up, for the report's header.</summary>
 public sealed record IslandReportSettings(uint FirstSeed, int Count, double Scale, double WallSeconds);
@@ -12,7 +12,7 @@ public sealed record IslandReportSettings(uint FirstSeed, int Count, double Scal
 /// <summary>
 /// Turns island measures over many seeds into a Markdown report (each measure's spread across the seeds,
 /// then shortfalls worth a look), a CSV with one row per seed, and a short console summary.
-/// Step 24a: measures only. The pass/fail checks arrive in step 24c.
+/// Step 24a: measures; step 24b: walking routes between key sites. The pass/fail checks arrive in step 24c.
 /// </summary>
 public static class IslandReport
 {
@@ -38,7 +38,7 @@ public static class IslandReport
         new Column("deep_river_cells", "River cells too deep to wade", "0", s => s.DeepRiverCells),
         new Column("lakes", "Lakes", "0", s => s.Lakes),
         new Column("lake_km2", "Lakes, km2", "0.00", s => s.LakeKm2),
-        new Column("pit_cells", "Enclosed basins (pit cells)", "0", s => s.PitCells),
+        new Column("pit_cells", "Pit cells (all)", "0", s => s.PitCells),
         new Column("highest_m", "Highest point, m", "0", s => s.HighestM),
         new Column("lowland_pct", "Lowland (below 150 m), % of dry land", "0.0", s => 100 * s.LowlandShare),
         new Column("steep_pct", "Steeper than 30 deg, % of dry land", "0.0", s => 100 * s.SteepShare),
@@ -51,6 +51,8 @@ public static class IslandReport
         new Column("road_km", "Roads, km", "0", s => s.RoadKm),
         new Column("bridges", "Bridges", "0", s => s.Bridges),
         new Column("tunnels", "Road tunnels", "0", s => s.Tunnels),
+        new Column("coastal_pit_cells", "Coast cells below sea level (count as reaching the sea)", "0", s => s.CoastalPitCells),
+        new Column("inland_pit_cells", "Enclosed basins that aren't lakes (inland pits)", "0", s => s.InlandPitCells),
     ];
 
     /// <summary>The spread of one measure over the seeds that generated.</summary>
@@ -99,7 +101,7 @@ public static class IslandReport
             + $"{ok.Count} of {results.Count} islands generated in {F(settings.WallSeconds, "0")} s"
             + (ok.Count > 0 ? $" ({F(ok.Average(r => r.Seconds), "0.0")} s per island on average, {F(ok.Max(r => r.Seconds), "0.0")} s the slowest)." : "."));
         sb.AppendLine();
-        sb.AppendLine("Measures only: the pass/fail checks arrive in step 24c, with thresholds set from these numbers. "
+        sb.AppendLine("Measures and key-site routes only: the pass/fail checks arrive in step 24c, with thresholds set from these numbers. "
             + "Every seed's numbers are in `seeds.csv` beside this report.");
         sb.AppendLine();
 
@@ -125,6 +127,8 @@ public static class IslandReport
         }
         sb.AppendLine();
 
+        RoutesSection(sb, ok);
+
         sb.AppendLine("## Facility placement");
         sb.AppendLine();
         sb.AppendLine("| Facility | Wanted | Seeds short | Fewest placed | Short in seeds |");
@@ -142,8 +146,9 @@ public static class IslandReport
         sb.AppendLine();
         Flag(sb, ok, "A paddock missing", s => s.PaddocksShort > 0);
         Flag(sb, ok, $"Beach under the decided {F(100 * DecidedBeachShare, "0")}% of the main island's coast", s => s.BeachShare < DecidedBeachShare);
-        Flag(sb, ok, "A river that doesn't reach the sea", s => s.RiversToSea < s.Rivers);
-        Flag(sb, ok, "Enclosed basins that aren't lakes (pit cells)", s => s.PitCells > 0);
+        Flag(sb, ok, "A river that doesn't reach the sea (coastal pits count as reaching it)", s => s.RiversToSea < s.Rivers);
+        Flag(sb, ok, "Enclosed basins that aren't lakes (inland pits)", s => s.InlandPitCells > 0);
+        Flag(sb, ok, "Coast cells below sea level (rivers into them count as reaching the sea)", s => s.CoastalPitCells > 0);
         Flag(sb, ok, "No islets (the design asks for 3–8)", s => s.Islets == 0);
         Flag(sb, ok, "More than 8 islets", s => s.Islets > 8);
         Flag(sb, ok, "Road tunnels (impassable on foot until step 55)", s => s.Tunnels > 0);
@@ -162,6 +167,50 @@ public static class IslandReport
             sb.AppendLine($"| {SlopeBinName(b)} | {F(100 * share, "0.0")}% | {Bar(share)} |");
         }
         return sb.ToString();
+    }
+
+    private static void RoutesSection(StringBuilder sb, List<IslandSeedResult> ok)
+    {
+        var withReach = ok.Where(r => r.Reach is not null).ToList();
+        if (withReach.Count == 0) return;
+        sb.AppendLine("## Walking routes between key sites");
+        sb.AppendLine();
+        sb.AppendLine("Key sites: docks, airstrip, comms relay, control centre and watch posts. Every pair is walked on foot "
+            + "with road tunnels shut (impassable until step 55) and rivers too deep to wade at base flow (32 m³/s and up) shut.");
+        sb.AppendLine();
+        int connected = withReach.Count(r => r.Reach!.FullyConnected);
+        sb.AppendLine($"- **Every pair walkable:** {connected} of {withReach.Count} seeds.");
+        ReachFlag(sb, withReach, "A pair that needs a road tunnel", x => x.TunnelGaps > 0);
+        ReachFlag(sb, withReach, "A pair that crosses deep water", x => x.DeepGaps > 0);
+        ReachFlag(sb, withReach, "A site with no walkable ground, or no route at all", x => x.GroundGaps > 0);
+        var ford = withReach.Select(r => (double)r.Reach!.MustFord).ToList();
+        int pairs = withReach.Max(r => r.Reach!.Routes.Count);
+        sb.AppendLine($"- **Pairs that must ford a river** (every river floods past wading in heavy rain): median {F(Median(ford), "0.#")} "
+            + $"of {pairs} pairs, {F(ford.Min(), "0")}–{F(ford.Max(), "0")} across the seeds.");
+        var slow = withReach.Select(r => r.Reach!.SlowestMinutes).ToList();
+        sb.AppendLine($"- **Slowest walk between two key sites:** {F(slow.Min(), "0")}–{F(slow.Max(), "0")} minutes, median {F(Median(slow), "0")}.");
+        sb.AppendLine();
+
+        var gapped = withReach.Where(r => !r.Reach!.FullyConnected).ToList();
+        if (gapped.Count > 0)
+        {
+            sb.AppendLine("| Seed | Pairs that can't be walked today |");
+            sb.AppendLine("|---:|---|");
+            foreach (IslandSeedResult r in gapped.Take(ListedSeeds))
+            {
+                var gaps = r.Reach!.Routes.Where(x => x.Status != RouteStatus.Ok)
+                    .Select(x => $"{x.From} – {x.To} ({IslandReach.Describe(x.Status)})");
+                sb.AppendLine($"| {r.Seed} | {Cell(string.Join("; ", gaps))} |");
+            }
+            if (gapped.Count > ListedSeeds) sb.AppendLine($"| | and {gapped.Count - ListedSeeds} more seeds (see `seeds.csv`) |");
+            sb.AppendLine();
+        }
+    }
+
+    private static void ReachFlag(StringBuilder sb, List<IslandSeedResult> withReach, string what, Func<IslandReach, bool> test)
+    {
+        var seeds = withReach.Where(r => test(r.Reach!)).Select(r => r.Seed).ToList();
+        sb.AppendLine($"- **{what}:** {seeds.Count} of {withReach.Count} seeds{(seeds.Count > 0 ? " (" + SeedList(seeds) + ")" : "")}.");
     }
 
     private static void Flag(StringBuilder sb, List<IslandSeedResult> ok, string what, Func<IslandStats, bool> test)
@@ -214,17 +263,31 @@ public static class IslandReport
         return string.Join(",", values);
     }
 
-    /// <summary>One row per seed: seed, seconds, the stats (empty when the island failed), then the error, if any.</summary>
+    /// <summary>The CSV keys of the route part of a row (step 24b).</summary>
+    public static string ReachHeader() =>
+        "anchors,anchor_pairs,anchor_gaps,tunnel_gaps,deep_gaps,no_ground_gaps,must_ford_pairs,slowest_anchor_minutes";
+
+    /// <summary>The routes as one CSV row matching <see cref="ReachHeader"/>. The golden-island tests pin these rows.</summary>
+    public static string ReachRow(IslandReach r) => string.Join(",",
+        r.Anchors.Count.ToString(CultureInfo.InvariantCulture), r.Routes.Count.ToString(CultureInfo.InvariantCulture),
+        r.Gaps.ToString(CultureInfo.InvariantCulture), r.TunnelGaps.ToString(CultureInfo.InvariantCulture),
+        r.DeepGaps.ToString(CultureInfo.InvariantCulture), r.GroundGaps.ToString(CultureInfo.InvariantCulture),
+        r.MustFord.ToString(CultureInfo.InvariantCulture), F(r.SlowestMinutes, "0.######"));
+
+    /// <summary>One row per seed: seed, seconds, the stats and the routes (empty when missing), then the error, if any.</summary>
     public static string Csv(IReadOnlyList<IslandSeedResult> results)
     {
         int statsFields = StatsHeader().Split(',').Length;
+        int reachFields = ReachHeader().Split(',').Length;
         var sb = new StringBuilder();
-        sb.Append("seed,seconds,").Append(StatsHeader()).AppendLine(",error");
+        sb.Append("seed,seconds,").Append(StatsHeader()).Append(',').Append(ReachHeader()).AppendLine(",error");
         foreach (IslandSeedResult r in results)
         {
             string stats = r.Stats is null ? new string(',', statsFields - 1) : StatsRow(r.Stats);
+            string reach = r.Reach is null ? new string(',', reachFields - 1) : ReachRow(r.Reach);
             string error = (r.Error ?? "").Replace(",", ";").Replace("\"", "'").Replace("\r", " ").Replace("\n", " ");
-            sb.Append(r.Seed).Append(',').Append(F(r.Seconds, "0.00")).Append(',').Append(stats).Append(',').AppendLine(error);
+            sb.Append(r.Seed).Append(',').Append(F(r.Seconds, "0.00")).Append(',').Append(stats).Append(',')
+                .Append(reach).Append(',').AppendLine(error);
         }
         return sb.ToString();
     }
@@ -249,6 +312,11 @@ public static class IslandReport
         int lowBeach = ok.Count(r => r.Stats!.BeachShare < DecidedBeachShare);
         sb.AppendLine($"Seeds short of a facility: {facShort}; of a paddock: {padShort}; under {F(100 * DecidedBeachShare, "0")}% beach: {lowBeach}; "
             + $"failed to generate: {results.Count - ok.Count}.");
+        var withReach = ok.Where(r => r.Reach is not null).ToList();
+        if (withReach.Count > 0)
+            sb.AppendLine($"Key-site routes: every pair walkable in {withReach.Count(r => r.Reach!.FullyConnected)} of {withReach.Count} seeds; "
+                + $"seeds with a pair needing a tunnel: {withReach.Count(r => r.Reach!.TunnelGaps > 0)}; crossing deep water: "
+                + $"{withReach.Count(r => r.Reach!.DeepGaps > 0)}; with no ground or no route: {withReach.Count(r => r.Reach!.GroundGaps > 0)}.");
         return sb.ToString();
     }
 

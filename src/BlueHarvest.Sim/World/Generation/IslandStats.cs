@@ -42,7 +42,10 @@ public sealed record IslandStats
 
     // ---------- water ----------
     public required int Rivers { get; init; }
-    /// <summary>Rivers whose water reaches the sea through a real mouth (not a dead-end pit).</summary>
+    /// <summary>
+    /// Rivers whose water reaches the sea: through a mouth, or into a coastal pit (a coast cell below sea level,
+    /// where the drainage map records no mouth but the sea is next to it). Step 24b counts the coastal pits.
+    /// </summary>
     public required int RiversToSea { get; init; }
     /// <summary>The largest mean discharge on any river cell, m³/s.</summary>
     public required double LargestRiverQ { get; init; }
@@ -50,10 +53,14 @@ public sealed record IslandStats
     public required int DeepRiverCells { get; init; }
     public required int Lakes { get; init; }
     public required double LakeKm2 { get; init; }
-    /// <summary>Land cells whose water has nowhere to go: enclosed basins that are not lakes. Expected to be 0.</summary>
+    /// <summary>Land cells the drainage map gives no receiver and no mouth (all pits, coastal or not).</summary>
     public required int PitCells { get; init; }
+    /// <summary>Pits on the coast: below sea level, with the sea beside them. Their water does reach the sea.</summary>
+    public required int CoastalPitCells { get; init; }
 
     public double RiversToSeaShare => Rivers == 0 ? 0 : RiversToSea / (double)Rivers;
+    /// <summary>Pits away from the sea: truly enclosed basins that aren't lakes. Expected to be 0.</summary>
+    public int InlandPitCells => PitCells - CoastalPitCells;
 
     // ---------- terrain ----------
     /// <summary>Dry land cells per slope bin (<see cref="SlopeBinEdgesDeg"/>).</summary>
@@ -143,7 +150,7 @@ public sealed record IslandStats
 
         int landCells = 0, dryCells = 0, lowland = 0, walkable = 0, walkConnected = 0;
         int coast = 0, beach = 0, rocky = 0, cliff = 0, mainCoast = 0, mainBeach = 0;
-        int pits = 0, deep = 0;
+        int pits = 0, coastalPits = 0, deep = 0;
         double highest = 0, largestQ = 0;
         var slopes = new int[SlopeBinEdgesDeg.Count + 1];
         DrainageTree tree = s.Tree;
@@ -161,7 +168,11 @@ public sealed record IslandStats
                 else if (cc == CoastClass.Rocky) rocky++;
                 else if (cc == CoastClass.Cliff) cliff++;
             }
-            if (tree.Receiver[i] == DrainageTree.Outlet && tree.Mouth[i] < 0) pits++;
+            if (tree.Receiver[i] == DrainageTree.Outlet && tree.Mouth[i] < 0)
+            {
+                pits++;
+                if (BesideSea(land, nx, ny, i)) coastalPits++;
+            }
             if (s.IsRiver[i] != 0)
             {
                 double q = s.Flow[i];
@@ -183,7 +194,7 @@ public sealed record IslandStats
         }
 
         int toSea = 0;
-        foreach (River r in s.Rivers) if (DrainsToSea(tree, r.Head)) toSea++;
+        foreach (River r in s.Rivers) if (DrainsToSea(tree, land, nx, ny, r.Head)) toSea++;
 
         var facilities = new List<FacilityCount>();
         foreach (FacilityType f in IslandWorks.Facilities)
@@ -210,6 +221,7 @@ public sealed record IslandStats
             Lakes = s.Lakes.Count,
             LakeKm2 = s.Lakes.Sum(l => l.AreaKm2),
             PitCells = pits,
+            CoastalPitCells = coastalPits,
             SlopeCells = slopes,
             HighestM = highest,
             LowlandCells = lowland,
@@ -231,17 +243,29 @@ public sealed record IslandStats
         };
     }
 
-    /// <summary>Follows the drainage tree down from a cell: true if the water leaves through a sea mouth.</summary>
-    private static bool DrainsToSea(DrainageTree tree, int start)
+    /// <summary>Follows the drainage tree down from a cell: true if the water leaves through a mouth or a coastal pit.</summary>
+    private static bool DrainsToSea(DrainageTree tree, byte[] land, int nx, int ny, int start)
     {
         int i = start;
         for (int steps = 0; steps < tree.N; steps++)
         {
             int r = tree.Receiver[i];
-            if (r == DrainageTree.Outlet) return tree.Mouth[i] >= 0;
+            if (r == DrainageTree.Outlet) return tree.Mouth[i] >= 0 || BesideSea(land, nx, ny, i);
             if (r < 0) return false; // a sea cell: not a river head
             i = r;
         }
         return false; // a loop, which the tree should never have
+    }
+
+    /// <summary>Whether a cell has sea (or the edge of the frame) among its eight neighbours.</summary>
+    private static bool BesideSea(byte[] land, int nx, int ny, int i)
+    {
+        int x = i % nx, y = i / nx;
+        for (int k = 0; k < 8; k++)
+        {
+            int xx = x + GenGrid.DX[k], yy = y + GenGrid.DY[k];
+            if (xx < 0 || yy < 0 || xx >= nx || yy >= ny || land[yy * nx + xx] == 0) return true;
+        }
+        return false;
     }
 }

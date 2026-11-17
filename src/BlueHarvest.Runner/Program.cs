@@ -11,7 +11,8 @@ using Gen = BlueHarvest.Sim.World.Generation;
 //    or: BlueHarvest.Runner batch [runs per option] [minutes] [weather] [options] [map file]
 //    or: BlueHarvest.Runner island validate [first seed] [count] [scale]
 // Island mode generates islands from count seeds starting at first seed (defaults 1, 200, 75% scale),
-// measures each one and writes reports/island-<time>/report.md and seeds.csv under the repo.
+// measures each one, walks the routes between its key sites, and writes reports/island-<time>/report.md
+// and seeds.csv under the repo.
 // Batch mode plays the testbed with a scripted player per escape option (with and without NPCs) and
 // writes reports/batch-<time>/report.md and runs.csv under the repo. Use "-" for any default:
 // runs 30, minutes 5, the map's own weather, all options (or a comma list: vehicle,jungle,building,
@@ -232,7 +233,9 @@ static void RunIsland(string[] args)
         try
         {
             var world = Gen.IslandWorld.Generate(new Gen.IslandParams { Seed = islandSeed, Scale = scale });
-            results[i] = new Gen.IslandSeedResult(islandSeed, Gen.IslandStats.Measure(world), one.Elapsed.TotalSeconds);
+            var stats = Gen.IslandStats.Measure(world);
+            var reach = world.Works.Reachability(Gen.IslandReach.AnchorKinds);
+            results[i] = new Gen.IslandSeedResult(islandSeed, stats, one.Elapsed.TotalSeconds, Reach: reach);
         }
         catch (Exception e)
         {

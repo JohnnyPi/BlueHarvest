@@ -5,9 +5,9 @@ using Xunit.Abstractions;
 namespace BlueHarvest.Sim.Tests;
 
 /// <summary>
-/// Step 24a: island measures and the validation report. Everything here is asserted except
-/// <see cref="GoldenValues_Print"/>, which prints the golden islands' measures for the establishing run;
-/// step 24b pins them.
+/// Steps 24a and 24b: island measures and the validation report. Everything here is asserted except
+/// <see cref="GoldenValues_Print"/>, which prints the golden islands' current rows: the establishing run for
+/// columns added after the pins below.
 /// </summary>
 public class IslandStatsTests
 {
@@ -22,6 +22,49 @@ public class IslandStatsTests
         TestIslands.Cases.ToDictionary(kv => kv.Key, kv => new Lazy<IslandStats>(() => IslandStats.Measure(TestIslands.World(kv.Key))));
 
     private static IslandStats Stats(string name) => Measured[name].Value;
+
+    // the step 24a establishing run (16 Nov 2026), pinned in step 24b; compared column by column, so columns
+    // added later don't disturb it
+    private const string PinnedColumns =
+        "land_pct,land_km2,main_km2,islets,largest_islet_km2,rivers,rivers_to_sea_pct,largest_river_q,deep_river_cells,lakes,lake_km2,pit_cells,highest_m,lowland_pct,steep_pct,walkable_pct,walkable_connected_pct,beach_pct,beach_all_pct,facilities_short,paddocks_placed,road_km,bridges,tunnels,slope_bin0_cells,slope_bin1_cells,slope_bin2_cells,slope_bin3_cells,slope_bin4_cells,slope_bin5_cells,placed_docks,placed_airstrip,placed_comms,placed_control,placed_genetics,placed_raptors,placed_nuclear,placed_geothermal,placed_weather,placed_orgone,placed_lab,placed_depot,placed_ley,placed_watch";
+
+    private static readonly Dictionary<string, string> Pinned = new()
+    {
+        ["Default"] = "31.612117,947.56864,942.702592,4,2.736128,101,100,4.294307,0,1,0.131072,0,1154.896455,42.660003,3.505283,97.729434,97.252149,26.184926,25.62995,0,4,151.00703,7,2,24948,16698,12491,1663,707,1320,2,1,1,1,1,1,1,1,1,1,2,2,3,3",
+        ["Seed12"] = "28.518409,854.8352,852.819968,2,1.622016,102,100,2.017199,0,1,0.57344,0,1191.598906,37.491369,3.716916,97.520138,97.309168,24.569241,25.077208,0,4,151.572986,2,3,17099,20318,11461,1324,683,1255,2,1,1,1,1,1,1,1,1,1,2,2,3,3",
+        ["SmallNoCliffs"] = "30.999115,412.975104,409.321472,3,1.916928,44,100,1.882016,0,2,0.57344,1,1153.002823,36.800286,1.557348,99.551071,98.716777,17.216643,15.714286,0,4,84.524385,3,0,5672,6695,10028,2384,341,51,2,1,1,1,1,1,1,1,1,1,2,2,3,3",
+        ["CoolWet"] = "33.125272,636.469248,630.767616,9,1.343488,105,100,2.955048,0,1,0.589824,0,1178.215784,39.792842,4.243642,97.217284,96.498415,22.502031,21.901408,0,4,130.647884,6,3,12430,12668,10511,1555,602,1045,2,1,1,1,1,1,1,1,1,1,2,2,3,3",
+    };
+
+    [Theory]
+    [MemberData(nameof(CaseNames))]
+    public void Measures_MatchTheEstablishingRun(string name)
+    {
+        string[] keys = PinnedColumns.Split(',');
+        string[] want = Pinned[name].Split(',');
+        Assert.Equal(keys.Length, want.Length);
+        var got = IslandReport.StatsHeader().Split(',')
+            .Zip(IslandReport.StatsRow(Stats(name)).Split(','))
+            .ToDictionary(p => p.First, p => p.Second);
+        var wrong = new List<string>();
+        for (int k = 0; k < keys.Length; k++)
+        {
+            if (!got.TryGetValue(keys[k], out string? value)) wrong.Add($"{keys[k]}: missing");
+            else if (value != want[k]) wrong.Add($"{keys[k]}: pinned {want[k]}, now {value}");
+        }
+        Assert.True(wrong.Count == 0, $"{name}: " + string.Join("; ", wrong));
+    }
+
+    [Theory]
+    [MemberData(nameof(CaseNames))]
+    public void Pits_AreAllOnTheCoast(string name)
+    {
+        // a pit needs a cell with no lower neighbour, which flooding leaves only on the coast below sea level
+        IslandStats s = Stats(name);
+        Assert.Equal(s.PitCells, s.CoastalPitCells);
+        Assert.Equal(0, s.InlandPitCells);
+        Assert.Equal(s.Rivers, s.RiversToSea);
+    }
 
     [Theory]
     [MemberData(nameof(CaseNames))]
@@ -126,13 +169,13 @@ public class IslandStatsTests
     }
 
     /// <summary>
-    /// Print mode (decision 7): prints each golden island's measures as a row ready to paste.
-    /// Always passes. Step 24b turns these rows into assertions.
+    /// Print mode (decision 7): prints each golden island's current measures as a row ready to paste.
+    /// Always passes. The pinned columns are asserted above; columns added since are pinned from this output.
     /// </summary>
     [Fact]
     public void GoldenValues_Print()
     {
-        _output.WriteLine("// Step 24a establishing run: IslandStats rows for the golden islands.");
+        _output.WriteLine("// IslandStats rows for the golden islands (all current columns).");
         _output.WriteLine("// Columns: " + IslandReport.StatsHeader());
         foreach (string name in TestIslands.Cases.Keys)
             _output.WriteLine($"[\"{name}\"] = \"{IslandReport.StatsRow(Stats(name))}\",");

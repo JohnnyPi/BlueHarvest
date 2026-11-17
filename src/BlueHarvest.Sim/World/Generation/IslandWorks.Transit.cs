@@ -147,36 +147,48 @@ public sealed partial class IslandWorks
     /// <summary>Minutes between every pair of sites; extra maps a coarse cell to its transit links (cell, seconds).</summary>
     private double[][] Travel(Dictionary<int, List<(int To, double Seconds)>>? extra)
     {
-        int ns = Sites.Count, cnx = _cnx, cny = _cny, cn = _cn;
+        var all = new int[Sites.Count];
+        for (int a = 0; a < all.Length; a++) all[a] = a;
+        return TravelCore(all, extra, null, _wd, _wdone, _wh);
+    }
+
+    /// <summary>
+    /// Minutes between the listed sites (walk[i][j] from sites[i] to sites[j]). Cells marked in blocked can't be
+    /// entered or started from. With every site listed and nothing blocked this is exactly the original timing.
+    /// wd, wdone and wh are scratch (sized to the walking grid; the heap to 8 entries per cell).
+    /// </summary>
+    private double[][] TravelCore(int[] sites, Dictionary<int, List<(int To, double Seconds)>>? extra, byte[]? blocked,
+        double[] wd, byte[] wdone, GenHeap wh)
+    {
+        int ns = sites.Length, cnx = _cnx, cny = _cny, cn = _cn;
         double cs = _cs;
         var walk = new double[ns][];
         for (int a = 0; a < ns; a++) { walk[a] = new double[ns]; Array.Fill(walk[a], double.PositiveInfinity); }
-        double[] wd = _wd;
-        GenHeap wh = _wh;
         for (int a = 0; a < ns; a++)
         {
             Array.Fill(wd, double.PositiveInfinity);
-            Array.Clear(_wdone);
+            Array.Clear(wdone);
             wh.Clear();
-            int s0 = _targets[a];
-            if (_pass[s0] == 0) continue;
+            int s0 = _targets[sites[a]];
+            if (_pass[s0] == 0 || (blocked != null && blocked[s0] != 0)) continue;
             wd[s0] = 0;
             wh.Push(0, s0);
             int left = ns;
             while (wh.Count > 0 && left > 0)
             {
                 int c = wh.Pop();
-                if (_wdone[c] != 0) continue;
-                _wdone[c] = 1;
+                if (wdone[c] != 0) continue;
+                wdone[c] = 1;
                 for (int b = 0; b < ns; b++)
-                    if (_targets[b] == c && double.IsPositiveInfinity(walk[a][b])) { walk[a][b] = wd[c] / 60; left--; }
+                    if (_targets[sites[b]] == c && double.IsPositiveInfinity(walk[a][b])) { walk[a][b] = wd[c] / 60; left--; }
                 int x = c % cnx, y = c / cnx;
                 for (int k = 0; k < 8; k++)
                 {
                     int xx = x + GenGrid.DX[k], yy = y + GenGrid.DY[k];
                     if (xx < 0 || yy < 0 || xx >= cnx || yy >= cny) continue;
                     int j = yy * cnx + xx;
-                    if (_pass[j] == 0 || _wdone[j] != 0) continue;
+                    if (_pass[j] == 0 || wdone[j] != 0) continue;
+                    if (blocked != null && blocked[j] != 0) continue;
                     double d = GenGrid.DL[k] * cs, sl = (_ch[j] - _ch[c]) / d;
                     bool roads = _onRoad[c] != 0 && _onRoad[j] != 0;
                     if (Math.Abs(sl) > 0.8 && !roads) continue;
@@ -195,6 +207,97 @@ public sealed partial class IslandWorks
             }
         }
         return walk;
+    }
+
+    /// <summary>
+    /// Walking routes between every pair of the sites of these kinds (step 24b), on foot without transit.
+    /// Each route is also timed with road tunnels shut (impassable until step 55) and with rivers too deep to
+    /// wade at base flow shut, which says why a gap is there; and once more with every river shut (all of them
+    /// flood in heavy rain), which says whether a dry route exists. A site's own cell is never shut.
+    /// alsoBlocked marks more walking-grid cells as impassable in every timing (for tests).
+    /// Thread-safe: uses its own scratch, never the generator's.
+    /// </summary>
+    public IslandReach Reachability(IReadOnlyCollection<string> kinds, Func<int, bool>? alsoBlocked = null)
+    {
+        var picked = new List<int>();
+        for (int a = 0; a < Sites.Count; a++) if (kinds.Contains(Sites[a].Kind)) picked.Add(a);
+        int[] sites = picked.ToArray();
+        int cn = _cn;
+
+        // what shuts each walking-grid cell: the same per-cell reading as TimeWalks
+        int nx = _nx, ny = _ny;
+        double[] q = _w.Flow;
+        int f = Math.Max(1, (int)GenMath.Round(256 / _cell));
+        var tunnel = new byte[cn];
+        var deep = new byte[cn];
+        var river = new byte[cn];
+        for (int c = 0; c < cn; c++)
+        {
+            if (_pass[c] == 0) continue;
+            int cx = c % _cnx, cy = c / _cnx, lc = 0, cliffy = 0, tot = 0;
+            double rq = 0;
+            bool surfaceRoad = false;
+            for (int y = cy * f; y < Math.Min(ny, cy * f + f); y++)
+            {
+                for (int x = cx * f; x < Math.Min(nx, cx * f + f); x++)
+                {
+                    int i = y * nx + x;
+                    tot++;
+                    if (RoadCell[i] != 0 && TunnelCell[i] == 0) surfaceRoad = true;
+                    if (!Dry(i)) continue;
+                    lc++;
+                    if (_w.IsRiver[i] != 0 && q[i] > 1) rq = Math.Max(rq, q[i]);
+                    if (_c.SlopeDeg[i] > 38) cliffy++;
+                }
+            }
+            // passable only because a tunnel runs through it
+            if (!surfaceRoad && (lc * 2 < tot || cliffy * 2 > lc)) tunnel[c] = 1;
+            if (!surfaceRoad && rq > 0)
+            {
+                river[c] = 1;
+                if (IslandStats.DeepAtBaseFlow(rq)) deep[c] = 1;
+            }
+        }
+
+        byte[] Shut(params byte[][] masks)
+        {
+            var m = new byte[cn];
+            for (int c = 0; c < cn; c++)
+            {
+                foreach (byte[] k in masks) if (k[c] != 0) m[c] = 1;
+                if (alsoBlocked != null && alsoBlocked(c)) m[c] = 1;
+            }
+            foreach (int s in sites) if (alsoBlocked == null || !alsoBlocked(_targets[s])) m[_targets[s]] = 0;
+            return m;
+        }
+
+        var wd = new double[cn];
+        var wdone = new byte[cn];
+        var wh = new GenHeap(cn * 8);
+        double[][] any = TravelCore(sites, null, alsoBlocked == null ? null : Shut(), wd, wdone, wh);
+        double[][] noTunnel = TravelCore(sites, null, Shut(tunnel), wd, wdone, wh);
+        double[][] noDeep = TravelCore(sites, null, Shut(deep), wd, wdone, wh);
+        double[][] neither = TravelCore(sites, null, Shut(tunnel, deep), wd, wdone, wh);
+        double[][] dry = TravelCore(sites, null, Shut(tunnel, river), wd, wdone, wh);
+
+        var routes = new List<AnchorRoute>();
+        for (int a = 0; a < sites.Length; a++)
+        {
+            for (int b = a + 1; b < sites.Length; b++)
+            {
+                RouteStatus status;
+                if (double.IsPositiveInfinity(any[a][b]))
+                    status = _pass[_targets[sites[a]]] == 0 || _pass[_targets[sites[b]]] == 0 ? RouteStatus.NoGround : RouteStatus.NoRoute;
+                else if (!double.IsPositiveInfinity(neither[a][b])) status = RouteStatus.Ok;
+                else if (!double.IsPositiveInfinity(noTunnel[a][b])) status = RouteStatus.NeedsDeepWater;
+                else if (!double.IsPositiveInfinity(noDeep[a][b])) status = RouteStatus.NeedsTunnel;
+                else status = RouteStatus.NeedsBoth;
+                bool ok = status == RouteStatus.Ok;
+                routes.Add(new AnchorRoute(sites[a], sites[b], Sites[sites[a]].Name, Sites[sites[b]].Name, status,
+                    ok ? neither[a][b] : double.PositiveInfinity, any[a][b], ok && double.IsPositiveInfinity(dry[a][b])));
+            }
+        }
+        return new IslandReach(sites, sites.Select(s => Sites[s].Name).ToList(), routes);
     }
 
     // ---------- transit: a skyway over the pali, a summit lift, a street tram, an underground monorail ----------

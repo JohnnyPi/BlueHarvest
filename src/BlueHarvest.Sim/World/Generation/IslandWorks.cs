@@ -156,6 +156,8 @@ public sealed partial class IslandWorks
     public List<Road> Roads { get; } = [];
     /// <summary>Road on each cell: 0 none, 1 track, 2 main road.</summary>
     public byte[] RoadCell { get; }
+    /// <summary>1 on each road cell whose road runs through a tunnel (portals excluded), 0 elsewhere.</summary>
+    public byte[] TunnelCell { get; }
     public double RoadKm { get; private set; }
     public double MainKm { get; private set; }
     public int Bridges { get; private set; }
@@ -173,6 +175,7 @@ public sealed partial class IslandWorks
         Array.Fill(PaddockCell, (short)-1);
         NearRiver = new byte[_n];
         RoadCell = new byte[_n];
+        TunnelCell = new byte[_n];
         _heap = new GenHeap(_n * 3);
         _g = new double[_n];
         _seen = new int[_n];
@@ -750,6 +753,7 @@ public sealed partial class IslandWorks
                     }
                     k = e;
                 }
+                for (int k = 0; k < len; k++) if ((pf[k] & 2) != 0) TunnelCell[run[k]] = 1;
                 var pts = new List<PolyPoint>(len);
                 for (int k = 0; k < len; k++) pts.Add(new PolyPoint(px[k], py[k], ph[k], 0));
                 List<PolyPoint> sm = GenGrid.Chaikin(pts, 2);
