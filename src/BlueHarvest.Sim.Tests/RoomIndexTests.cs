@@ -25,14 +25,14 @@ public class RoomIndexTests
     // node tools/island-lab/golden-rooms.js
     private static readonly Dictionary<string, Expected> Golden = new()
     {
-        ["Default"] = new(203, 27, 8, 13, 0xD19E3CC56900645AUL,
-            "Underground monorail station=8;Pali skyway station=4;Stegosaurus paddock=2;Triceratops paddock=2;Tyrannosaur paddock=2;Apatosaurus paddock=2;Cordon watch post, north-east=3;Cordon watch post, north=3;Cordon watch post, east=3;Ley-line survey station, north=3;Ley-line survey station, south=3;Ley-line survey station, south-east=3;Supply depot, north-west=5;Supply depot, north-east=5;Research lab, south-east=12;Research lab, north-west=12;Orgone research station=6;Weather control array=6;Geothermal plant=4;Nuclear plant=12;Velociraptor pen=10;Genetics complex=44;Control centre=19;Comms relay=4;Airstrip=8;Docks, south-east=9;Docks, south-west=9"),
-        ["Seed12"] = new(203, 27, 8, 13, 0x9712A794BD3F8BF0UL,
-            "Underground monorail station=8;Pali skyway station=4;Stegosaurus paddock=2;Triceratops paddock=2;Tyrannosaur paddock=2;Apatosaurus paddock=2;Cordon watch post, south-east=3;Cordon watch post, north-east=3;Cordon watch post, north-west=3;Ley-line survey station, west=3;Ley-line survey station, south=3;Ley-line survey station, east=3;Supply depot, south=5;Supply depot, east=5;Research lab, south=12;Research lab, south-east=12;Orgone research station=6;Weather control array=6;Geothermal plant=4;Nuclear plant=12;Velociraptor pen=10;Genetics complex=44;Control centre=19;Comms relay=4;Airstrip=8;Docks, west=9;Docks, south-east=9"),
-        ["SmallNoCliffs"] = new(207, 27, 8, 13, 0x2615EB2541B14876UL,
-            "Underground monorail station=8;Summit lift station=4;Pali skyway station=4;Stegosaurus paddock=2;Triceratops paddock=2;Tyrannosaur paddock=2;Apatosaurus paddock=2;Cordon watch post, east 2=3;Cordon watch post, east=3;Cordon watch post, south=3;Ley-line survey station, west=3;Ley-line survey station, north-west=3;Ley-line survey station, south-west=3;Supply depot, south-east=5;Supply depot, west=5;Research lab, south-east=12;Research lab, north-west=12;Orgone research station=6;Weather control array=6;Geothermal plant=4;Nuclear plant=12;Velociraptor pen=10;Genetics complex=44;Control centre=19;Comms relay=4;Airstrip=8;Docks, east=9;Docks, south-west=9"),
-        ["CoolWet"] = new(203, 27, 8, 13, 0x4DEA960CF108C3CBUL,
-            "Underground monorail station=8;Pali skyway station=4;Stegosaurus paddock=2;Triceratops paddock=2;Tyrannosaur paddock=2;Apatosaurus paddock=2;Cordon watch post, east 2=3;Cordon watch post, east=3;Cordon watch post, south=3;Ley-line survey station, west=3;Ley-line survey station, north=3;Ley-line survey station, east=3;Supply depot, north-west 2=5;Supply depot, north-west=5;Research lab, north-west 2=12;Research lab, north-west=12;Orgone research station=6;Weather control array=6;Geothermal plant=4;Nuclear plant=12;Velociraptor pen=10;Genetics complex=44;Control centre=19;Comms relay=4;Airstrip=8;Docks, north-west=9;Docks, south-east=9"),
+        ["Default"] = new(203, 27, 8, 13, 0xD83BEC9715A99706UL,
+            "Monorail station at Research lab, south-east=2;Monorail station at Orgone research station=2;Monorail station at Control centre=2;Monorail station at Genetics complex=2;Skyway station, north-east=2;Pali skyway station at Control centre=2;Stegosaurus paddock=2;Triceratops paddock=2;Tyrannosaur paddock=2;Apatosaurus paddock=2;Cordon watch post, north-east=3;Cordon watch post, north=3;Cordon watch post, east=3;Ley-line survey station, north=3;Ley-line survey station, south=3;Ley-line survey station, south-east=3;Supply depot, north-west=5;Supply depot, north-east=5;Research lab, south-east=12;Research lab, north-west=12;Orgone research station=6;Weather control array=6;Geothermal plant=4;Nuclear plant=12;Velociraptor pen=10;Genetics complex=44;Control centre=19;Comms relay=4;Airstrip=8;Docks, south-east=9;Docks, south-west=9"),
+        ["Seed12"] = new(203, 27, 8, 13, 0x1A4581F018443B10UL,
+            "Monorail station at Research lab, south=2;Monorail station at Orgone research station=2;Monorail station at Control centre=2;Monorail station at Genetics complex=2;Skyway station, north-west=2;Pali skyway station at Velociraptor pen=2;Stegosaurus paddock=2;Triceratops paddock=2;Tyrannosaur paddock=2;Apatosaurus paddock=2;Cordon watch post, south-east=3;Cordon watch post, north-east=3;Cordon watch post, north-west=3;Ley-line survey station, west=3;Ley-line survey station, south=3;Ley-line survey station, east=3;Supply depot, south=5;Supply depot, east=5;Research lab, south=12;Research lab, south-east=12;Orgone research station=6;Weather control array=6;Geothermal plant=4;Nuclear plant=12;Velociraptor pen=10;Genetics complex=44;Control centre=19;Comms relay=4;Airstrip=8;Docks, west=9;Docks, south-east=9"),
+        ["SmallNoCliffs"] = new(207, 27, 8, 13, 0x1083CA55B4EBF1F6UL,
+            "Monorail station at Research lab, north-west=2;Monorail station at Orgone research station=2;Monorail station at Control centre=2;Monorail station at Genetics complex=2;Summit lift station at Comms relay=2;Summit lift station at Control centre=2;Skyway station, west=2;Pali skyway station at Supply depot, west=2;Stegosaurus paddock=2;Triceratops paddock=2;Tyrannosaur paddock=2;Apatosaurus paddock=2;Cordon watch post, east 2=3;Cordon watch post, east=3;Cordon watch post, south=3;Ley-line survey station, west=3;Ley-line survey station, north-west=3;Ley-line survey station, south-west=3;Supply depot, south-east=5;Supply depot, west=5;Research lab, south-east=12;Research lab, north-west=12;Orgone research station=6;Weather control array=6;Geothermal plant=4;Nuclear plant=12;Velociraptor pen=10;Genetics complex=44;Control centre=19;Comms relay=4;Airstrip=8;Docks, east=9;Docks, south-west=9"),
+        ["CoolWet"] = new(203, 27, 8, 13, 0xB233E09D2C5D225FUL,
+            "Monorail station at Orgone research station=2;Monorail station at Control centre=2;Monorail station at Research lab, north-west=2;Monorail station at Genetics complex=2;Skyway station, north=2;Pali skyway station at Velociraptor pen=2;Stegosaurus paddock=2;Triceratops paddock=2;Tyrannosaur paddock=2;Apatosaurus paddock=2;Cordon watch post, east 2=3;Cordon watch post, east=3;Cordon watch post, south=3;Ley-line survey station, west=3;Ley-line survey station, north=3;Ley-line survey station, east=3;Supply depot, north-west 2=5;Supply depot, north-west=5;Research lab, north-west 2=12;Research lab, north-west=12;Orgone research station=6;Weather control array=6;Geothermal plant=4;Nuclear plant=12;Velociraptor pen=10;Genetics complex=44;Control centre=19;Comms relay=4;Airstrip=8;Docks, north-west=9;Docks, south-east=9"),
     };
 
     public static IEnumerable<object[]> CaseNames => Golden.Keys.Select(k => new object[] { k });
@@ -174,16 +174,16 @@ public class RoomIndexTests
         Assert.Equal(2, hall.KeycardLevel);
         IndexedRoom vault = index.Rooms.First(r => r.Kind == "genetics" && r.Name == "Cryo vault");
         Assert.Equal(3, vault.KeycardLevel);
-        IndexedRoom lift = index.Rooms.First(r => r.Kind == "transit" && r.Name == "Elevator");
-        Assert.Equal("Underground monorail station · Elevator", RoomIndex.Describe(lift));
-        Assert.StartsWith("Station at ", lift.Building);
+        IndexedRoom lift = index.Rooms.First(r => r.Kind == "transit" && r.Name == "Elevator" && r.Building == "Station at Genetics complex");
+        Assert.Equal("Monorail station at Genetics complex · Elevator", RoomIndex.Describe(lift));
         Assert.True(lift.Motorised);
         Assert.Equal(-1, lift.SiteIndex);
+        Assert.Contains(index.Rooms, r => r.Place == "Summit lift station at Control centre" && r.Name == "Cabin hall");
+        Assert.Contains(index.Rooms, r => r.Place.StartsWith("Skyway station, ", StringComparison.Ordinal)); // the skyway's far end, at no facility
+        Assert.DoesNotContain(index.Rooms, r => r.Place.Contains("Underground", StringComparison.Ordinal));
         IndexedRoom gallery = index.Rooms.First(r => r.Kind == "paddock");
         Assert.Equal("Viewing station", gallery.Building);
         Assert.Equal(0, gallery.KeycardLevel);
-        Assert.True(index.Rooms.First(r => r.Name == "Airlock").IsPassage);
-        Assert.False(hall.IsPassage);
     }
 
     // ---------- in the simulation ----------
@@ -268,7 +268,7 @@ public class RoomIndexTests
     private static Direction Back(Direction d) => (Direction)(((int)d + 4) % 8);
 
     [Fact]
-    public void WalkingIntoARoom_RaisesTheEventOnce_AndLeavingIt_Once()
+    public void WalkingIntoARoom_EntersItOnce_AndWalkingOut_LeavesItOnce()
     {
         var (sim, world, index, site) = AtGenetics();
         var (room, outside, way) = DoorIn(sim, world, index, site);
@@ -282,16 +282,16 @@ public class RoomIndexTests
             new MoveAction(Back(way)), // out again
         };
         Actor walker = sim.AddActor("Walker", 'w', outside, Species.Human, new ScriptedController(script));
-        var seen = new List<(Actor Who, IndexedRoom? Room)>();
-        sim.ActorEnteredRoom += (a, r) => seen.Add((a, r));
+        var seen = new List<(string What, Actor Who, IndexedRoom Room)>();
+        sim.ActorEnteredRoom += (a, r) => seen.Add(("entered", a, r));
+        sim.ActorLeftRoom += (a, r) => seen.Add(("left", a, r));
 
         sim.RunUntil(sim.CurrentTick + 20 * Ticks.PerSecond);
 
         Assert.Equal(outside, walker.Position);
-        Assert.Equal(2, seen.Count);
-        Assert.Same(walker, seen[0].Who);
-        Assert.Same(room, seen[0].Room);
-        Assert.Null(seen[1].Room);
+        Assert.Equal(new[] { "entered", "left" }, seen.Select(e => e.What).ToArray());
+        Assert.All(seen, e => Assert.Same(walker, e.Who));
+        Assert.All(seen, e => Assert.Same(room, e.Room));
     }
 
     [Fact]

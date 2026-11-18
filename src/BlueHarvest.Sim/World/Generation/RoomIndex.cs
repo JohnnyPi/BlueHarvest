@@ -2,12 +2,13 @@ namespace BlueHarvest.Sim.World.Generation;
 
 /// <summary>
 /// One named room of a generated building, in island metres (inclusive, walls included, so rooms
-/// side by side share a wall line, and a door between them lies in both).
+/// side by side share a wall line, and a door between them lies in both). A building's corridor, the
+/// space between its two rows of rooms, is no room: it has no name and isn't indexed.
 /// </summary>
 /// <param name="Id">Its place in the index: buildings in drawing order, rooms in each building's order. Stable per island seed.</param>
 /// <param name="Name">The room's own name, as the programme gives it ("Server hall").</param>
 /// <param name="Building">The building it's in ("Server farm"; "Station at Genetics complex" for a transit station).</param>
-/// <param name="Place">The facility's name, the paddock's for a viewing station, or "&lt;line&gt; station" for transit.</param>
+/// <param name="Place">The facility's name; the paddock's for a viewing station; for transit, the station's ("Monorail station at Genetics complex").</param>
 /// <param name="SiteIndex">Index into <see cref="IslandWorks.Sites"/>, or −1 for paddocks and transit.</param>
 /// <param name="Kind">The facility's kind ("genetics"), or "paddock" or "transit".</param>
 /// <param name="KeycardLevel">0 for an ordinary room, 2 or 3 for one behind a security door (<see cref="RoomRules.KeycardLevel"/>).</param>
@@ -17,9 +18,6 @@ public sealed record IndexedRoom(int Id, string Name, string Building, string Pl
     int X0, int Y0, int X1, int Y1, int KeycardLevel, bool Motorised, int Label)
 {
     public bool Contains(long x, long y) => x >= X0 && x <= X1 && y >= Y0 && y <= Y1;
-
-    /// <summary>Only a way through, which the log needn't name (<see cref="RoomRules.PassageRooms"/>).</summary>
-    public bool IsPassage => RoomRules.IsPassage(Name);
 }
 
 /// <summary>
@@ -96,7 +94,7 @@ public sealed class RoomIndex
             }
             else
             {
-                place = owner + " station";
+                place = StationName(owner, building, siteByName);
                 kind = "transit";
             }
             foreach (Room r in p.Rooms)
@@ -150,6 +148,21 @@ public sealed class RoomIndex
 
     /// <summary>How the front end names a room: the place and the room, "Genetics complex · Server hall", with no building in between.</summary>
     public static string Describe(IndexedRoom room) => room.Place + " · " + room.Name;
+
+    /// <summary>
+    /// A transit station's name from its line and building ("Station at Genetics complex"): "Monorail
+    /// station at Genetics complex", "Summit lift station at Control centre", or the stop's own name
+    /// where it isn't at a facility ("Skyway station, north-east").
+    /// </summary>
+    private static string StationName(string line, string building, Dictionary<string, int> siteByName)
+    {
+        const string at = "Station at ";
+        string stop = building.StartsWith(at, StringComparison.Ordinal) ? building[at.Length..] : building;
+        string lineName = line == "Underground monorail" ? "Monorail" : line;
+        if (siteByName.ContainsKey(stop))
+            return lineName + " station at " + stop;
+        return stop.Length == 0 ? lineName + " station" : char.ToUpperInvariant(stop[0]) + stop[1..];
+    }
 
     private static int Bucket(int m) => m >= 0 ? m / BucketM : -((-m + BucketM - 1) / BucketM);
 }

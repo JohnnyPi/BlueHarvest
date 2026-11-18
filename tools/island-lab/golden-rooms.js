@@ -41,7 +41,12 @@ for (const [name, params] of CASES) {
     let place, kind, si = -1;
     if (siteIndex.has(owner)) { si = siteIndex.get(owner); place = owner; kind = s.sites[si].kind; }
     else if (paddocks.has(owner)) { place = owner; kind = 'paddock'; }
-    else { place = owner + ' station'; kind = 'transit'; }
+    else {
+      const stop = building.startsWith('Station at ') ? building.slice('Station at '.length) : building;
+      const line = owner === 'Underground monorail' ? 'Monorail' : owner;
+      place = siteIndex.has(stop) ? line + ' station at ' + stop : stop.length === 0 ? line + ' station' : stop[0].toUpperCase() + stop.slice(1);
+      kind = 'transit';
+    }
     for (const r of q.rooms) {
       const rp = w.labels[r.label].split(' · '), rn = rp[rp.length - 1];
       rows.push({ id: rows.length, name: rn, building, place, si, kind, x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1, level: level(rn), motor: MOTOR.has(rn), label: r.label });

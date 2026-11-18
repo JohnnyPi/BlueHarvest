@@ -5,7 +5,7 @@ namespace BlueHarvest.Sim.World.Generation;
 /// <summary>
 /// What a room's name says about it, in one table that the power plan, the room index and later the
 /// quests all read: which rooms sit behind security doors and at what keycard level, which have
-/// motorised doors, and which are only ways through. Names match the facility programmes
+/// motorised doors. Names match the facility programmes
 /// (<see cref="FacilityPrograms"/>) and the station rooms of the transit lines.
 /// </summary>
 public static class RoomRules
@@ -29,16 +29,8 @@ public static class RoomRules
     public static readonly FrozenSet<string> MotorRooms =
         new[] { "Elevator", "Airlock", "Vehicle bays", "Hangar floor", "Boat bays", "Cargo hall" }.ToFrozenSet(StringComparer.Ordinal);
 
-    /// <summary>
-    /// Rooms that are only ways through, which the log doesn't name as you pass. Corridors aren't rooms
-    /// at all (a building's corridor is the space between its two rows of rooms), so this is short.
-    /// </summary>
-    public static readonly FrozenSet<string> PassageRooms = new[] { "Airlock" }.ToFrozenSet(StringComparer.Ordinal);
-
     /// <summary>The keycard a room's security door wants: 3 or 2 for a secure room, 0 for any other.</summary>
     public static int KeycardLevel(string room) => Level3Rooms.Contains(room) ? 3 : SecureRooms.Contains(room) ? 2 : 0;
 
     public static bool IsMotorised(string room) => MotorRooms.Contains(room);
-
-    public static bool IsPassage(string room) => PassageRooms.Contains(room);
 }
