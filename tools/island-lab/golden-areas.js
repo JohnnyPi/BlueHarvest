@@ -1,5 +1,5 @@
 'use strict';
-// Golden values for step 25b-2 (FacilityAreas): each golden island's facility areas and park-map
+// Golden values for step 25b-2 (FacilityAreas): each golden island's facility areas and their ten park-map
 // sheets, from gen.js's facilityAreas. Prints the C# table used by FacilityAreasTests.
 const G = require('./gen.js');
 const PRIME = 1099511628211n, MASK = (1n << 64n) - 1n;

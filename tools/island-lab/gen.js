@@ -2460,8 +2460,9 @@ var IslandGen = (function () {
   // ---------- facility areas (step 25b-2): BlueHarvest.Sim.World.Generation.FacilityAreas ----------
   // Every land cell goes to the facility quickest to walk to, minor facilities' times counting double;
   // cells nobody can walk to go to the nearest facility in a straight line. Each area is cut like a pie
-  // round its facility into five sheets of equal cell count.
-  const AREA_SHEETS = 5;
+  // round its facility into ten sheets of equal cell count.
+  const AREA_SHEETS = 10;
+  const AREA_MAJOR = new Set(['raptors']); // minor in the generator, but its area counts like a major facility's
   function facilityAreas(w) {
     const W = w.works, G = W.walkGrid, sites = W.sites, nx = w.nx, ny = w.ny, cell = w.cell;
     const cn = G.cnx * G.cny, cs = G.cs;
@@ -2484,7 +2485,7 @@ var IslandGen = (function () {
       return { sec, from };
     }
     const majors = [], minors = [];
-    sites.forEach((t, a) => (t.major ? majors : minors).push(a));
+    sites.forEach((t, a) => (t.major || AREA_MAJOR.has(t.kind) ? majors : minors).push(a));
     const M = spread(majors), m = spread(minors);
     const area = new Int32Array(nx * ny).fill(-1);
     for (let i = 0; i < nx * ny; i++) {

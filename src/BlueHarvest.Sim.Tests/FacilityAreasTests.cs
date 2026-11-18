@@ -24,10 +24,10 @@ public class FacilityAreasTests
     // node tools/island-lab/golden-areas.js
     private static readonly Dictionary<string, Expected> Golden = new()
     {
-        ["Default"] = new(57835, 0xB9019825A2D9ADE9UL, 0x1A10F430FB5FFF77UL, "6910,3029,4308,586,4196,2720,44,4274,3292,1042,1184,5056,4024,5240,7503,436,916,1476,1018,275,306", "4,4,4,1,2,2,3,3,4,1,3,2,2,0,1,2,1,3,3,0,3", "41302 43120 41320 12043 23401 21403 34102 30412 41320 12304 30421 23401 23014 03142 14230 24103 10432 34210 31204 03412 32041"),
-        ["Seed12"] = new(52175, 0x23D582179D5161DFUL, 0x637C423C9ECA7F75UL, "1410,5781,7123,1623,3028,6283,205,935,3017,1121,3929,1340,3764,4505,2218,1797,917,1169,435,1186,389", "4,3,4,1,1,0,0,1,4,3,1,1,4,3,4,1,2,2,0,0,0", "41203 31042 43120 13204 13042 03421 03214 10432 43201 34201 14023 12340 41203 31402 42310 14032 23401 20341 01324 03142 01243"),
-        ["SmallNoCliffs"] = new(25206, 0x35B44B9A05242177UL, 0x095F8FCE20E1917FUL, "2457,1526,1348,379,3796,1073,12,2255,1946,929,1102,1284,1092,1724,1276,404,829,904,388,258,224", "4,4,1,3,4,0,4,4,3,3,2,2,2,0,4,2,2,0,4,2,1", "42310 40132 14320 32410 40132 03412 40321 43102 32410 30421 21403 23104 24130 03214 43021 20413 21403 04231 41032 23104 13024"),
-        ["CoolWet"] = new(38847, 0x3FEDAE92C2CFC21DUL, 0x26C2B3499395A515UL, "3347,654,4191,427,4724,3776,162,3083,2470,855,2752,499,1113,1473,1203,952,480,3295,1248,500,1643", "4,4,4,3,2,1,0,1,4,1,1,2,1,3,4,1,0,1,4,1,0", "40132 41203 41302 30412 21043 10423 01234 12340 42301 12034 10342 23014 13042 31204 43201 13420 04213 13420 43201 13204 03124"),
+        ["Default"] = new(57835, 0x17ABEA85AB7B0009UL, 0xB29C8C18A7913FC8UL, "6910,3029,4308,586,4196,1576,1362,4274,3292,1042,1184,4972,4024,5240,7473,436,916,1476,1018,215,306", "8,9,9,3,5,2,5,7,8,2,7,5,5,1,3,4,2,7,6,0,7", "8135024976 9315264780 9716438520 3204679158 5394687021 2761480539 5741630298 7904853162 8516493720 2973061458 7904356218 5682734901 5380124697 1342879056 3429786105 4251073689 2715094863 7492538160 6183279054 0537641982 7230946815"),
+        ["Seed12"] = new(52175, 0xC6FF5FE3EBBB7D7FUL, 0xD278AFC93ABECD64UL, "1410,5781,7123,1607,3028,3077,3431,935,3017,1121,3929,1340,3764,4501,2218,1797,917,1169,435,1186,389", "9,6,8,2,2,0,0,2,8,6,3,2,9,6,9,3,5,5,0,0,0", "9612870354 6918053742 8316495270 2630574891 2307584169 0347856291 0853927164 2085791643 8326014759 6834209715 3419870265 2387410596 9814527036 6187345902 9627345180 3490582716 5362480179 5620374819 0136284957 0531796428 0175243869"),
+        ["SmallNoCliffs"] = new(25206, 0x198D1D749B076277UL, 0x880CBF7D9FFC0ED3UL, "2457,1518,1348,379,3796,1021,84,2255,1946,929,1102,1284,1092,1724,1264,404,829,904,388,258,224", "8,8,2,7,8,1,8,9,7,6,4,5,5,0,8,5,4,1,9,5,3", "8236457190 8049156327 2143689075 7243851960 8549061372 1034986527 8564970321 9748310562 7294136805 6057429183 4158967203 5763190248 5924138670 0327691548 8635490271 5760841932 4176083592 1429057836 9148506327 5723160498 3701269485"),
+        ["CoolWet"] = new(38847, 0x25498948083CD15DUL, 0x6909DE4066EB2992UL, "3347,654,4191,427,4724,772,3170,3083,2470,855,2752,499,1113,1473,1203,952,480,3295,1248,500,1639", "8,8,9,6,4,9,2,3,9,3,2,5,3,7,8,2,1,3,8,2,1", "8607415329 8194620537 9813570426 6045127839 4106278593 9580642371 2697105834 3962148507 9523018674 3256709814 2039451768 5893061724 3047195682 7918230456 8573206491 2793485160 1428965703 3854276019 8359201674 2368054791 1837024965"),
     };
 
     public static IEnumerable<object[]> CaseNames => Golden.Keys.Select(k => new object[] { k });
@@ -75,7 +75,7 @@ public class FacilityAreasTests
         Assert.Equal(world.Works.Sites.Count, areas.Count);
         for (int a = 0; a < areas.Count; a++)
         {
-            if (world.Works.Sites[a].Major)
+            if (world.Works.Sites[a].Major || FacilityAreas.MajorKinds.Contains(world.Works.Sites[a].Kind))
                 Assert.True(areas.CellsOf(a).Count > 0, $"{world.Works.Sites[a].Name} has no area");
             Assert.All(areas.CellsOf(a), c => Assert.Equal(a, areas.AreaOf(c)));
         }
@@ -84,7 +84,7 @@ public class FacilityAreasTests
 
     [Theory]
     [MemberData(nameof(CaseNames))]
-    public void AnAreasFiveSheets_CoverItExactlyOnce_InEqualShares(string island)
+    public void AnAreasTenSheets_CoverItExactlyOnce_InEqualShares(string island)
     {
         IslandWorld world = TestIslands.World(island);
         FacilityAreas areas = world.Areas();
@@ -123,6 +123,8 @@ public class FacilityAreasTests
     {
         "Lobby", "Security office", "Offices", "Harbourmaster's office", "Operations office", "Gatehouse", "Shift office",
         "Control room", "Array control", "Observation room", "Office", "Map room", "Radio room", "Keeper's office",
+        "Lab offices", "Director's office", "Briefing room", "Customs", "Loading office", "Check-in", "Departure lounge",
+        "Main control room", "Workshop", "Radar room", "Laboratory", "Wet lab", "Dispatch", "Instrument room", "Bunk room", "Lookout",
         "Elevator lobby", "Cabin hall",
     };
 
@@ -153,8 +155,8 @@ public class FacilityAreasTests
             IReadOnlyList<int> order = areas.SheetOrder(area);
             Assert.Equal(order[k % order.Count], sheet);
         }
-        // watch posts hold none
-        Assert.DoesNotContain(maps, m => ParkMaps.TryParse(m.Item.Tag, out int a, out _) && world.Works.Sites[a].Kind == "watch" && rooms.At(m.X, m.Y)?.SiteIndex == a);
+        // common: twenty or more on every golden island
+        Assert.True(maps.Count >= 20, $"only {maps.Count} park maps");
     }
 
     [Theory]

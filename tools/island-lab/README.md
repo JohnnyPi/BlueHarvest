@@ -16,7 +16,7 @@ node tools/island-lab/golden-wild.js    # stage 4d: IslandWildTests
 node tools/island-lab/golden-chunks.js  # stage 5: IslandChunkTests (1 m tiles)
 node tools/island-lab/golden-rooms.js   # step 25a-1: RoomIndexTests (every named room, its place and rules)
 node tools/island-lab/golden-knowledge.js # step 25b-1: MapKnowledgeTests (the island-scale view rule on two scripted walks)
-node tools/island-lab/golden-areas.js     # step 25b-2: FacilityAreasTests (facility areas and their five park-map sheets)
+node tools/island-lab/golden-areas.js     # step 25b-2: FacilityAreasTests (facility areas and their ten park-map sheets)
 ```
 
 `generate({ stopAfter: 'shape' | 'climate' | 'sites' | 'roads' | 'transit' | 'works' })` returns the generator's internal state at the

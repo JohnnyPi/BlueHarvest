@@ -5,13 +5,17 @@ namespace BlueHarvest.Sim.World.Generation;
 /// threat zones and step 56's facility effects). Every land cell of the island map goes to the
 /// facility quickest to walk to, by the walking model (slopes, fords and roads count), with minor
 /// facilities' times counting double, so the major ones dominate and each minor one holds a smaller
-/// patch of its own. Cells no facility can walk to go to the nearest in a straight line. Each area is
-/// cut like a pie round its facility into <see cref="SheetCount"/> sheets of equal cell count: what one
-/// park map charts. Pure and generator-level; ported in the island lab (gen.js facilityAreas).
+/// patch of its own (the raptor pen counts as major here, <see cref="MajorKinds"/>). Cells no facility
+/// can walk to go to the nearest in a straight line. Each area is cut like a pie round its facility
+/// into <see cref="SheetCount"/> sheets of equal cell count: what one park map charts, a tenth of the
+/// area. Pure and generator-level; ported in the island lab (gen.js facilityAreas).
 /// </summary>
 public sealed class FacilityAreas
 {
-    public const int SheetCount = 5;
+    public const int SheetCount = 10;
+
+    /// <summary>Kinds the generator treats as minor whose areas count like a major facility's (the user's decision, 18 Nov).</summary>
+    public static readonly IReadOnlySet<string> MajorKinds = new HashSet<string>(StringComparer.Ordinal) { "raptors" };
 
     private readonly int[] _area;
     private readonly sbyte[] _sheet;
@@ -36,7 +40,7 @@ public sealed class FacilityAreas
         var majors = new List<int>();
         var minors = new List<int>();
         for (int a = 0; a < sites.Count; a++)
-            (sites[a].Major ? majors : minors).Add(a);
+            (sites[a].Major || MajorKinds.Contains(sites[a].Kind) ? majors : minors).Add(a);
         var (majorSec, majorFrom) = w.WalkFrom(majors);
         var (minorSec, minorFrom) = w.WalkFrom(minors);
 
@@ -143,7 +147,7 @@ public sealed class FacilityAreas
     /// <summary>The site whose area a spot (island metres) lies in, or −1 at sea.</summary>
     public int AreaAt(double x, double y) => _area[CellAt(x, y)];
 
-    /// <summary>Which of its area's sheets (0–4) a cell is in, or −1 at sea.</summary>
+    /// <summary>Which of its area's sheets (0–9) a cell is in, or −1 at sea.</summary>
     public int SheetOf(int cell) => _sheet[cell];
 
     /// <summary>An area's cells, in order.</summary>
@@ -157,7 +161,7 @@ public sealed class FacilityAreas
 
     /// <summary>
     /// The order park maps of an area take their sheets: the sheet holding the facility first, then the
-    /// others in an order shuffled per island. A sixth map repeats the first.
+    /// others in an order shuffled per island. An eleventh map repeats the first.
     /// </summary>
     public IReadOnlyList<int> SheetOrder(int site) => _order[site];
 }

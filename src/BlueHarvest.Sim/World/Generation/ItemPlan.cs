@@ -221,21 +221,36 @@ public static class ItemPlan
 
         new(["Cryo vault"], 20, "data-drive"),
 
-        // park maps (step 25b-2): in one front office per kind of facility, and at the transit stations;
-        // each charts a fifth of its facility's area (the area a station stands in)
-        new(["Lobby", "Security office"], 40, ">park-map", ["genetics"]),
-        new(["Offices"], 40, ">park-map", ["control", "lab"]),
-        new(["Harbourmaster's office"], 40, ">park-map", ["docks"]),
-        new(["Operations office"], 40, ">park-map", ["airstrip"]),
-        new(["Gatehouse", "Shift office"], 40, ">park-map", ["nuclear"]),
-        new(["Control room"], 40, ">park-map", ["geothermal"]),
-        new(["Array control"], 40, ">park-map", ["weather"]),
-        new(["Observation room"], 40, ">park-map", ["orgone"]),
-        new(["Office"], 40, ">park-map", ["depot"]),
-        new(["Map room"], 40, ">park-map", ["ley"]),
-        new(["Radio room"], 40, ">park-map", ["comms"]),
-        new(["Keeper's office"], 40, ">park-map", ["raptors"]),
-        new(["Elevator lobby", "Cabin hall"], 60, ">park-map", ["transit"]),
+        // park maps (step 25b-2): common, but each charts only a tenth of its facility's area (the area a
+        // station stands in), so charting an area takes several. A front office per kind of facility,
+        // a second room per kind, and the transit stations
+        new(["Lobby", "Security office"], 70, ">park-map", ["genetics"]),
+        new(["Offices"], 70, ">park-map", ["control", "lab"]),
+        new(["Harbourmaster's office"], 70, ">park-map", ["docks"]),
+        new(["Operations office"], 70, ">park-map", ["airstrip"]),
+        new(["Gatehouse", "Shift office"], 70, ">park-map", ["nuclear"]),
+        new(["Control room"], 70, ">park-map", ["geothermal"]),
+        new(["Array control"], 70, ">park-map", ["weather"]),
+        new(["Observation room"], 70, ">park-map", ["orgone"]),
+        new(["Office"], 70, ">park-map", ["depot"]),
+        new(["Map room"], 70, ">park-map", ["ley"]),
+        new(["Radio room"], 70, ">park-map", ["comms"]),
+        new(["Keeper's office"], 70, ">park-map", ["raptors"]),
+        new(["Lab offices", "Director's office"], 50, ">park-map", ["genetics"]),
+        new(["Briefing room", "Radio room"], 50, ">park-map", ["control"]),
+        new(["Customs", "Loading office"], 50, ">park-map", ["docks"]),
+        new(["Check-in", "Departure lounge"], 50, ">park-map", ["airstrip"]),
+        new(["Main control room"], 50, ">park-map", ["nuclear"]),
+        new(["Workshop"], 50, ">park-map", ["geothermal"]),
+        new(["Radar room"], 50, ">park-map", ["weather"]),
+        new(["Laboratory"], 50, ">park-map", ["orgone"]),
+        new(["Wet lab"], 50, ">park-map", ["lab"]),
+        new(["Dispatch"], 50, ">park-map", ["depot"]),
+        new(["Instrument room"], 50, ">park-map", ["ley"]),
+        new(["Bunk room"], 50, ">park-map", ["comms"]),
+        new(["Observation room"], 50, ">park-map", ["raptors"]),
+        new(["Lookout"], 50, ">park-map", ["watch"]),
+        new(["Elevator lobby", "Cabin hall"], 80, ">park-map", ["transit"]),
 
         // keycards outside the doors they open (step 25b-2): every facility with secure rooms has a card
         // for its top level somewhere that isn't itself behind one of those doors

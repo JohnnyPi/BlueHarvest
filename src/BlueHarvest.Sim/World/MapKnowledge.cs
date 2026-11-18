@@ -29,7 +29,7 @@ public sealed record MapNote(MapNoteKind Kind, double X, double Y, string Text, 
 /// <summary>One step of a trail: an island-map cell walked into, and when.</summary>
 public readonly record struct TrailStep(int Cell, long Tick);
 
-/// <summary>One fifth of a facility's area, as a park map charts it (step 25b-2).</summary>
+/// <summary>One tenth of a facility's area, as a park map charts it (step 25b-2).</summary>
 public readonly record struct ChartedSheet(int Area, int Sheet);
 
 /// <summary>
