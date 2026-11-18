@@ -48,13 +48,15 @@ public sealed class IslandChunker
     private static readonly List<Item> NoWorks = [];
 
     /// <summary>
-    /// Every building stands on level ground: inside a compound on the compound's own level, elsewhere on
-    /// a pad at the ground's height under its middle, kept flat <see cref="PadFlat"/> m round it and
-    /// blended back into the terrain over <see cref="PadApron"/> m.
+    /// Every building stands on level ground: inside a compound on the compound's own level; elsewhere on
+    /// a pad kept flat <see cref="PadFlat"/> m round it and blended back into the terrain over
+    /// <see cref="PadApron"/> m, at the compound's level if the building reaches into one (a station at its
+    /// edge) and otherwise at the ground's height under its middle. The <see cref="PadFlat"/> m round every
+    /// building is never cut into terraces, so its doors open level (step 25b-3b).
     /// </summary>
     private const int PadFlat = 2, PadApron = 10;
 
-    /// <summary>Each building's pad: its floor height, and whether the ground round it is blended to it (not inside a compound).</summary>
+    /// <summary>Each building's pad: its floor height, and whether the ground round it is blended to it (not wholly inside a compound).</summary>
     private readonly Dictionary<Prim, (double Height, bool Apron)> _pads = new(ReferenceEqualityComparer.Instance);
 
     // ground cover inside each biome, from open to closed ground, as (cover, cumulative share)
@@ -180,13 +182,20 @@ public sealed class IslandChunker
 
     private static long Floor(double v) => (long)Math.Floor(v);
 
-    /// <summary>A building's floor height: a compound's own level if it stands inside one, else the ground under its middle (as the chunk makes it before the works), pulled toward any compound nearby.</summary>
+    /// <summary>A building's floor height: a compound's own level if it stands inside or reaches into one, else the ground under its middle (as the chunk makes it before the works), pulled toward any compound nearby.</summary>
     private (double Height, bool Apron) BuildingPad(IslandWorks w, Prim q)
     {
         foreach (Site t in w.Sites)
         {
             if (Math.Max(Math.Max(Math.Abs(q.X0 - t.X), Math.Abs(q.X1 - t.X)), Math.Max(Math.Abs(q.Y0 - t.Y), Math.Abs(q.Y1 - t.Y))) <= t.R + 2)
                 return (t.H, false);
+        }
+        // reaching into a compound (a station at its edge): the compound's level, with the flat and the apron outside it
+        foreach (Site t in w.Sites)
+        {
+            double e = t.R + 2;
+            if (q.X1 >= t.X - e && q.X0 <= t.X + e && q.Y1 >= t.Y - e && q.Y0 <= t.Y + e)
+                return (t.H, true);
         }
         double x = Math.Floor((q.X0 + q.X1) / 2.0) + 0.5, y = Math.Floor((q.Y0 + q.Y1) / 2.0) + 0.5, gx = x / _cell - 0.5, gy = y / _cell - 0.5;
         double z = Bicubic(_height, _nx, _ny, gx, gy);
@@ -319,7 +328,7 @@ public sealed class IslandChunker
                 {
                     (double Height, bool Apron) pad = BuildingPad(w, q);
                     _pads[q] = pad;
-                    int margin = pad.Apron ? PadFlat + PadApron + 1 : 1;
+                    int margin = pad.Apron ? PadFlat + PadApron + 1 : PadFlat + 1;
                     PPut(q.X0 - margin, q.Y0 - margin, q.X1 + margin, q.Y1 + margin, q);
                     break;
                 }
@@ -542,7 +551,8 @@ public sealed class IslandChunker
                 }
                 else if (kind[k] == 0 && sl > 0.5 && lavaV < 0.55)
                 {
-                    double step = Math.Floor(z / 2) * 2, f = z - step;
+                    // 2 m steps: flat for 70% of each step's rise, then the riser (f is the fraction of the step)
+                    double step = Math.Floor(z / 2) * 2, f = (z - step) / 2;
                     z = step + (f < 0.7 ? 0 : (f - 0.7) / 0.3 * 2);
                 }
                 outH[o2] = (float)z; lvl[o2] = water[k];
@@ -689,12 +699,13 @@ public sealed class IslandChunker
                         (double padZ, bool apron) = _pads[q];
                         if (ix < q.X0 || ix > q.X1 || iy < q.Y0 || iy > q.Y1)
                         {
+                            int d = Math.Max(Math.Max(q.X0 - ix, ix - q.X1), Math.Max(q.Y0 - iy, iy - q.Y1));
                             if (apron && !built && !onPad && kind[k] == 0)
                             {
-                                int d = Math.Max(Math.Max(q.X0 - ix, ix - q.X1), Math.Max(q.Y0 - iy, iy - q.Y1));
                                 if (d <= PadFlat) z = padZ;
                                 else if (d < PadFlat + PadApron) z = padZ + (z - padZ) * GenMath.SmoothStep(0, 1, (d - PadFlat) / (double)PadApron);
                             }
+                            if (d <= PadFlat) levelled[k] = 1; // the flat round a building: no terrace steps at its doors
                             continue;
                         }
                         z = padZ; kind[k] = 0; water[k] = float.NaN; levelled[k] = 1;

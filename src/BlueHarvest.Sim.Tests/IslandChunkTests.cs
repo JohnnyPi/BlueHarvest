@@ -24,37 +24,37 @@ public class IslandChunkTests
             (447, 107, 0x623F3E50CE226B96UL),
             (481, 551, 0x2CECCD2BD7B484A9UL),
             (643, 313, 0xCFB1E7422A246713UL),
-            (561, 279, 0x79E2C1CD7109E9B2UL),
-            (315, 458, 0x4A79F5B8DDC193D2UL),
-            (315, 457, 0x8DB3A6277A35E243UL),
+            (561, 279, 0x69B582C38BB74AF5UL),
+            (315, 458, 0x002E2C825EB18145UL),
+            (315, 457, 0xC223BCA782090B22UL),
             (533, 401, 0xFCC4157A7A73D4A8UL),
-            (458, 107, 0x0AC2CDD9323B14CFUL),
-            (448, 160, 0xEC9CDC046A080CE9UL),
+            (458, 107, 0xEA5D3FEDFD186FB3UL),
+            (448, 160, 0xCE55D31A1A342F82UL),
             (449, 167, 0xD3B144194B280EA7UL),
-            (585, 431, 0xFDD6CE43339CF14AUL),
+            (585, 431, 0x00F6FE28A64D6D99UL),
             (621, 572, 0x61F3BE97313F3BC9UL),
             (413, 442, 0x481A4161ABF8627FUL),
             (418, 132, 0x036399692D8EF766UL),
-            (408, 140, 0xC7BDC27B6E2E5115UL),
-            (575, 307, 0xACBA6ADD77FCA6BAUL),
-            (574, 360, 0x512AF40F8DCAD253UL),
-            (202, 194, 0x3456D0DEEED5577EUL),
+            (408, 140, 0x733BBF1974E56D65UL),
+            (575, 307, 0xEF5D710242D82C5FUL),
+            (574, 360, 0xB748A020D254ED8CUL),
+            (202, 194, 0xEF2C8309C9478E26UL),
             (747, 333, 0x79BD3107E075DBE6UL),
             (571, 551, 0x9037B2D106113F60UL),
             (679, 327, 0xA42A102A8F7DF6D5UL),
             (871, 519, 0x9487187656DA9829UL),
-            (103, 213, 0x8FD09325815AC614UL),
+            (103, 213, 0x6ADDC51A57F43EA8UL),
             (493, 569, 0x1EE95B6EF7B10E7BUL),
             (527, 271, 0xDA53F7EDDE418CF1UL),
-            (559, 279, 0xD91037275DE2ED40UL),
+            (559, 279, 0x6265BFD52C5D4658UL),
             (451, 114, 0x5C6038A281B2F84EUL),
-            (562, 269, 0x42790859E23E1111UL),
+            (562, 269, 0x9373D0F76CDC805BUL),
             (776, 485, 0xEAFA2B6F6BFE222DUL),
             (391, 221, 0x4459ECEB7594347BUL),
-            (393, 75, 0x20D81CD3620781D8UL),
+            (393, 75, 0x14731293458363D1UL),
             (393, 59, 0x033DEE7346082A22UL),
             (631, 133, 0xDB9C3F24A0A598B0UL),
-            (309, 115, 0xACA809D19271FD7FUL),
+            (309, 115, 0xD4BFE2BB81256DDBUL),
             (435, 121, 0x5E4FF86F81A1918DUL),
         ]), // 38 chunks, 40 of 42 covers seen
         ["Seed12"] = new(357, 87, 0x8BF5FDA3CBB115B2UL,
@@ -64,16 +64,16 @@ public class IslandChunkTests
             (357, 87, 0xEAABB179E855EBB3UL),
             (363, 89, 0x26623EC9114015BEUL),
             (559, 441, 0xA84CE249BFEC206EUL),
-            (545, 225, 0x951BB6A55748ACFDUL),
-            (571, 249, 0x6F8E38F4EEA9D5F7UL),
-            (791, 540, 0xD7E5EFAEE252C4B2UL),
-            (791, 539, 0x366D50732BDD76EDUL),
-            (469, 323, 0xB08F337897FD21EDUL),
-            (372, 90, 0x311E19D2FF517B41UL),
-            (331, 162, 0x74F8738C04BB626CUL),
+            (545, 225, 0xEED58B8CA6A94DBEUL),
+            (571, 249, 0xD4C735081D2CA2A0UL),
+            (791, 540, 0x50EF39DFF14D40CAUL),
+            (791, 539, 0xFF518D445B411F35UL),
+            (469, 323, 0xA9E9B74B1D0B37A4UL),
+            (372, 90, 0xEEE30AFD0460EEDCUL),
+            (331, 162, 0xF6250C626831641FUL),
             (327, 169, 0xBAC089CCD7D72C00UL),
-            (474, 305, 0x4EE7E470182EFD51UL),
-            (415, 280, 0xBCC77E8C5279530EUL),
+            (474, 305, 0x5C06C29478BFFEBAUL),
+            (415, 280, 0x4DA5B516157A795CUL),
             (363, 468, 0x10088A1A7B93CE4BUL),
         ]), // 16 chunks, 32 of 42 covers seen
         ["SmallNoCliffs"] = new(419, 333, 0x6E30405E4F9D0397UL,
@@ -83,13 +83,13 @@ public class IslandChunkTests
             (419, 333, 0x47F483110EE5642EUL),
             (429, 335, 0x8E3D38B210CA152BUL),
             (181, 175, 0xAA242ACDE0AA20E8UL),
-            (367, 205, 0x2B14A028678A4F76UL),
-            (357, 183, 0x8474C1D702B026EAUL),
-            (250, 382, 0x4A8B4C00E83A7079UL),
+            (367, 205, 0x33970A2602917379UL),
+            (357, 183, 0x253C6A9ADFCE53D9UL),
+            (250, 382, 0x4E89C7EB0FC8BC12UL),
             (251, 381, 0x9A736B4163784BF3UL),
-            (349, 289, 0x19640DBCB104F0FCUL),
-            (416, 319, 0x0C59F2704ECD758CUL),
-            (376, 277, 0xB6468689B0C8CE41UL),
+            (349, 289, 0x0A483E12575267EAUL),
+            (416, 319, 0x0D94CFAB2CF4DEC1UL),
+            (376, 277, 0xA75874DFE49CD023UL),
             (371, 271, 0xDD14DEE75551FF86UL),
             (255, 201, 0xF179A018DA2C49F5UL),
             (163, 177, 0x7F085D88D2A5E30CUL),
@@ -102,15 +102,15 @@ public class IslandChunkTests
             (421, 133, 0x54F5DC147355722FUL),
             (425, 139, 0xE071559F387DFBB3UL),
             (315, 235, 0xA0CBB0BDDA8F5B9CUL),
-            (537, 271, 0x692877D7A75AF461UL),
-            (511, 239, 0x65A1FACE9BE4E9C5UL),
-            (573, 438, 0x211CBEF2FBEAC1E3UL),
-            (573, 437, 0x2CFDFAE68DD5153AUL),
+            (537, 271, 0xA368835EAB401F1AUL),
+            (511, 239, 0x404A8DC974995C5EUL),
+            (573, 438, 0xD9F510FC6652767BUL),
+            (573, 437, 0xF63527B032043220UL),
             (407, 307, 0xF53A025091E4EECCUL),
-            (432, 132, 0x32321436D96B7A53UL),
-            (403, 236, 0xBCBFB6E16FB6060FUL),
+            (432, 132, 0x7287300BC0FCDE1FUL),
+            (403, 236, 0xC7BFA7DC96C5E58AUL),
             (403, 243, 0x9800AF44D963BBB4UL),
-            (458, 348, 0x3D9C4DACE942AAB7UL),
+            (458, 348, 0x57BDE0CAC147025BUL),
             (510, 395, 0xB3631E3B7CA0D2CBUL),
             (348, 381, 0x017234E5BD3696EBUL),
         ]), // 16 chunks, 33 of 42 covers seen
@@ -275,5 +275,51 @@ public class IslandChunkTests
         }
         Assert.True(uneven.Count == 0, $"{uneven.Count} buildings aren't level: {string.Join("; ", uneven)}");
         Assert.Equal(name == "SmallNoCliffs" ? 2 : 0, skipped);
+    }
+    /// <summary>
+    /// Step 25b-3b: every outside door of a building opens level onto dry ground, within the half metre a
+    /// person steps up or down, so a building can always be walked into and out of. Buildings that overlap
+    /// another are left out (polish item P1). On SmallNoCliffs the monorail station at the Orgone research
+    /// station still opens into the lake from both doors (polish item P2).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CaseNames))]
+    public void EveryOuterDoor_OpensOntoLevelGround(string name)
+    {
+        IslandWorks works = TestIslands.Works(name);
+        IslandChunker chunker = TestIslands.Chunker(name);
+        var chunks = new Dictionary<(int X, int Y), IslandChunk>();
+        (double Height, bool Wet) TileAt(int x, int y)
+        {
+            var key = ((int)Math.Floor(x / 64.0), (int)Math.Floor(y / 64.0));
+            if (!chunks.TryGetValue(key, out IslandChunk? c))
+                chunks[key] = c = chunker.Build(key.Item1, key.Item2);
+            int i = (y - c.Y0) * c.Size + (x - c.X0);
+            return (c.Height[i], !float.IsNaN(c.Water[i]));
+        }
+        List<Prim> buildings = works.Prims.InOrder().Where(p => p.Kind == PrimKind.Building).ToList();
+        bool Overlaps(Prim a) => buildings.Any(b => b != a && a.X0 <= b.X1 && a.X1 >= b.X0 && a.Y0 <= b.Y1 && a.Y1 >= b.Y0);
+        var bad = new List<string>();
+        int doors = 0;
+        foreach (Prim b in buildings)
+        {
+            if (Overlaps(b)) continue;
+            foreach ((int x, int y) in b.Doors!)
+            {
+                int ox = x, oy = y;
+                if (x == b.X0) ox--;
+                else if (x == b.X1) ox++;
+                else if (y == b.Y0) oy--;
+                else if (y == b.Y1) oy++;
+                else continue; // a door between rooms
+                doors++;
+                (double inside, _) = TileAt(x, y);
+                (double outside, bool wet) = TileAt(ox, oy);
+                if (wet || Math.Abs(outside - inside) > 0.5)
+                    bad.Add($"{works.Labels[b.Label]} ({x}, {y}): {outside - inside:+0.00;-0.00} m{(wet ? ", water" : "")}");
+            }
+        }
+        Assert.True(doors > 100, $"{doors} outer doors");
+        Assert.True(bad.Count == (name == "SmallNoCliffs" ? 2 : 0), $"{bad.Count} of {doors} outer doors don't open level: {string.Join("; ", bad)}");
     }
 }

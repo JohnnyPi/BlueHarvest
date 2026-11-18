@@ -2162,12 +2162,18 @@ var IslandGen = (function () {
 
   // Spatial index of everything people built (and caves, wrecks, ruins), in 256 m bins.
   const NO_WORKS = [];
-  // every building stands on level ground: inside a compound on the compound's own level, elsewhere on a pad
-  // at the ground's height under its middle, kept flat PAD_FLAT m round it and blended out over PAD_APRON m
+  // every building stands on level ground: inside a compound on the compound's own level; elsewhere on a pad,
+  // kept flat PAD_FLAT m round it and blended out over PAD_APRON m, at the compound's level if the building
+  // reaches into one (a station at its edge) and otherwise at the ground's height under its middle. The
+  // PAD_FLAT m round every building is never cut into terraces, so its doors open level.
   const PAD_FLAT = 2, PAD_APRON = 10;
   function buildingPad(world, q) {
     for (const t of world.works.sites)
       if (Math.max(Math.abs(q.x0 - t.x), Math.abs(q.x1 - t.x), Math.abs(q.y0 - t.y), Math.abs(q.y1 - t.y)) <= t.r + 2) return { h: t.h, apron: false };
+    for (const t of world.works.sites) {
+      const e = t.r + 2;
+      if (q.x1 >= t.x - e && q.x0 <= t.x + e && q.y1 >= t.y - e && q.y0 <= t.y + e) return { h: t.h, apron: true };
+    }
     const { nx, ny, cell } = world, nz = world.noise;
     const x = Math.floor((q.x0 + q.x1) / 2) + 0.5, y = Math.floor((q.y0 + q.y1) / 2) + 0.5, gx = x / cell - 0.5, gy = y / cell - 0.5;
     let z = bicubic(world.height, nx, ny, gx, gy);
@@ -2213,7 +2219,7 @@ var IslandGen = (function () {
       if (q.t === 'circle') put(q.x - q.r - 1, q.y - q.r - 1, q.x + q.r + 1, q.y + q.r + 1, it);
       else if (q.t === 'tower') put(q.x - 2, q.y - 2, q.x + 2, q.y + 2, it);
       else if (q.t === 'line') seg(q.ax, q.ay, q.bx, q.by, q.w, it);
-      else if (q.t === 'bld') { const pad = buildingPad(world, q), m = pad.apron ? PAD_FLAT + PAD_APRON + 1 : 1; it.pad = pad.h; it.apron = pad.apron; put(q.x0 - m, q.y0 - m, q.x1 + m, q.y1 + m, it); }
+      else if (q.t === 'bld') { const pad = buildingPad(world, q), m = pad.apron ? PAD_FLAT + PAD_APRON + 1 : PAD_FLAT + 1; it.pad = pad.h; it.apron = pad.apron; put(q.x0 - m, q.y0 - m, q.x1 + m, q.y1 + m, it); }
       else put(q.x0 - 1, q.y0 - 1, q.x1 + 1, q.y1 + 1, it);
     }
     bins.prims = pbins;
@@ -2319,11 +2325,12 @@ var IslandGen = (function () {
             const q = it.p;
             if (q.t === 'bld') {
               if (ix < q.x0 || ix > q.x1 || iy < q.y0 || iy > q.y1) {
+                const d = Math.max(q.x0 - ix, ix - q.x1, q.y0 - iy, iy - q.y1);
                 if (it.apron && !built && !onPad && kind[k] === 0) {
-                  const d = Math.max(q.x0 - ix, ix - q.x1, q.y0 - iy, iy - q.y1);
                   if (d <= PAD_FLAT) z = it.pad;
                   else if (d < PAD_FLAT + PAD_APRON) z = it.pad + (z - it.pad) * smoothstep(0, 1, (d - PAD_FLAT) / PAD_APRON);
                 }
+                if (d <= PAD_FLAT) levelled[k] = 1; // the flat round a building: no terrace steps at its doors
                 continue;
               }
               z = it.pad; kind[k] = 0; water[k] = NaN; levelled[k] = 1;
@@ -2412,7 +2419,7 @@ var IslandGen = (function () {
       else if (kind[k] === 0 && paliV > 0.3 && sl > 0.6) { // the pali: 6 m rock steps with narrow ledges
         const S = 6, step = Math.floor(z / S) * S, f = (z - step) / S; z = step + (f < 0.3 ? 0 : (f - 0.3) / 0.7 * S);
         ledge = f < 0.3 ? 1 : 0;
-      } else if (kind[k] === 0 && sl > 0.5 && lavaV < 0.55) { const step = Math.floor(z / 2) * 2, f = z - step; z = step + (f < 0.7 ? 0 : (f - 0.7) / 0.3 * 2); }
+      } else if (kind[k] === 0 && sl > 0.5 && lavaV < 0.55) { const step = Math.floor(z / 2) * 2, f = (z - step) / 2; z = step + (f < 0.7 ? 0 : (f - 0.7) / 0.3 * 2); }
       outH[o2] = z; lvl[o2] = water[k];
       { // hillshade, light from the north-west; uses the margin so chunk edges match
         const sx = (h[k + 1] - h[k - 1]) / 2, sy = (h[k + M] - h[k - M]) / 2;
