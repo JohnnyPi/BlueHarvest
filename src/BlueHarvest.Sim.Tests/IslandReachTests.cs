@@ -6,8 +6,7 @@ namespace BlueHarvest.Sim.Tests;
 
 /// <summary>
 /// Steps 24b and 24c: walking routes between the key sites (docks, airstrip, comms relay, control centre, watch posts).
-/// Everything here is asserted except <see cref="GoldenRoutes_Print"/>, the establishing run for the route
-/// columns step 24c's corner rule can change (pinned in step 24d).
+/// Everything here is asserted; <see cref="GoldenRoutes_Print"/> prints the current rows for pinning columns added later.
 /// </summary>
 public class IslandReachTests
 {
@@ -23,16 +22,17 @@ public class IslandReachTests
 
     private static IslandReach Reach(string name) => Walked[name].Value;
 
-    // from the step 24b establishing run (16 Nov 2026): the columns step 24c's corner rule can't change,
-    // since they come from the route search with nothing shut
-    private const string PinnedColumns = "anchors,anchor_pairs,no_ground_gaps";
+    // the step 24c establishing run (17 Nov 2026, with the corner rule), pinned in step 24d;
+    // compared column by column, so columns added later don't disturb it
+    private const string PinnedColumns =
+        "anchors,anchor_pairs,anchor_gaps,tunnel_gaps,deep_gaps,no_ground_gaps,must_ford_pairs,slowest_anchor_minutes,worst_dry_detour";
 
     private static readonly Dictionary<string, string> Pinned = new()
     {
-        ["Default"] = "8,28,0",
-        ["Seed12"] = "8,28,0",
-        ["SmallNoCliffs"] = "8,28,0",
-        ["CoolWet"] = "8,28,0",
+        ["Default"] = "8,28,0,0,0,0,0,698.718161,1.041022",
+        ["Seed12"] = "8,28,0,0,0,0,0,601.924755,1.065566",
+        ["SmallNoCliffs"] = "8,28,0,0,0,0,0,370.849828,1.036581",
+        ["CoolWet"] = "8,28,0,0,0,0,0,661.139865,1.001917",
     };
 
     [Theory]
@@ -43,7 +43,12 @@ public class IslandReachTests
             .Zip(IslandReport.ReachRow(Reach(name)).Split(','))
             .ToDictionary(p => p.First, p => p.Second);
         string[] keys = PinnedColumns.Split(','), want = Pinned[name].Split(',');
-        for (int k = 0; k < keys.Length; k++) Assert.True(want[k] == got[keys[k]], $"{name} {keys[k]}: pinned {want[k]}, now {got[keys[k]]}");
+        Assert.Equal(keys.Length, want.Length);
+        for (int k = 0; k < keys.Length; k++)
+        {
+            Assert.True(got.ContainsKey(keys[k]), $"{name}: column {keys[k]} is gone");
+            Assert.True(want[k] == got[keys[k]], $"{name} {keys[k]}: pinned {want[k]}, now {got[keys[k]]}");
+        }
     }
 
     [Fact]

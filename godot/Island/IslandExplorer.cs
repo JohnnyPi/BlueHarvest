@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using BlueHarvest.Game.Ui;
 using BlueHarvest.Sim.World.Generation;
@@ -10,6 +11,8 @@ namespace BlueHarvest.Game.Island;
 
 /// <summary>
 /// Island generator and map. Type a seed (or roll one) and generate; drag to pan, wheel to zoom.
+/// Random skips seeds that fail the seed checks (<see cref="IslandChecks"/>); a typed seed is always shown,
+/// with its failures in the debug view.
 /// Basic view shows only what a survivor knows on arrival: the island's outline, and later whatever
 /// they have unlocked. Debug view (F9) reveals the whole island: layers, roads, facilities and the rest,
 /// and zoomed far enough in it streams the 1 m tiles: buildings, rooms, fences, river beds.
@@ -25,7 +28,7 @@ public partial class IslandExplorer : Node2D
     private const float MaxZoom = 128f * 16f;
 
     private IslandWorld? _world;
-    private Task<IslandWorld>? _job;
+    private Task<SeedSearch>? _job;
     private volatile string _stage = "";
     private ulong _jobStarted;
 
@@ -135,11 +138,7 @@ public partial class IslandExplorer : Node2D
         _seed = new SpinBox { MinValue = 0, MaxValue = uint.MaxValue, Step = 1, Value = 7, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         seedRow.AddChild(_seed);
         Button roll = HudTheme.PlainButton("Random");
-        roll.Pressed += () =>
-        {
-            _seed.Value = GD.Randi();
-            StartGeneration();
-        };
+        roll.Pressed += RollIsland;
         seedRow.AddChild(roll);
 
         column.AddChild(HudTheme.Heading("Size"));
@@ -217,14 +216,30 @@ public partial class IslandExplorer : Node2D
     }
 
     // ---------- generating ----------
+    /// <summary>Generates the typed seed and shows it, whether or not it passes the seed checks.</summary>
     private void StartGeneration()
     {
         if (_job != null) return; // one at a time
-        var p = new IslandParams { Seed = (uint)_seed.Value, Scale = Sizes[Math.Max(0, _size.Selected)].Scale };
+        Begin(new[] { (uint)_seed.Value });
+    }
+
+    /// <summary>Rolls random seeds and shows the first that passes the seed checks (up to IslandSeeds.MaxTries).</summary>
+    private void RollIsland()
+    {
+        if (_job != null) return;
+        var seeds = new uint[IslandSeeds.MaxTries];
+        for (int k = 0; k < seeds.Length; k++) seeds[k] = GD.Randi(); // rolled here: GD stays on the main thread
+        _seed.Value = seeds[0];
+        Begin(seeds);
+    }
+
+    private void Begin(uint[] seeds)
+    {
+        var p = new IslandParams { Seed = seeds[0], Scale = Sizes[Math.Max(0, _size.Selected)].Scale };
         _stage = "Starting";
         _jobStarted = Time.GetTicksMsec();
         _generate.Disabled = true;
-        _job = Task.Run(() => IslandWorld.Generate(p, stage => _stage = stage));
+        _job = Task.Run(() => IslandSeeds.FirstPassing(p, seeds, stage => _stage = stage));
     }
 
     public override void _Process(double delta)
@@ -237,7 +252,7 @@ public partial class IslandExplorer : Node2D
             }
             else
             {
-                Task<IslandWorld> job = _job;
+                Task<SeedSearch> job = _job;
                 _job = null;
                 _generate.Disabled = false;
                 if (job.IsFaulted)
@@ -247,9 +262,11 @@ public partial class IslandExplorer : Node2D
                 }
                 else
                 {
-                    _world = job.Result;
+                    SeedSearch found = job.Result;
+                    _world = found.World;
+                    _seed.Value = _world.Params.Seed;
                     IslandLaunch.Remember(_world);
-                    _status.Text = $"Seed {_world.Params.Seed} generated in {(Time.GetTicksMsec() - _jobStarted) / 1000.0:0.0} s";
+                    _status.Text = StatusAfter(found, (Time.GetTicksMsec() - _jobStarted) / 1000.0);
                     ShowPicture();
                     ShowFacts();
                     _overlay.SetWorld(_world);
@@ -279,6 +296,21 @@ public partial class IslandExplorer : Node2D
             _tiles.Stream(new Rect2(_camera.Position - view / 2f / _zoom, view / _zoom));
         }
         UpdateHover();
+    }
+
+    /// <summary>The status line after generating: each skipped seed and why, then what is shown.</summary>
+    private static string StatusAfter(SeedSearch found, double seconds)
+    {
+        var lines = found.Skipped.Select(s => s.Describe()).ToList();
+        uint seed = found.World.Params.Seed;
+        IslandValidation v = found.World.Validate();
+        if (found.Found)
+            lines.Add($"Seed {seed} generated in {seconds:0.0} s" + (v.Warnings.Count > 0 ? $" ({v.Warnings.Count} warning{(v.Warnings.Count == 1 ? "" : "s")}, F9)" : ""));
+        else if (found.Skipped.Count > 0)
+            lines.Add($"No seed passed in {found.Skipped.Count + 1} tries; showing seed {seed}, which fails: {v.FailureSummary}");
+        else
+            lines.Add($"Seed {seed} generated in {seconds:0.0} s; it fails the seed checks: {v.FailureSummary}");
+        return string.Join("\n", lines);
     }
 
     // ---------- what is shown ----------
@@ -323,6 +355,13 @@ public partial class IslandExplorer : Node2D
             $"{k.Lifts.Count} lifts, tram {(k.Tram != null ? $"{k.Tram.Km:0.0} km" : "none")}, monorail {(k.Monorail != null ? $"{k.Monorail.Km:0.0} km" : "none")}",
             $"{k.Caves.Count} caves, {k.Wrecks.Count} wrecks, {k.Ruins.Count} ruins",
         };
+        IslandValidation v = _world.Validate();
+        if (v.Passed)
+            lines.Add($"[color={HudTheme.Hex(HudTheme.Safe)}]Seed checks: passed{(v.Warnings.Count == 0 ? ", no warnings" : "")}[/color]");
+        foreach (CheckResult f in v.Failures)
+            lines.Add($"[color={HudTheme.Hex(HudTheme.Danger)}]Fails {HudTheme.Escape(f.Name)}:[/color] {HudTheme.Escape(f.Reason)}");
+        foreach (CheckResult w in v.Warnings)
+            lines.Add($"[color={HudTheme.Hex(HudTheme.Caution)}]Warning:[/color] {HudTheme.Escape(w.Reason)}");
         _facts.Text = string.Join("\n", lines);
     }
 

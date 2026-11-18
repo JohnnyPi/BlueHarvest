@@ -7,7 +7,7 @@ namespace BlueHarvest.Sim.Tests;
 /// <summary>
 /// Step 24c: seed checks as data (<see cref="IslandChecks"/>). Each check is tried just past and just short of
 /// its threshold on the Default island's measures, edited with record "with" copies, so no island is generated
-/// for them. <see cref="GoldenValidation_Print"/> is the establishing run that step 24d pins.
+/// for them. The golden islands' full validation (routes included) is pinned from the step 24c run.
 /// </summary>
 public class IslandChecksTests
 {
@@ -210,14 +210,22 @@ public class IslandChecksTests
         Assert.Contains("Checks: ", IslandReport.ConsoleSummary(results));
     }
 
-    /// <summary>
-    /// Print mode (decision 7): each golden island's full validation (routes included) as a row ready to paste.
-    /// Always passes. Step 24d turns the rows into assertions.
-    /// </summary>
+    // the step 24c establishing run (17 Nov 2026), pinned in step 24d
+    [Theory]
+    [InlineData("Default", "1,,")]
+    [InlineData("Seed12", "1,,islets")]
+    [InlineData("SmallNoCliffs", "1,,")]
+    [InlineData("CoolWet", "1,,islets")]
+    public void GoldenIslands_MatchTheEstablishingRun(string name, string pinned)
+    {
+        Assert.Equal(pinned, IslandReport.ChecksRow(TestIslands.World(name).Validate()));
+    }
+
+    /// <summary>Prints each golden island's full validation as a row ready to paste. Always passes.</summary>
     [Fact]
     public void GoldenValidation_Print()
     {
-        _output.WriteLine("// Step 24c establishing run: validation rows for the golden islands.");
+        _output.WriteLine("// Validation rows for the golden islands.");
         _output.WriteLine("// Columns: " + IslandReport.ChecksHeader());
         foreach (string name in TestIslands.Cases.Keys)
             _output.WriteLine($"[\"{name}\"] = \"{IslandReport.ChecksRow(TestIslands.World(name).Validate())}\",");
