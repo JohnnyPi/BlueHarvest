@@ -2459,10 +2459,11 @@ var IslandGen = (function () {
 
   // ---------- facility areas (step 25b-2): BlueHarvest.Sim.World.Generation.FacilityAreas ----------
   // Every land cell goes to the facility quickest to walk to, minor facilities' times counting double;
-  // cells nobody can walk to go to the nearest facility in a straight line. Each area is cut like a pie
+  // cells nobody can walk to go to the nearest facility in a straight line. A facility's footprint (its
+  // compound's square) is always its own, and some kinds hold a guaranteed radius. Each area is cut like a pie
   // round its facility into ten sheets of equal cell count.
   const AREA_SHEETS = 10;
-  const AREA_MAJOR = new Set(['raptors']); // minor in the generator, but its area counts like a major facility's
+  const AREA_MIN_R = { raptors: 1000 }; // ground always held round these kinds, m (never another facility's footprint)
   function facilityAreas(w) {
     const W = w.works, G = W.walkGrid, sites = W.sites, nx = w.nx, ny = w.ny, cell = w.cell;
     const cn = G.cnx * G.cny, cs = G.cs;
@@ -2485,7 +2486,7 @@ var IslandGen = (function () {
       return { sec, from };
     }
     const majors = [], minors = [];
-    sites.forEach((t, a) => (t.major || AREA_MAJOR.has(t.kind) ? majors : minors).push(a));
+    sites.forEach((t, a) => (t.major ? majors : minors).push(a));
     const M = spread(majors), m = spread(minors);
     const area = new Int32Array(nx * ny).fill(-1);
     for (let i = 0; i < nx * ny; i++) {
@@ -2498,6 +2499,16 @@ var IslandGen = (function () {
         sites.forEach((t, a) => { const d2 = (t.x - x) * (t.x - x) + (t.y - y) * (t.y - y); if (d2 < bd) { bd = d2; best = a; } });
         area[i] = best;
       } else area[i] = tM <= tm ? M.from[c] : m.from[c];
+      // a facility's footprint (its compound's square) is always its own; round some kinds, a guaranteed radius
+      let fp = -1, fd = Infinity, rp = -1, rd = Infinity;
+      sites.forEach((t, a) => {
+        const dx = t.x - x, dy = t.y - y, d2 = dx * dx + dy * dy;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) <= t.r && d2 < fd) { fp = a; fd = d2; }
+        const mr = AREA_MIN_R[t.kind];
+        if (mr && d2 <= mr * mr && d2 < rd) { rp = a; rd = d2; }
+      });
+      if (fp >= 0) area[i] = fp;
+      else if (rp >= 0) area[i] = rp;
     }
     const sheet = new Int8Array(nx * ny).fill(-1), facilitySheet = [], order = [];
     const st = stream(w.params.seed >>> 0, 'parkmap.sheets');

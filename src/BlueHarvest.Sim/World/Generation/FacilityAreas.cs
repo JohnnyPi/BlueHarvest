@@ -5,8 +5,9 @@ namespace BlueHarvest.Sim.World.Generation;
 /// threat zones and step 56's facility effects). Every land cell of the island map goes to the
 /// facility quickest to walk to, by the walking model (slopes, fords and roads count), with minor
 /// facilities' times counting double, so the major ones dominate and each minor one holds a smaller
-/// patch of its own (the raptor pen counts as major here, <see cref="MajorKinds"/>). Cells no facility
-/// can walk to go to the nearest in a straight line. Each area is cut like a pie round its facility
+/// patch of its own. Cells no facility can walk to go to the nearest in a straight line. A facility's
+/// footprint (its compound's square) is always its own, and some kinds hold a guaranteed radius round
+/// them (<see cref="MinRadiusM"/>: the raptor pen), outside other footprints. Each area is cut like a pie round its facility
 /// into <see cref="SheetCount"/> sheets of equal cell count: what one park map charts, a tenth of the
 /// area. Pure and generator-level; ported in the island lab (gen.js facilityAreas).
 /// </summary>
@@ -14,8 +15,11 @@ public sealed class FacilityAreas
 {
     public const int SheetCount = 10;
 
-    /// <summary>Kinds the generator treats as minor whose areas count like a major facility's (the user's decision, 18 Nov).</summary>
-    public static readonly IReadOnlySet<string> MajorKinds = new HashSet<string>(StringComparer.Ordinal) { "raptors" };
+    /// <summary>
+    /// Kinds whose area always holds the land within this many metres of them, except other facilities'
+    /// footprints (the user's decision, 18 Nov: the raptor pen, 1 km, without touching the genetics complex).
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, double> MinRadiusM = new Dictionary<string, double>(StringComparer.Ordinal) { ["raptors"] = 1000 };
 
     private readonly int[] _area;
     private readonly sbyte[] _sheet;
@@ -40,7 +44,7 @@ public sealed class FacilityAreas
         var majors = new List<int>();
         var minors = new List<int>();
         for (int a = 0; a < sites.Count; a++)
-            (sites[a].Major || MajorKinds.Contains(sites[a].Kind) ? majors : minors).Add(a);
+            (sites[a].Major ? majors : minors).Add(a);
         var (majorSec, majorFrom) = w.WalkFrom(majors);
         var (minorSec, minorFrom) = w.WalkFrom(minors);
 
@@ -68,6 +72,17 @@ public sealed class FacilityAreas
             {
                 _area[i] = tMajor <= tMinor ? majorFrom[c] : minorFrom[c];
             }
+            // a facility's footprint (its compound's square) is always its own; round some kinds, a guaranteed radius
+            int footprint = -1, held = -1;
+            double fd = double.PositiveInfinity, hd = double.PositiveInfinity;
+            for (int a = 0; a < sites.Count; a++)
+            {
+                double dx = sites[a].X - x, dy = sites[a].Y - y, d2 = dx * dx + dy * dy;
+                if (Math.Max(Math.Abs(dx), Math.Abs(dy)) <= sites[a].R && d2 < fd) { footprint = a; fd = d2; }
+                if (MinRadiusM.TryGetValue(sites[a].Kind, out double r) && d2 <= r * r && d2 < hd) { held = a; hd = d2; }
+            }
+            if (footprint >= 0) _area[i] = footprint;
+            else if (held >= 0) _area[i] = held;
         }
 
         _sheet = new sbyte[n];

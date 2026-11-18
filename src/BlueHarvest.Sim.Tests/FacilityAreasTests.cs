@@ -24,10 +24,10 @@ public class FacilityAreasTests
     // node tools/island-lab/golden-areas.js
     private static readonly Dictionary<string, Expected> Golden = new()
     {
-        ["Default"] = new(57835, 0x17ABEA85AB7B0009UL, 0xB29C8C18A7913FC8UL, "6910,3029,4308,586,4196,1576,1362,4274,3292,1042,1184,4972,4024,5240,7473,436,916,1476,1018,215,306", "8,9,9,3,5,2,5,7,8,2,7,5,5,1,3,4,2,7,6,0,7", "8135024976 9315264780 9716438520 3204679158 5394687021 2761480539 5741630298 7904853162 8516493720 2973061458 7904356218 5682734901 5380124697 1342879056 3429786105 4251073689 2715094863 7492538160 6183279054 0537641982 7230946815"),
-        ["Seed12"] = new(52175, 0xC6FF5FE3EBBB7D7FUL, 0xD278AFC93ABECD64UL, "1410,5781,7123,1607,3028,3077,3431,935,3017,1121,3929,1340,3764,4501,2218,1797,917,1169,435,1186,389", "9,6,8,2,2,0,0,2,8,6,3,2,9,6,9,3,5,5,0,0,0", "9612870354 6918053742 8316495270 2630574891 2307584169 0347856291 0853927164 2085791643 8326014759 6834209715 3419870265 2387410596 9814527036 6187345902 9627345180 3490582716 5362480179 5620374819 0136284957 0531796428 0175243869"),
-        ["SmallNoCliffs"] = new(25206, 0x198D1D749B076277UL, 0x880CBF7D9FFC0ED3UL, "2457,1518,1348,379,3796,1021,84,2255,1946,929,1102,1284,1092,1724,1264,404,829,904,388,258,224", "8,8,2,7,8,1,8,9,7,6,4,5,5,0,8,5,4,1,9,5,3", "8236457190 8049156327 2143689075 7243851960 8549061372 1034986527 8564970321 9748310562 7294136805 6057429183 4158967203 5763190248 5924138670 0327691548 8635490271 5760841932 4176083592 1429057836 9148506327 5723160498 3701269485"),
-        ["CoolWet"] = new(38847, 0x25498948083CD15DUL, 0x6909DE4066EB2992UL, "3347,654,4191,427,4724,772,3170,3083,2470,855,2752,499,1113,1473,1203,952,480,3295,1248,500,1639", "8,8,9,6,4,9,2,3,9,3,2,5,3,7,8,2,1,3,8,2,1", "8607415329 8194620537 9813570426 6045127839 4106278593 9580642371 2697105834 3962148507 9523018674 3256709814 2039451768 5893061724 3047195682 7918230456 8573206491 2793485160 1428965703 3854276019 8359201674 2368054791 1837024965"),
+        ["Default"] = new(57835, 0x7059E17911153E8AUL, 0xB3D5C050312106C1UL, "6910,3029,4308,586,4196,2559,205,4274,3292,1042,1184,5056,4024,5240,7503,436,916,1476,1018,275,306", "8,9,9,3,5,4,5,7,8,2,7,5,5,1,3,4,2,7,6,0,7", "8135024976 9315264780 9716438520 3204679158 5394687021 4761802539 5741630298 7904853162 8516493720 2973061458 7904356218 5682734901 5380124697 1342879056 3429786105 4251073689 2715094863 7492538160 6183279054 0537641982 7230946815"),
+        ["Seed12"] = new(52175, 0xA85E10593157EABCUL, 0xE6E615B32213F585UL, "1410,5781,7123,1623,3028,6120,368,935,3017,1121,3929,1340,3764,4505,2218,1797,917,1169,435,1186,389", "9,6,8,2,2,0,1,2,8,6,3,2,9,6,9,3,5,5,0,0,0", "9612870354 6918053742 8316495270 2630574891 2307584169 0347856291 1853927604 2085791643 8326014759 6834209715 3419870265 2387410596 9814527036 6187345902 9627345180 3490582716 5362480179 5620374819 0136284957 0531796428 0175243869"),
+        ["SmallNoCliffs"] = new(25206, 0xB246C7FCDF31CB74UL, 0x1131FE9747E5A62FUL, "2457,1526,1348,379,3796,968,117,2255,1946,929,1102,1284,1092,1724,1276,404,829,904,388,258,224", "8,8,2,7,8,1,6,9,7,6,4,5,5,0,8,5,4,1,9,5,3", "8236457190 8049156327 2143689075 7243851960 8549061372 1034986527 6549708321 9748310562 7294136805 6057429183 4158967203 5763190248 5924138670 0327691548 8635490271 5760841932 4176083592 1429057836 9148506327 5723160498 3701269485"),
+        ["CoolWet"] = new(38847, 0xE440642D6B25017EUL, 0xDC436C696A527E3FUL, "3347,654,4191,427,4724,3597,341,3083,2470,855,2752,499,1113,1473,1203,952,480,3295,1248,500,1643", "8,8,9,6,4,3,2,3,9,3,2,5,3,7,8,2,1,3,8,2,1", "8607415329 8194620537 9813570426 6045127839 4106278593 3589064271 2697105834 3962148507 9523018674 3256709814 2039451768 5893061724 3047195682 7918230456 8573206491 2793485160 1428965703 3854276019 8359201674 2368054791 1837024965"),
     };
 
     public static IEnumerable<object[]> CaseNames => Golden.Keys.Select(k => new object[] { k });
@@ -75,11 +75,50 @@ public class FacilityAreasTests
         Assert.Equal(world.Works.Sites.Count, areas.Count);
         for (int a = 0; a < areas.Count; a++)
         {
-            if (world.Works.Sites[a].Major || FacilityAreas.MajorKinds.Contains(world.Works.Sites[a].Kind))
+            if (world.Works.Sites[a].Major)
                 Assert.True(areas.CellsOf(a).Count > 0, $"{world.Works.Sites[a].Name} has no area");
             Assert.All(areas.CellsOf(a), c => Assert.Equal(a, areas.AreaOf(c)));
         }
         Assert.Same(areas, world.Areas()); // kept on the island
+    }
+
+    [Theory]
+    [MemberData(nameof(CaseNames))]
+    public void EveryFootprint_IsItsFacilitys_AndTheRaptorPenHoldsItsRadius(string island)
+    {
+        IslandWorld world = TestIslands.World(island);
+        FacilityAreas areas = world.Areas();
+        IslandShape s = world.Shape;
+        IReadOnlyList<Site> sites = world.Works.Sites;
+        int pen = Enumerable.Range(0, sites.Count).Single(a => sites[a].Kind == "raptors");
+        double r = FacilityAreas.MinRadiusM["raptors"];
+        int held = 0;
+        for (int i = 0; i < s.N; i++)
+        {
+            if (s.Land[i] == 0)
+                continue;
+            double x = s.CellX(i), y = s.CellY(i);
+            int owner = -1;
+            double best = double.PositiveInfinity;
+            for (int a = 0; a < sites.Count; a++)
+            {
+                double dx = sites[a].X - x, dy = sites[a].Y - y;
+                if (Math.Max(Math.Abs(dx), Math.Abs(dy)) <= sites[a].R && dx * dx + dy * dy < best) { owner = a; best = dx * dx + dy * dy; }
+            }
+            if (owner >= 0)
+            {
+                Assert.True(areas.AreaOf(i) == owner, $"cell {i} in {sites[owner].Name}'s footprint belongs to {sites[areas.AreaOf(i)].Name}");
+                continue;
+            }
+            double px = sites[pen].X - x, py = sites[pen].Y - y;
+            if (px * px + py * py <= r * r)
+            {
+                Assert.Equal(pen, areas.AreaOf(i));
+                held++;
+            }
+        }
+        Assert.True(held >= 100, $"the pen holds only {held} cells within {r} m");
+        Assert.False(sites[pen].Major); // the generator's kind, and the area's: minor, times doubled outside its radius
     }
 
     [Theory]
