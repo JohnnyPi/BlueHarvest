@@ -462,6 +462,7 @@ public sealed partial class Simulation
 
         _actors.Add(actor);
         Occupy(actor);
+        StartRoom(actor);
         _scheduler.Schedule(actor.Id, actor.NextActTick);
         actor.Scheduled = true;
         return actor;
@@ -1240,6 +1241,7 @@ public sealed partial class Simulation
 
     private void Place(Actor actor, TilePos anchor, Direction facing, bool onDeck)
     {
+        TilePos from = actor.Position;
         Vacate(actor);
         actor.Position = anchor;
         actor.Facing = facing;
@@ -1247,6 +1249,8 @@ public sealed partial class Simulation
         actor.Body = actor.Species.Body.Footprint(anchor, Compass16.Of(facing));
         Occupy(actor);
         MoveCarriedLight(actor);
+        if (anchor != from)
+            NoteRoom(actor);
     }
 
     /// <summary>Keeps a carried flashlight at its holder, pointing where they face.</summary>
@@ -1819,6 +1823,7 @@ public sealed partial class Simulation
             occupant.Position = new TilePos(occupant.Position.X + dx, occupant.Position.Y + dy);
             occupant.Body = occupant.Species.Body.Footprint(occupant.Position, Compass16.Of(occupant.Facing));
             Occupy(occupant);
+            NoteRoom(occupant);
         }
 
         foreach (int index in vehicle.LightIndices)
@@ -1993,6 +1998,7 @@ public sealed partial class Simulation
             rider.Position = LandingSpot(rider.Position);
             rider.Body = rider.Species.Body.Footprint(rider.Position, Compass16.Of(rider.Facing));
             Occupy(rider);
+            NoteRoom(rider);
             fell.Add(rider);
             int drop = Math.Max(0, fromDm - Terrain[rider.Position]);
             ActorFell?.Invoke(rider, drop);

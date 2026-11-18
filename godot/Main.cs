@@ -517,6 +517,8 @@ public partial class Main : Node2D
         _sim.UseWater(IslandWaters.For(world, Seed));
         // what was left in the rooms, ten years on: lockers, desks, fridges and what's in them
         _sim.UseItems(ItemPlan.Build(world, Seed));
+        // every named room, so the sim can say which room a tile is in and who walked into which
+        _sim.UseRooms(RoomIndex.Build(world));
         // the island's mean air temperature at sea level: the sea's (it cools 6.5 °C a kilometre up)
         _sim.SetBaseTemperature(world.Params.SeaTemp);
         TilePos start = _island.NearestStandable(_island.ToLocal(Island.IslandLaunch.X, Island.IslandLaunch.Y));

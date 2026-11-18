@@ -47,22 +47,7 @@ public static class PowerPlan
 
     private static readonly string[] BatteryRooms = ["UPS and batteries", "Battery room"];
 
-    /// <summary>
-    /// Rooms behind security doors: maglocks that hold while the facility has power. None of them
-    /// holds power equipment, so the switch panel that releases the locks can always be reached.
-    /// </summary>
-    private static readonly HashSet<string> SecureRooms =
-    [
-        "Server hall", "Data centre", "Cryo vault", "Armoury", "Security office", "Security", "Sequencing lab", "Embryology lab",
-        "Fertilisation lab", "Clean room", "Genetics lab", "Specimen store", "Records", "Health physics",
-        "Fuel pool", "Cask store", "Accumulator chamber", "Holding cell 1", "Holding cell 2", "Holding cell 3", "Holding cell 4", "Animal holding",
-    ];
-
-    /// <summary>Secure rooms whose doors want a level 3 keycard: vaults, the armoury, records and the reactor's fuel stores. The rest want level 2.</summary>
-    private static readonly HashSet<string> Level3Rooms = ["Cryo vault", "Armoury", "Records", "Fuel pool", "Cask store", "Accumulator chamber"];
-
-    /// <summary>Rooms whose doors are motorised: elevators, airlocks, and the big doors of vehicle bays and cargo halls.</summary>
-    private static readonly HashSet<string> MotorRooms = ["Elevator", "Airlock", "Vehicle bays", "Hangar floor", "Boat bays", "Cargo hall"];
+    // Which rooms have security or motorised doors, and at what keycard level, is in RoomRules.
 
     /// <summary>Kinds whose generator matters most: they get two ways back to power of their own.</summary>
     private static readonly HashSet<string> Majors = ["genetics", "control", "nuclear", "geothermal", "lab", "depot", "docks", "airstrip"];
@@ -342,13 +327,13 @@ public static class PowerPlan
         foreach ((int x, int y) in building.Doors)
         {
             var touching = rooms.Where(t => x >= t.X0 && x <= t.X1 && y >= t.Y0 && y <= t.Y1).Select(t => t.Name).ToList();
-            string? secure = touching.FirstOrDefault(SecureRooms.Contains);
+            string? secure = touching.FirstOrDefault(RoomRules.SecureRooms.Contains);
             if (secure is not null)
             {
-                grid.AddDoor(siteId, x, y, DoorKind.SecurityLock, secure, Level3Rooms.Contains(secure) ? 3 : 2);
+                grid.AddDoor(siteId, x, y, DoorKind.SecurityLock, secure, RoomRules.Level3Rooms.Contains(secure) ? 3 : 2);
                 continue;
             }
-            string? motor = touching.FirstOrDefault(MotorRooms.Contains);
+            string? motor = touching.FirstOrDefault(RoomRules.MotorRooms.Contains);
             if (motor is not null)
                 grid.AddDoor(siteId, x, y, DoorKind.Motor, motor);
         }
