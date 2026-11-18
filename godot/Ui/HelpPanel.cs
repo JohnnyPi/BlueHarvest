@@ -12,6 +12,8 @@ public partial class HelpPanel : PanelContainer
         "[color=#e9b04c]Wait[/color]            .  numpad 5  Space\n" +
         "[color=#e9b04c]Wait for light[/color]  z  until dawn or dusk (any key or click stops)\n" +
         "[color=#e9b04c]Inventory[/color]       I: click an item to use, switch on, combine, bag or drop it\n" +
+        "[color=#e9b04c]Island map[/color]      M: where you've been, what you've seen, found and charted\n" +
+        "                (no time passes while it's open; M or Esc closes it)\n" +
         "[color=#e9b04c]Lights[/color]          headlamp and lantern (batteries), glow sticks (throw them), a torch (light it)\n" +
         "[color=#e9b04c]Sleep[/color]           Shift+Z, or right-click yourself: until rested or woken\n" +
         "[color=#e9b04c]Needs[/color]           eat, drink, sleep; painkillers dull pain; sprinting costs breath\n" +

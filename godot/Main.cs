@@ -175,7 +175,7 @@ public partial class Main : Node2D
         }
 
         // WASD pans the view. Not while a key mode is waiting for letters (o then s means "stay").
-        if (_mode == InputMode.Normal && !_menu.Visible)
+        if (_mode == InputMode.Normal && !_menu.Visible && !_islandMap.Visible)
         {
             var direction = Vector2.Zero;
             if (Input.IsPhysicalKeyPressed(Key.W))
@@ -240,6 +240,13 @@ public partial class Main : Node2D
             GetTree().ChangeSceneToFile(Island.FrontMenu.MenuScene);
             return;
         }
+        // While the island map is open every key is the map's (M or Esc closes it), so no time passes.
+        if (_islandMap.Visible)
+        {
+            viewport.SetInputAsHandled();
+            _islandMap.HandleKey(key);
+            return;
+        }
         if (!key.Echo && key.Keycode == Key.F9)
         {
             viewport.SetInputAsHandled();
@@ -263,6 +270,12 @@ public partial class Main : Node2D
         {
             viewport.SetInputAsHandled();
             ToggleInventory();
+            return;
+        }
+        if (!key.Echo && _mode == InputMode.Normal && key.Keycode == Key.M && !_menu.Visible)
+        {
+            viewport.SetInputAsHandled();
+            OpenIslandMap();
             return;
         }
         if (!key.Echo && _debug.TryHotkey(key.Keycode))

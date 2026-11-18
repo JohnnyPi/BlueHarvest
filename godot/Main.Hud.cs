@@ -25,6 +25,7 @@ public partial class Main
     private LogPanel? _log;
     private DebugPanel _debug = null!;
     private HelpPanel _help = null!;
+    private IslandMapScreen _islandMap = null!;
     private TileTooltip _tooltip = null!;
     private ActionMenu _menu = null!;
     private PanelContainer _promptBox = null!;
@@ -113,12 +114,18 @@ public partial class Main
             SkipToTime(index);
             Refresh(snapCamera: false);
         };
+        _debug.ParkMapWanted += GiveParkMapHere;
         root.AddChild(_debug);
 
         _help = new HelpPanel();
         root.AddChild(_help);
 
         BuildInventoryPanel(root);
+
+        // the island map (M) covers the whole screen, the sidebar and the log too
+        _islandMap = new IslandMapScreen();
+        _islandMap.Bind(font);
+        root.AddChild(_islandMap);
 
         _tooltip = new TileTooltip();
         root.AddChild(_tooltip);
@@ -129,6 +136,45 @@ public partial class Main
         foreach (string line in _pendingLog)
             Say(line);
         _pendingLog.Clear();
+    }
+
+    /// <summary>M: the survivor's map of the island (step 25b-3). Only on the island; the testbed has none.</summary>
+    private void OpenIslandMap()
+    {
+        if (_island is null || _playerActor.IsGone || _sim.Knowledge(_playerActor) is not { } known)
+        {
+            Say("There's no island map here: this is the testbed, not the island.");
+            return;
+        }
+        var world = _island.World;
+        var (x, y) = _sim.ToIsland(_playerActor.Position);
+        float cell = (float)world.Shape.Cell;
+        _tooltip.Visible = false;
+        _islandMap.Open(world, known, new Vector2((x + 0.5f) / cell, (y + 0.5f) / cell));
+    }
+
+    /// <summary>Debug (P): a park map of the sheet you stand in, laid at your feet and picked up (a turn).</summary>
+    private void GiveParkMapHere()
+    {
+        if (_island is null || _playerActor.IsGone)
+        {
+            Say("Debug: park maps are for the island.", quiet: true);
+            return;
+        }
+        var world = _island.World;
+        var (x, y) = _sim.ToIsland(_playerActor.Position);
+        BlueHarvest.Sim.World.Generation.FacilityAreas areas = world.Areas();
+        int cell = areas.CellAt(x, y), area = areas.AreaOf(cell);
+        if (area < 0)
+        {
+            Say("Debug: you're not on the land, so there's no sheet here.", quiet: true);
+            return;
+        }
+        int sheet = areas.SheetOf(cell);
+        Item map = _sim.CreateItem(ItemKind.ParkMap, tag: BlueHarvest.Sim.World.Generation.ParkMaps.Tag(area, sheet));
+        _sim.PlaceItem(map, _playerActor.Position, _playerActor.OnDeck);
+        Say($"Debug: a park map of sheet {sheet + 1} of {BlueHarvest.Sim.World.Generation.FacilityAreas.SheetCount} round {world.Works.Sites[area].Name}.", quiet: true);
+        Submit(new PickUpAction(map.Id));
     }
 
     /// <summary>Adds a line to the log, stamped with the game clock. A quiet line stays muted (where you are, say).</summary>

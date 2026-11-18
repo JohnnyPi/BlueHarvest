@@ -56,6 +56,7 @@ public partial class IslandExplorer : Node2D
     private static readonly (string Name, MapLayer Layer)[] Layers =
     {
         ("Biomes", MapLayer.Biomes), ("Height", MapLayer.Height), ("Rainfall", MapLayer.Rain), ("Regions", MapLayer.Regions),
+        ("Facility areas", MapLayer.Areas),
     };
 
     private bool DebugOn => _debug.ButtonPressed;
@@ -418,6 +419,11 @@ public partial class IslandExplorer : Node2D
             lines.Add($"{Legend.Regions[c.Regions[i]].Name}");
             lines.Add($"{s.Rain[i]:0} mm rain, {c.Temperature[i]:0.0} °C, slope {c.SlopeDeg[i]:0}°");
             if (_world.Works.PaddockCell[i] >= 0) lines.Add(_world.Works.Paddocks[_world.Works.PaddockCell[i]].Name);
+            FacilityAreas areas = _world.Areas();
+            int area = areas.AreaOf(i);
+            if (area >= 0)
+                lines.Add($"Area of {HudTheme.Escape(_world.Works.Sites[area].Name)}, park-map sheet {areas.SheetOf(i) + 1} of {FacilityAreas.SheetCount}"
+                    + (areas.SheetOf(i) == areas.FacilitySheet(area) ? " (the facility's own)" : ""));
         }
         if (_tiles.Visible)
         {

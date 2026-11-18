@@ -9,7 +9,8 @@ namespace BlueHarvest.Game.Ui;
 /// <summary>
 /// Everything that isn't the game: the map overlays, the omniscient creature, the weather presets and a
 /// readout of the numbers behind the HUD. F9 opens it; while it's open, 1-8 toggle the overlays and
-/// G the omniscient creature, [ and ] pick which creature the creature views follow.
+/// G the omniscient creature, [ and ] pick which creature the creature views follow, and P hands you a
+/// park map of the sheet you're standing in (on the island).
 /// </summary>
 public partial class DebugPanel : PanelContainer
 {
@@ -35,6 +36,9 @@ public partial class DebugPanel : PanelContainer
 
     /// <summary>A time of day was picked, by index.</summary>
     public event Action<int>? TimeChosen;
+
+    /// <summary>P: give the player a park map of the sheet they're standing in.</summary>
+    public event Action? ParkMapWanted;
 
     public DebugPanel()
     {
@@ -124,11 +128,16 @@ public partial class DebugPanel : PanelContainer
         weatherRow.AddChild(_time);
         column.AddChild(weatherRow);
 
+        Button parkMap = HudTheme.PlainButton("P  Park map of this sheet");
+        parkMap.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
+        parkMap.Pressed += () => ParkMapWanted?.Invoke();
+        column.AddChild(parkMap);
+
         _readout = HudTheme.Rich(HudTheme.SmallSize);
         column.AddChild(_readout);
     }
 
-    /// <summary>Handles 1-8, G, [ and ] while the panel is open. True if the key was one of them.</summary>
+    /// <summary>Handles 1-8, G, P, [ and ] while the panel is open. True if the key was one of them.</summary>
     public bool TryHotkey(Key key)
     {
         if (!Visible || key == Key.None)
@@ -141,6 +150,11 @@ public partial class DebugPanel : PanelContainer
         if (key == Key.G)
         {
             _hunt.ButtonPressed = !_hunt.ButtonPressed; // raises Toggled
+            return true;
+        }
+        if (key == Key.P)
+        {
+            ParkMapWanted?.Invoke();
             return true;
         }
         foreach (var toggle in _toggles)

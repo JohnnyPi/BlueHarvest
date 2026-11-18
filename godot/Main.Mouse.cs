@@ -157,7 +157,7 @@ public partial class Main
     private bool OverPanel(Vector2 point)
     {
         bool Hit(Control? c) => c is not null && c.Visible && c.GetGlobalRect().HasPoint(point);
-        return _menu.Visible || Hit(_log) || Hit(_debug) || Hit(_help) || Hit(_promptBox);
+        return _menu.Visible || Hit(_log) || Hit(_debug) || Hit(_help) || Hit(_promptBox) || Hit(_islandMap);
     }
 
     private void UpdatePathPreview(TilePos? tile)
