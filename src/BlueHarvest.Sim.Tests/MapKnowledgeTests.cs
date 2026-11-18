@@ -1,5 +1,6 @@
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Core;
+using BlueHarvest.Sim.Navigation;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Sim.World.Generation;
 using Xunit;
@@ -348,32 +349,107 @@ public class MapKnowledgeTests
         Assert.Equal(new[] { site }, sites); // found once, when knowledge began; walking about inside adds nothing
     }
 
+    /// <summary>One position of a scripted walk: where the walker stood after an action, and the clock either side of it.</summary>
+    private readonly record struct WalkStep(TilePos At, long Before, long After);
+
     /// <summary>
-    /// Print mode for 25b-3's pins: a survivor walks 150 steps east from the Default island's genetics
-    /// complex at noon, and the rows below go to the test output (run with the detailed logger).
+    /// A survivor walks 350 m south from the Default island's control centre gate, across open grassland,
+    /// with map knowledge on. Every move is recorded. Returns what the simulation knows at the end and the
+    /// positions walked (the first is the start, before any move).
     /// </summary>
-    [Fact]
-    public void Print_AScriptedWalkOnTheDefaultIsland()
+    private (MapKnowledge Known, List<WalkStep> Steps, Simulation Sim) WalkFromTheControlCentre(int hour)
     {
         IslandWorld world = TestIslands.World("Default");
-        Site genetics = world.Works.Sites.First(t => t.Kind == "genetics");
-        var window = new IslandWindow(world, TestIslands.Chunker("Default"), genetics.X, genetics.Y, 6);
+        Site control = world.Works.Sites.First(t => t.Kind == "control");
+        Assert.Equal('s', control.Gate); // the walk goes out of the gate, away from the buildings
+        double gateY = control.Y + control.R;
+        var window = new IslandWindow(world, TestIslands.Chunker("Default"), control.X, gateY + 175, 9);
         var sim = new Simulation(window.Map, seed: 5);
-        sim.SetTimeOfDay(12);
-        sim.UsePower(PowerPlan.Build(world, runSeed: 1), window.OriginX, window.OriginY);
+        sim.SetTimeOfDay(hour);
         sim.UseRooms(RoomIndex.Build(world));
-        TilePos start = window.NearestStandable(window.ToLocal(genetics.X, genetics.Y));
-        var script = Enumerable.Repeat<ActorAction>(new MoveAction(Direction.East), 150).ToArray();
-        Actor walker = sim.AddActor("Walker", 'w', start, Species.Human, new ScriptedController(script));
-        MapKnowledge k = sim.UseMapKnowledge(walker, world);
-        sim.RunUntil(sim.CurrentTick + 600 * Ticks.PerSecond);
-        var (ix, iy) = sim.ToIsland(walker.Position);
-        var hs = new GenHasher().I(k.SeenCount);
-        foreach (int c in k.SeenCells())
-            hs.I(c);
-        _output.WriteLine("// 25b-1 print mode: Default island, 150 steps east from the genetics complex at noon");
-        _output.WriteLine($"walked to ({ix}, {iy}); seen {k.SeenCount} cells, hash 0x{hs.Value:X16}UL; trail {k.Trail.Count}; " +
-                          $"features {k.Features.Count}; sites {string.Join(",", k.Sites)}; rooms {k.Rooms.Count}");
-        Assert.True(k.SeenCount > 0);
+        var drive = new PlayerController();
+        TilePos start = window.NearestStandable(window.ToLocal(control.X, gateY + 6));
+        Actor walker = sim.AddActor("Walker", 'w', start, Species.Human, drive, Direction.South);
+        long t0 = sim.CurrentTick;
+        MapKnowledge k = sim.UseMapKnowledge(walker, world, Features["Default"].Value);
+        sim.RunUntilInputNeeded();
+        var steps = new List<WalkStep> { new(walker.Position, t0, sim.CurrentTick) };
+
+        TilePos goal = window.NearestStandable(window.ToLocal(control.X, gateY + 356));
+        IReadOnlyList<Direction>? path = Pathfinder.FindPath(sim, walker, goal, tolerance: 3, maxNodes: 300_000);
+        Assert.NotNull(path);
+        Assert.True(path.Count >= 300, $"a {path.Count}-move path");
+        foreach (Direction move in path)
+        {
+            long before = sim.CurrentTick;
+            drive.Pending = new MoveAction(move);
+            sim.RunUntilInputNeeded();
+            steps.Add(new WalkStep(walker.Position, before, sim.CurrentTick));
+        }
+        return (k, steps, sim);
+    }
+
+    /// <summary>
+    /// The simulation's side of map knowledge: after every action the survivor looks from where they now
+    /// stand, with the range for that spot and the time of day, and the map they end with is exactly what
+    /// MapSight gives for the same spots looked at in the same order. (MapSight itself is checked against
+    /// the island lab above.) By day on open ground they see far more than by night.
+    /// </summary>
+    [Fact]
+    public void TheSimulationKeepsTheMap_JustAsMapSightDoes_ByDayAndByNight()
+    {
+        IslandWorld world = TestIslands.World("Default");
+        FeatureIndex f = Features["Default"].Value;
+        var seen = new Dictionary<int, int>();
+        foreach (int hour in new[] { 12, 0 })
+        {
+            var (k, steps, sim) = WalkFromTheControlCentre(hour);
+            bool day = hour == 12;
+            Assert.Equal(day, sim.AmbientLightPercent >= Simulation.DaylightPercent);
+
+            // the same looks, made by hand on an empty map
+            var replay = Empty(world);
+            var stepOfTrail = new List<int>();
+            var rooms = new HashSet<int>();
+            int roomWas = sim.RoomAt(steps[0].At)?.Id ?? -1;
+            for (int i = 0; i < steps.Count; i++)
+            {
+                var (ix, iy) = sim.ToIsland(steps[i].At);
+                double x = ix + 0.5, y = iy + 0.5;
+                int trailWas = replay.Trail.Count;
+                MapSight.See(replay, world, f, x, y, MapSight.Range(world, x, y, day, sim.Map.IsIndoor(steps[i].At)), steps[i].After);
+                if (replay.Trail.Count > trailWas)
+                    stepOfTrail.Add(i);
+                int roomNow = sim.RoomAt(steps[i].At)?.Id ?? -1;
+                if (i > 0 && roomNow != roomWas && roomNow >= 0)
+                    rooms.Add(roomNow);
+                roomWas = roomNow;
+            }
+
+            Assert.Equal(replay.SeenCells(), k.SeenCells());
+            Assert.Equal(replay.Trail.Select(p => p.Cell), k.Trail.Select(p => p.Cell));
+            Assert.Equal(replay.Features.Select(q => (q.Kind, q.Id, q.How)).OrderBy(q => q), k.Features.Select(q => (q.Kind, q.Id, q.How)).OrderBy(q => q));
+            Assert.Equal(replay.Sites.OrderBy(n => n), k.Sites.OrderBy(n => n));
+            Assert.Equal(rooms.OrderBy(n => n), k.Rooms.OrderBy(n => n));
+
+            // each trail step is stamped during the move that first stood in its cell
+            for (int t = 0; t < k.Trail.Count; t++)
+            {
+                WalkStep at = steps[stepOfTrail[t]];
+                Assert.InRange(k.Trail[t].Tick, at.Before, at.After);
+            }
+
+            // the walk went somewhere, one cell at a time, and everywhere it went was seen
+            Assert.True(k.Trail.Count >= 3, $"{k.Trail.Count} trail steps");
+            for (int t = 1; t < k.Trail.Count; t++)
+            {
+                int a = k.Trail[t - 1].Cell, b = k.Trail[t].Cell;
+                Assert.True(Math.Max(Math.Abs(a % k.Nx - b % k.Nx), Math.Abs(a / k.Nx - b / k.Nx)) <= 1, $"trail jumps from {a} to {b}");
+            }
+            Assert.All(k.Trail, p => Assert.True(k.HasSeen(p.Cell)));
+            seen[hour] = k.SeenCount;
+            _output.WriteLine($"{(day ? "noon" : "midnight")}: {steps.Count - 1} moves, {k.Trail.Count} trail steps, {k.SeenCount} cells seen");
+        }
+        Assert.True(seen[12] > seen[0], $"seen {seen[12]} cells by day, {seen[0]} by night");
     }
 }
