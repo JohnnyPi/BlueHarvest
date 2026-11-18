@@ -194,7 +194,7 @@ public class RoomIndexTests
 
     private const string Island = "SmallNoCliffs";
 
-    private static (Simulation Sim, IslandWorld World, RoomIndex Index, int Site) AtGenetics(bool rooms = true)
+    internal static (Simulation Sim, IslandWorld World, RoomIndex Index, int Site) AtGenetics(bool rooms = true)
     {
         IslandWorld world = TestIslands.World(Island);
         Site genetics = world.Works.Sites.First(t => t.Kind == "genetics");
@@ -240,7 +240,7 @@ public class RoomIndexTests
     /// An ordinary room of the facility with a door you can walk through from outside every room:
     /// the tile outside the door, and the way in.
     /// </summary>
-    private static (IndexedRoom Room, TilePos Outside, Direction In) DoorIn(Simulation sim, IslandWorld world, RoomIndex index, int site)
+    internal static (IndexedRoom Room, TilePos Outside, Direction In) DoorIn(Simulation sim, IslandWorld world, RoomIndex index, int site)
     {
         foreach (Prim b in world.Works.Prims.InOrder())
         {
@@ -269,7 +269,7 @@ public class RoomIndexTests
         throw new InvalidOperationException("No ordinary door found into a room of the genetics complex.");
     }
 
-    private static Direction Back(Direction d) => (Direction)(((int)d + 4) % 8);
+    internal static Direction Back(Direction d) => (Direction)(((int)d + 4) % 8);
 
     [Fact]
     public void WalkingIntoARoom_EntersItOnce_AndWalkingOut_LeavesItOnce()

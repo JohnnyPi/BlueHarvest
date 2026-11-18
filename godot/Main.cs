@@ -522,7 +522,9 @@ public partial class Main : Node2D
         // the island's mean air temperature at sea level: the sea's (it cools 6.5 °C a kilometre up)
         _sim.SetBaseTemperature(world.Params.SeaTemp);
         TilePos start = _island.NearestStandable(_island.ToLocal(Island.IslandLaunch.X, Island.IslandLaunch.Y));
-        _sim.AddActor("Survivor", '@', start, Species.Human, _player, loadout: Loadout.TestbedSurvivor);
+        Actor survivor = _sim.AddActor("Survivor", '@', start, Species.Human, _player, loadout: Loadout.TestbedSurvivor);
+        // the survivor's own island map, filled in as they explore (shown with M from step 25b-3)
+        _sim.UseMapKnowledge(survivor, world);
         Say($"Island {world.Params.Seed}. You are on foot; the map follows you. F10 for the menu.");
     }
 

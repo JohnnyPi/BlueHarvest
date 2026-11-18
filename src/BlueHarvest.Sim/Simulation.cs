@@ -1110,6 +1110,7 @@ public sealed partial class Simulation
         _scheduler.TryDequeue(out _, out _);
         actor.Charging = false; // only a charging step sets it again
         int cost = Resolve(actor, action);
+        UpdateKnowledge(actor); // what the survivor sees across the island from where they are now
         SyncItemLights(); // lights carried, set down, thrown, run down or burnt out
         if (!actor.IsLarge && !actor.IsGone && !actor.OnDeck && ExitAt(actor.Position) is { } exit)
             Escape(actor, exit);
@@ -1208,6 +1209,7 @@ public sealed partial class Simulation
         hasher.Add(FenceBreachTick ?? -1);
         AddItemsTo(hasher);
         AddNeedsTo(hasher);
+        AddKnowledgeTo(hasher);
         hasher.Add(_scent.Count).Add(_vibrations.Count);
         if (_scent.Count > 0)
             hasher.Add(_scent[^1].Tick).Add(_scent[^1].Position.X).Add(_scent[^1].Position.Y);

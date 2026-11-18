@@ -70,7 +70,10 @@ public sealed partial class Simulation
         if (was >= 0)
             ActorLeftRoom?.Invoke(actor, _rooms.Rooms[was]);
         if (now is not null)
+        {
+            NoteRoomKnown(actor, now);
             ActorEnteredRoom?.Invoke(actor, now);
+        }
     }
 
     /// <summary>When an actor is added: where it starts, so its first move can tell whether it changed rooms.</summary>
