@@ -47,6 +47,16 @@ public sealed class IslandChunker
     /// <summary>The works of a bin where people built nothing but buildings, if anything.</summary>
     private static readonly List<Item> NoWorks = [];
 
+    /// <summary>
+    /// Every building stands on level ground: inside a compound on the compound's own level, elsewhere on
+    /// a pad at the ground's height under its middle, kept flat <see cref="PadFlat"/> m round it and
+    /// blended back into the terrain over <see cref="PadApron"/> m.
+    /// </summary>
+    private const int PadFlat = 2, PadApron = 10;
+
+    /// <summary>Each building's pad: its floor height, and whether the ground round it is blended to it (not inside a compound).</summary>
+    private readonly Dictionary<Prim, (double Height, bool Apron)> _pads = new(ReferenceEqualityComparer.Instance);
+
     // ground cover inside each biome, from open to closed ground, as (cover, cumulative share)
     private static readonly (Cover C, double Upto)[][] Mix = BuildMix();
 
@@ -170,6 +180,26 @@ public sealed class IslandChunker
 
     private static long Floor(double v) => (long)Math.Floor(v);
 
+    /// <summary>A building's floor height: a compound's own level if it stands inside one, else the ground under its middle (as the chunk makes it before the works), pulled toward any compound nearby.</summary>
+    private (double Height, bool Apron) BuildingPad(IslandWorks w, Prim q)
+    {
+        foreach (Site t in w.Sites)
+        {
+            if (Math.Max(Math.Max(Math.Abs(q.X0 - t.X), Math.Abs(q.X1 - t.X)), Math.Max(Math.Abs(q.Y0 - t.Y), Math.Abs(q.Y1 - t.Y))) <= t.R + 2)
+                return (t.H, false);
+        }
+        double x = Math.Floor((q.X0 + q.X1) / 2.0) + 0.5, y = Math.Floor((q.Y0 + q.Y1) / 2.0) + 0.5, gx = x / _cell - 0.5, gy = y / _cell - 0.5;
+        double z = Bicubic(_height, _nx, _ny, gx, gy);
+        double det = 1.3 * GenNoise.Fbm(_nTile, x / 32, y / 32, 3) + 0.35 * GenNoise.Noise(_nFine, x / 5, y / 5);
+        z += z > 0 ? det : det * 0.3;
+        foreach (Site t in w.Sites)
+        {
+            double dch = Math.Max(Math.Abs(x - t.X), Math.Abs(y - t.Y));
+            if (dch < t.R + 30) z = z + (t.H - z) * (dch <= t.R + 2 ? 1 : 1 - (dch - t.R - 2) / 28);
+        }
+        return (Math.Max(z, 0.6), true);
+    }
+
     private void IndexRivers()
     {
         for (int ri = 0; ri < _riverXs.Length; ri++)
@@ -285,6 +315,14 @@ public sealed class IslandChunker
                 case PrimKind.Circle: PPut(q.X - q.R - 1, q.Y - q.R - 1, q.X + q.R + 1, q.Y + q.R + 1, q); break;
                 case PrimKind.Tower: PPut(q.X - 2, q.Y - 2, q.X + 2, q.Y + 2, q); break;
                 case PrimKind.Line: PPut(Math.Min(q.Ax, q.Bx) - q.W, Math.Min(q.Ay, q.By) - q.W, Math.Max(q.Ax, q.Bx) + q.W, Math.Max(q.Ay, q.By) + q.W, q); break;
+                case PrimKind.Building:
+                {
+                    (double Height, bool Apron) pad = BuildingPad(w, q);
+                    _pads[q] = pad;
+                    int margin = pad.Apron ? PadFlat + PadApron + 1 : 1;
+                    PPut(q.X0 - margin, q.Y0 - margin, q.X1 + margin, q.Y1 + margin, q);
+                    break;
+                }
                 default: PPut(q.X0 - 1, q.Y0 - 1, q.X1 + 1, q.Y1 + 1, q); break;
             }
         }
@@ -380,6 +418,7 @@ public sealed class IslandChunker
         var flowX = new sbyte[m2 * m2];
         var flowY = new sbyte[m2 * m2];
         var kind = new sbyte[m2 * m2]; // 0 land, 1 sea, 2 river, 3 lake
+        var levelled = new byte[m2 * m2]; // a building's tiles: never cut into terraces
         var riverOf = new short[m2 * m2];
         var riverLevel = new float[m2 * m2];
         Array.Fill(riverOf, (short)-1);
@@ -453,7 +492,7 @@ public sealed class IslandChunker
                 // ---- the works: what people built (and caves, wrecks, ruins) ----
                 // buildings are drawn even where nothing else people built is near (a lone station on a ridge)
                 List<Item> items = _bins.TryGetValue(Floor(x / Bin) * 4096 + Floor(y / Bin), out List<Item>? found) ? found : NoWorks;
-                z = Works(items, k, x, y, z, kind, water, mark, lab);
+                z = Works(items, k, x, y, z, kind, water, mark, lab, levelled);
                 h[k] = (float)z;
             }
         }
@@ -489,7 +528,11 @@ public sealed class IslandChunker
                 double lavaV = GenGrid.Bilinear(s.Lava, nx, ny, gx, gy) + 0.2 * GenNoise.Fbm(_nCover, x / 40, y / 40, 2);
                 double paliV = GenGrid.Bilinear(s.PaliCut, nx, ny, gx, gy);
                 int ledge = -1; // on the pali: 1 = a ledge, 0 = a rock face
-                if (kind[k] == 0 && paliV > 0.3 && sl > 0.6)
+                if (levelled[k] != 0)
+                {
+                    // a building's floor stays level
+                }
+                else if (kind[k] == 0 && paliV > 0.3 && sl > 0.6)
                 {
                     // the pali: 6 m rock steps with narrow ledges
                     const double step6 = 6;
@@ -559,7 +602,7 @@ public sealed class IslandChunker
     }
 
     /// <summary>Applies the works to one tile; returns the tile's new height.</summary>
-    private double Works(List<Item> items, int k, double x, double y, double z, sbyte[] kind, float[] water, byte[] mark, short[] lab)
+    private double Works(List<Item> items, int k, double x, double y, double z, sbyte[] kind, float[] water, byte[] mark, short[] lab, byte[] levelled)
     {
         double bestW = 1e9, wT = 0;
         Way? wR = null;
@@ -590,12 +633,14 @@ public sealed class IslandChunker
                 }
             }
         }
+        bool onPad = false; // on a compound's level ground, which a building's apron leaves alone
         foreach (Item it in items)
         {
             if (it.Kind == ItemKind.Site)
             {
                 Site t = it.Site!;
                 double dx = x - t.X, dy = y - t.Y, dch = Math.Max(Math.Abs(dx), Math.Abs(dy));
+                if (dch <= t.R + 2) onPad = true;
                 if (dch < t.R + 30)
                 {
                     double wgt = dch <= t.R + 2 ? 1 : 1 - (dch - t.R - 2) / 28;
@@ -641,8 +686,18 @@ public sealed class IslandChunker
                 {
                     case PrimKind.Building:
                     {
-                        if (ix < q.X0 || ix > q.X1 || iy < q.Y0 || iy > q.Y1) continue;
-                        kind[k] = 0; water[k] = float.NaN;
+                        (double padZ, bool apron) = _pads[q];
+                        if (ix < q.X0 || ix > q.X1 || iy < q.Y0 || iy > q.Y1)
+                        {
+                            if (apron && !built && !onPad && kind[k] == 0)
+                            {
+                                int d = Math.Max(Math.Max(q.X0 - ix, ix - q.X1), Math.Max(q.Y0 - iy, iy - q.Y1));
+                                if (d <= PadFlat) z = padZ;
+                                else if (d < PadFlat + PadApron) z = padZ + (z - padZ) * GenMath.SmoothStep(0, 1, (d - PadFlat) / (double)PadApron);
+                            }
+                            continue;
+                        }
+                        z = padZ; kind[k] = 0; water[k] = float.NaN; levelled[k] = 1;
                         byte m = MkFloor;
                         int lb = q.Label;
                         if (ix == q.X0 || ix == q.X1 || iy == q.Y0 || iy == q.Y1) m = MkWall;

@@ -2160,6 +2160,23 @@ var IslandGen = (function () {
 
   // Spatial index of everything people built (and caves, wrecks, ruins), in 256 m bins.
   const NO_WORKS = [];
+  // every building stands on level ground: inside a compound on the compound's own level, elsewhere on a pad
+  // at the ground's height under its middle, kept flat PAD_FLAT m round it and blended out over PAD_APRON m
+  const PAD_FLAT = 2, PAD_APRON = 10;
+  function buildingPad(world, q) {
+    for (const t of world.works.sites)
+      if (Math.max(Math.abs(q.x0 - t.x), Math.abs(q.x1 - t.x), Math.abs(q.y0 - t.y), Math.abs(q.y1 - t.y)) <= t.r + 2) return { h: t.h, apron: false };
+    const { nx, ny, cell } = world, nz = world.noise;
+    const x = Math.floor((q.x0 + q.x1) / 2) + 0.5, y = Math.floor((q.y0 + q.y1) / 2) + 0.5, gx = x / cell - 0.5, gy = y / cell - 0.5;
+    let z = bicubic(world.height, nx, ny, gx, gy);
+    const det = 1.3 * fbm(nz.tile, x / 32, y / 32, 3) + 0.35 * noise(nz.fine, x / 5, y / 5);
+    z += z > 0 ? det : det * 0.3;
+    for (const t of world.works.sites) {
+      const dch = Math.max(Math.abs(x - t.x), Math.abs(y - t.y));
+      if (dch < t.r + 30) z = z + (t.h - z) * (dch <= t.r + 2 ? 1 : 1 - (dch - t.r - 2) / 28);
+    }
+    return { h: Math.max(z, 0.6), apron: true };
+  }
   function indexWorks(world) {
     const W = world.works, bins = new Map(), put = (x0, y0, x1, y1, item) => {
       for (let by = Math.floor(y0 / BIN); by <= Math.floor(y1 / BIN); by++)
@@ -2194,6 +2211,7 @@ var IslandGen = (function () {
       if (q.t === 'circle') put(q.x - q.r - 1, q.y - q.r - 1, q.x + q.r + 1, q.y + q.r + 1, it);
       else if (q.t === 'tower') put(q.x - 2, q.y - 2, q.x + 2, q.y + 2, it);
       else if (q.t === 'line') seg(q.ax, q.ay, q.bx, q.by, q.w, it);
+      else if (q.t === 'bld') { const pad = buildingPad(world, q), m = pad.apron ? PAD_FLAT + PAD_APRON + 1 : 1; it.pad = pad.h; it.apron = pad.apron; put(q.x0 - m, q.y0 - m, q.x1 + m, q.y1 + m, it); }
       else put(q.x0 - 1, q.y0 - 1, q.x1 + 1, q.y1 + 1, it);
     }
     bins.prims = pbins;
@@ -2217,6 +2235,7 @@ var IslandGen = (function () {
     const { nx, ny, cell } = world, M = size + 2, x0 = ccx * CHUNK - 1, y0 = ccy * CHUNK - 1;
     const h = new Float32Array(M * M), water = new Float32Array(M * M).fill(NaN), riverD = new Float32Array(M * M).fill(1e9);
     const kind = new Int8Array(M * M); // 0 land, 1 sea, 2 river, 3 lake
+    const levelled = new Uint8Array(M * M); // a building's tiles: never cut into terraces
     const nz = world.noise, rv = {}, so = {}, mark = new Uint8Array(M * M), lab = new Int16Array(M * M).fill(-1);
     const WB = world.works ? (world._wi || (world._wi = indexWorks(world))) : null;
     for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) {
@@ -2269,9 +2288,11 @@ var IslandGen = (function () {
               else { const tt = smoothstep(0, 1, (bestW - half) / 12); z = hr + (z - hr) * tt; }
             }
           }
+          let onPad = false; // on a compound's level ground, which a building's apron leaves alone
           for (const it of L) {
             if (it.t === 'site') {
               const t = it.s, dx = x - t.x, dy = y - t.y, dch = Math.max(Math.abs(dx), Math.abs(dy));
+              if (dch <= t.r + 2) onPad = true;
               if (dch < t.r + 30) {
                 const wgt = dch <= t.r + 2 ? 1 : 1 - (dch - t.r - 2) / 28;
                 if (kind[k] !== 1 || dch <= t.r) { z = z + (t.h - z) * wgt; if (dch <= t.r) { kind[k] = 0; water[k] = NaN; } }
@@ -2295,8 +2316,15 @@ var IslandGen = (function () {
             if (it.t !== 'prim') continue;
             const q = it.p;
             if (q.t === 'bld') {
-              if (ix < q.x0 || ix > q.x1 || iy < q.y0 || iy > q.y1) continue;
-              kind[k] = 0; water[k] = NaN;
+              if (ix < q.x0 || ix > q.x1 || iy < q.y0 || iy > q.y1) {
+                if (it.apron && !built && !onPad && kind[k] === 0) {
+                  const d = Math.max(q.x0 - ix, ix - q.x1, q.y0 - iy, iy - q.y1);
+                  if (d <= PAD_FLAT) z = it.pad;
+                  else if (d < PAD_FLAT + PAD_APRON) z = it.pad + (z - it.pad) * smoothstep(0, 1, (d - PAD_FLAT) / PAD_APRON);
+                }
+                continue;
+              }
+              z = it.pad; kind[k] = 0; water[k] = NaN; levelled[k] = 1;
               let m = MK.floor, lb = q.label;
               if (ix === q.x0 || ix === q.x1 || iy === q.y0 || iy === q.y1) m = MK.wall;
               else for (const rm of q.rooms) if (ix >= rm.x0 && ix <= rm.x1 && iy >= rm.y0 && iy <= rm.y1) { lb = rm.label; if (ix === rm.x0 || ix === rm.x1 || iy === rm.y0 || iy === rm.y1) m = MK.wall; }
@@ -2378,7 +2406,8 @@ var IslandGen = (function () {
       const lavaV = bilinear(world.lava, nx, ny, gx, gy) + 0.2 * fbm(nz.cover, x / 40, y / 40, 2);
       const paliV = bilinear(world.pali, nx, ny, gx, gy);
       let ledge = -1; // on the pali: 1 = a ledge, 0 = a rock face
-      if (kind[k] === 0 && paliV > 0.3 && sl > 0.6) { // the pali: 6 m rock steps with narrow ledges
+      if (levelled[k]) { /* a building's floor stays level */ }
+      else if (kind[k] === 0 && paliV > 0.3 && sl > 0.6) { // the pali: 6 m rock steps with narrow ledges
         const S = 6, step = Math.floor(z / S) * S, f = (z - step) / S; z = step + (f < 0.3 ? 0 : (f - 0.3) / 0.7 * S);
         ledge = f < 0.3 ? 1 : 0;
       } else if (kind[k] === 0 && sl > 0.5 && lavaV < 0.55) { const step = Math.floor(z / 2) * 2, f = z - step; z = step + (f < 0.7 ? 0 : (f - 0.7) / 0.3 * 2); }

@@ -28,7 +28,7 @@ public class IslandChunkTests
             (315, 458, 0x4A79F5B8DDC193D2UL),
             (315, 457, 0x8DB3A6277A35E243UL),
             (533, 401, 0xFCC4157A7A73D4A8UL),
-            (458, 107, 0x990A5216DCA78640UL),
+            (458, 107, 0x0AC2CDD9323B14CFUL),
             (448, 160, 0xEC9CDC046A080CE9UL),
             (449, 167, 0xD3B144194B280EA7UL),
             (585, 431, 0xFDD6CE43339CF14AUL),
@@ -47,8 +47,8 @@ public class IslandChunkTests
             (493, 569, 0x1EE95B6EF7B10E7BUL),
             (527, 271, 0xDA53F7EDDE418CF1UL),
             (559, 279, 0xD91037275DE2ED40UL),
-            (451, 114, 0x00424476E313E6C4UL),
-            (562, 269, 0xFA7C4711818D154DUL),
+            (451, 114, 0x5C6038A281B2F84EUL),
+            (562, 269, 0x42790859E23E1111UL),
             (776, 485, 0xEAFA2B6F6BFE222DUL),
             (391, 221, 0x4459ECEB7594347BUL),
             (393, 75, 0x20D81CD3620781D8UL),
@@ -69,8 +69,8 @@ public class IslandChunkTests
             (791, 540, 0xD7E5EFAEE252C4B2UL),
             (791, 539, 0x366D50732BDD76EDUL),
             (469, 323, 0xB08F337897FD21EDUL),
-            (372, 90, 0xF3F2608AC37D97E8UL),
-            (331, 162, 0xC4021F9A84712A4EUL),
+            (372, 90, 0x311E19D2FF517B41UL),
+            (331, 162, 0x74F8738C04BB626CUL),
             (327, 169, 0xBAC089CCD7D72C00UL),
             (474, 305, 0x4EE7E470182EFD51UL),
             (415, 280, 0xBCC77E8C5279530EUL),
@@ -84,12 +84,12 @@ public class IslandChunkTests
             (429, 335, 0x8E3D38B210CA152BUL),
             (181, 175, 0xAA242ACDE0AA20E8UL),
             (367, 205, 0x2B14A028678A4F76UL),
-            (357, 183, 0x4D80690E0BA28F16UL),
+            (357, 183, 0x8474C1D702B026EAUL),
             (250, 382, 0x4A8B4C00E83A7079UL),
             (251, 381, 0x9A736B4163784BF3UL),
             (349, 289, 0x19640DBCB104F0FCUL),
             (416, 319, 0x0C59F2704ECD758CUL),
-            (376, 277, 0xF62A690346C1145BUL),
+            (376, 277, 0xB6468689B0C8CE41UL),
             (371, 271, 0xDD14DEE75551FF86UL),
             (255, 201, 0xF179A018DA2C49F5UL),
             (163, 177, 0x7F085D88D2A5E30CUL),
@@ -233,5 +233,47 @@ public class IslandChunkTests
         }
         Assert.True(missing.Count == 0, $"{missing.Count} of {doors} doors aren't drawn: {string.Join("; ", missing)}");
         Assert.Equal(name == "SmallNoCliffs" ? 323 : 315, doors); // from the island lab
+    }
+
+    /// <summary>
+    /// Every building stands on level ground (step 25a-4): each one's tiles, walls and doors included, are
+    /// all at one height, inside compounds and out. Buildings that overlap another are left out: on
+    /// SmallNoCliffs the monorail and summit lift stations at the Control centre share ground (polish item P1).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CaseNames))]
+    public void EveryBuilding_StandsOnLevelGround(string name)
+    {
+        IslandWorks works = TestIslands.Works(name);
+        IslandChunker chunker = TestIslands.Chunker(name);
+        var chunks = new Dictionary<(int X, int Y), IslandChunk>();
+        double HeightAt(int x, int y)
+        {
+            var key = ((int)Math.Floor(x / 64.0), (int)Math.Floor(y / 64.0));
+            if (!chunks.TryGetValue(key, out IslandChunk? c))
+                chunks[key] = c = chunker.Build(key.Item1, key.Item2);
+            return c.Height[(y - c.Y0) * c.Size + (x - c.X0)];
+        }
+        List<Prim> buildings = works.Prims.InOrder().Where(p => p.Kind == PrimKind.Building).ToList();
+        bool Overlaps(Prim a) => buildings.Any(b => b != a && a.X0 <= b.X1 && a.X1 >= b.X0 && a.Y0 <= b.Y1 && a.Y1 >= b.Y0);
+        var uneven = new List<string>();
+        int skipped = 0;
+        foreach (Prim b in buildings)
+        {
+            if (Overlaps(b)) { skipped++; continue; }
+            double lo = double.MaxValue, hi = double.MinValue;
+            for (int y = b.Y0; y <= b.Y1; y++)
+            {
+                for (int x = b.X0; x <= b.X1; x++)
+                {
+                    double h = HeightAt(x, y);
+                    lo = Math.Min(lo, h); hi = Math.Max(hi, h);
+                }
+            }
+            if (hi - lo > 0.001)
+                uneven.Add($"{works.Labels[b.Label]}: {hi - lo:0.00} m");
+        }
+        Assert.True(uneven.Count == 0, $"{uneven.Count} buildings aren't level: {string.Join("; ", uneven)}");
+        Assert.Equal(name == "SmallNoCliffs" ? 2 : 0, skipped);
     }
 }
