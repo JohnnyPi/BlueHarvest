@@ -165,7 +165,7 @@ public class RoomIndexTests
     }
 
     [Fact]
-    public void Describe_NamesThePlaceAndTheRoom_NotTheBuilding()
+    public void Describe_NamesThePlaceAndTheRoom_AndTheBuildingOnlyWhenTwoRoomsShareAName()
     {
         RoomIndex index = Index("SmallNoCliffs");
         IndexedRoom hall = index.Rooms.First(r => r.Kind == "genetics" && r.Name == "Server hall");
@@ -181,6 +181,10 @@ public class RoomIndexTests
         Assert.Contains(index.Rooms, r => r.Place == "Summit lift station at Control centre" && r.Name == "Cabin hall");
         Assert.Contains(index.Rooms, r => r.Place.StartsWith("Skyway station, ", StringComparison.Ordinal)); // the skyway's far end, at no facility
         Assert.DoesNotContain(index.Rooms, r => r.Place.Contains("Underground", StringComparison.Ordinal));
+        // two rooms of one name in one place: the building tells them apart
+        var washrooms = index.Rooms.Where(r => r.Kind == "genetics" && r.Name == "Washrooms").Select(RoomIndex.Describe).OrderBy(t => t, StringComparer.Ordinal).ToList();
+        Assert.Equal(new[] { "Genetics complex · Dormitory · Washrooms", "Genetics complex · Main laboratory · Washrooms" }, washrooms);
+        Assert.All(index.Rooms.GroupBy(RoomIndex.Describe), g => Assert.Single(g));
         IndexedRoom gallery = index.Rooms.First(r => r.Kind == "paddock");
         Assert.Equal("Viewing station", gallery.Building);
         Assert.Equal(0, gallery.KeycardLevel);

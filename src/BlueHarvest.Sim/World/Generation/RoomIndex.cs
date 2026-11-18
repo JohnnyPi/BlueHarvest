@@ -18,6 +18,12 @@ public sealed record IndexedRoom(int Id, string Name, string Building, string Pl
     int X0, int Y0, int X1, int Y1, int KeycardLevel, bool Motorised, int Label)
 {
     public bool Contains(long x, long y) => x >= X0 && x <= X1 && y >= Y0 && y <= Y1;
+
+    /// <summary>
+    /// How the front end names it: "Genetics complex · Server hall", with the building in between only
+    /// where the place has two rooms of that name ("Genetics complex · Dormitory · Washrooms").
+    /// </summary>
+    public string Title { get; init; } = "";
 }
 
 /// <summary>
@@ -73,6 +79,7 @@ public sealed class RoomIndex
         var paddocks = new HashSet<string>(works.Paddocks.Select(q => q.Name), StringComparer.Ordinal);
 
         var rooms = new List<IndexedRoom>();
+        var named = new Dictionary<(string Place, string Name), int>();
         foreach (Prim p in works.Prims.InOrder())
         {
             if (p.Kind != PrimKind.Building || p.Rooms is null)
@@ -102,7 +109,16 @@ public sealed class RoomIndex
                 string name = works.Labels[r.Label].Split(" · ")[^1];
                 rooms.Add(new IndexedRoom(rooms.Count, name, building, place, siteIndex, kind, r.X0, r.Y0, r.X1, r.Y1,
                     RoomRules.KeycardLevel(name), RoomRules.IsMotorised(name), r.Label));
+                named[(place, name)] = named.GetValueOrDefault((place, name)) + 1;
             }
+        }
+        for (int i = 0; i < rooms.Count; i++)
+        {
+            IndexedRoom r = rooms[i];
+            rooms[i] = r with
+            {
+                Title = named[(r.Place, r.Name)] > 1 ? r.Place + " · " + r.Building + " · " + r.Name : r.Place + " · " + r.Name,
+            };
         }
         return new RoomIndex(rooms);
     }
@@ -146,8 +162,8 @@ public sealed class RoomIndex
     public IReadOnlyList<IndexedRoom> OfSite(int siteIndex) =>
         _bySite.TryGetValue(siteIndex, out List<IndexedRoom>? mine) ? mine : Array.Empty<IndexedRoom>();
 
-    /// <summary>How the front end names a room: the place and the room, "Genetics complex · Server hall", with no building in between.</summary>
-    public static string Describe(IndexedRoom room) => room.Place + " · " + room.Name;
+    /// <summary>How the front end names a room: its <see cref="IndexedRoom.Title"/>.</summary>
+    public static string Describe(IndexedRoom room) => room.Title;
 
     /// <summary>
     /// A transit station's name from its line and building ("Station at Genetics complex"): "Monorail

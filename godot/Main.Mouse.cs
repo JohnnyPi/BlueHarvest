@@ -451,6 +451,8 @@ public partial class Main
                 : other.Controller is HumanBrain brain ? $"{other.Name}, {brain.Describe()}"
                 : other.Name, other.IsDead ? HudTheme.Danger : HudTheme.Ink));
 
+        AddRoomFacts(facts, tile);
+
         int ground = _sim.Terrain[tile];
         int relative = ground - _sim.StandHeight(me);
         facts.Add(($"Ground {Units.FormatMeters(ground)}" +
@@ -490,6 +492,19 @@ public partial class Main
     private string LookText(TilePos tile) =>
         $"{FoggedTitle(tile)}: {string.Join("; ", FoggedFacts(tile).Select(f => f.Text))}.";
 
+    /// <summary>
+    /// The room a tile is in, if it's one: the facility and the room ("Genetics complex · Server hall"),
+    /// and the keycard its security door wants. Only for tiles you've seen; the fog hides the rest.
+    /// </summary>
+    private void AddRoomFacts(List<(string Text, Color? Color)> facts, TilePos tile)
+    {
+        if (_sim.RoomAt(tile) is not { } room)
+            return;
+        facts.Add((BlueHarvest.Sim.World.Generation.RoomIndex.Describe(room), HudTheme.Amber));
+        if (room.KeycardLevel > 0)
+            facts.Add(($"Behind a security door: level {room.KeycardLevel} keycard", HudTheme.Muted));
+    }
+
     /// <summary>The tooltip's title under the fog: the plan's name for a tile you haven't seen, "Unknown" off the plan.</summary>
     private string FoggedTitle(TilePos tile)
     {
@@ -512,7 +527,10 @@ public partial class Main
         var state = _map.FogAt(tile);
         if (_map.RoofShown(tile))
         {
-            var facts = new List<(string Text, Color? Color)> { ("Under a roof: out of a big animal's reach", HudTheme.Safe) };
+            var facts = new List<(string Text, Color? Color)>();
+            if (state is FogState.Visible or FogState.Remembered)
+                AddRoomFacts(facts, tile); // a room you've been in, seen from outside
+            facts.Add(("Under a roof: out of a big animal's reach", HudTheme.Safe));
             if (state == FogState.Plan)
                 facts.Add(("On the park plan; you haven't seen it yet.", HudTheme.Muted));
             return facts;

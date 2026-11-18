@@ -2159,6 +2159,7 @@ var IslandGen = (function () {
   }
 
   // Spatial index of everything people built (and caves, wrecks, ruins), in 256 m bins.
+  const NO_WORKS = [];
   function indexWorks(world) {
     const W = world.works, bins = new Map(), put = (x0, y0, x1, y1, item) => {
       for (let by = Math.floor(y0 / BIN); by <= Math.floor(y1 / BIN); by++)
@@ -2253,7 +2254,8 @@ var IslandGen = (function () {
       if (!isNaN(lv) && z < lv && kind[k] !== 1) { kind[k] = 3; water[k] = lv; }
       // ---- the works: what people built (and caves, wrecks, ruins) ----
       if (WB) {
-        const L = WB.get(Math.floor(x / BIN) * 4096 + Math.floor(y / BIN));
+        // buildings are drawn even where nothing else people built is near (a lone station on a ridge)
+        const L = WB.get(Math.floor(x / BIN) * 4096 + Math.floor(y / BIN)) || NO_WORKS;
         if (L) {
           let bestW = 1e9, wR = null, wK = 0, wT = 0;
           for (const it of L) {
@@ -2286,6 +2288,7 @@ var IslandGen = (function () {
           }
           const ix = Math.floor(x), iy = Math.floor(y);
           const LP = WB.prims.get(Math.floor(x / 32) * 8192 + Math.floor(y / 32)) || [];
+          let built = false; // a building stands here: yard rects (tram stops, car parks) lie beneath it
           for (const it of L) if (it.t === 'rail') { if (segDist(x, y, it.ax, it.ay, it.bx, it.by, so) < 1.6 && kind[k] !== 1) mark[k] = MK.rail; }
           for (const it of LP) {
             if (it.t === 'rail') { if (segDist(x, y, it.ax, it.ay, it.bx, it.by, so) < 1.6 && kind[k] !== 1) mark[k] = MK.rail; continue; }
@@ -2298,7 +2301,7 @@ var IslandGen = (function () {
               if (ix === q.x0 || ix === q.x1 || iy === q.y0 || iy === q.y1) m = MK.wall;
               else for (const rm of q.rooms) if (ix >= rm.x0 && ix <= rm.x1 && iy >= rm.y0 && iy <= rm.y1) { lb = rm.label; if (ix === rm.x0 || ix === rm.x1 || iy === rm.y0 || iy === rm.y1) m = MK.wall; }
               for (const d of q.doors) if (d[0] === ix && d[1] === iy) m = MK.door;
-              mark[k] = m; lab[k] = lb;
+              mark[k] = m; lab[k] = lb; built = true;
             } else if (q.t === 'fur') {
               if (ix >= q.x0 && ix <= q.x1 && iy >= q.y0 && iy <= q.y1 && mark[k] === MK.floor) { mark[k] = MK[q.cover]; }
             } else if (q.t === 'circle') {
@@ -2309,7 +2312,7 @@ var IslandGen = (function () {
                 if (d < q.r + 0.75) { lab[k] = q.label; if (kind[k] === 1 && q.cover !== 'shallow') { kind[k] = 0; water[k] = NaN; } }
               }
             } else if (q.t === 'rect') {
-              if (ix >= q.x0 && ix <= q.x1 && iy >= q.y0 && iy <= q.y1) { mark[k] = q.fence && (ix === q.x0 || ix === q.x1 || iy === q.y0 || iy === q.y1) ? MK.fence : MK[q.cover]; lab[k] = q.label; }
+              if (!built && ix >= q.x0 && ix <= q.x1 && iy >= q.y0 && iy <= q.y1) { mark[k] = q.fence && (ix === q.x0 || ix === q.x1 || iy === q.y0 || iy === q.y1) ? MK.fence : MK[q.cover]; lab[k] = q.label; }
             } else if (q.t === 'tower') {
               if (Math.abs(x - q.x) < 1.5 && Math.abs(y - q.y) < 1.5) { mark[k] = MK.mast; lab[k] = q.label; }
             } else if (q.t === 'line') {

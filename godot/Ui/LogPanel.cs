@@ -24,7 +24,7 @@ public partial class LogPanel : PanelContainer
     public const float Margin = 10f;
     private const int MaxEntries = 300;
 
-    private readonly List<(string Clock, string Text, int Turn)> _entries = new();
+    private readonly List<(string Clock, string Text, int Turn, bool Quiet)> _entries = new();
     private readonly RichTextLabel _text;
     private readonly Label _count;
     private readonly Button _move;
@@ -74,14 +74,17 @@ public partial class LogPanel : PanelContainer
         SetCorner(LogCorner.LowerLeft);
     }
 
-    /// <summary>Adds a line. Lines added with the same turn number count as "what just happened".</summary>
-    public void Add(string clock, string text, int turn)
+    /// <summary>
+    /// Adds a line. Lines added with the same turn number count as "what just happened". A quiet line
+    /// (where you are, say) stays muted even when it's new.
+    /// </summary>
+    public void Add(string clock, string text, int turn, bool quiet = false)
     {
         if (string.IsNullOrWhiteSpace(text))
             return;
         if (_entries.Count > 0 && _entries[^1].Text == text && _entries[^1].Turn == turn)
             return;
-        _entries.Add((clock, text.Trim(), turn));
+        _entries.Add((clock, text.Trim(), turn, quiet));
         if (_entries.Count > MaxEntries)
             _entries.RemoveRange(0, _entries.Count - MaxEntries);
         _latestTurn = turn;
@@ -119,7 +122,7 @@ public partial class LogPanel : PanelContainer
         string muted = HudTheme.Hex(HudTheme.Muted);
         string ink = HudTheme.Hex(HudTheme.Ink);
         _text.Text = string.Join("\n", _entries.Select(e =>
-            $"[color={amber}]{e.Clock}[/color]  [color={(e.Turn == _latestTurn ? ink : muted)}]{HudTheme.Escape(e.Text)}[/color]"));
+            $"[color={amber}]{e.Clock}[/color]  [color={(e.Turn == _latestTurn && !e.Quiet ? ink : muted)}]{HudTheme.Escape(e.Text)}[/color]"));
         _count.Text = _entries.Count == 1 ? "1 entry  " : $"{_entries.Count} entries  ";
         Callable.From(() => _text.ScrollToLine(Math.Max(0, _text.GetLineCount() - 1))).CallDeferred();
     }

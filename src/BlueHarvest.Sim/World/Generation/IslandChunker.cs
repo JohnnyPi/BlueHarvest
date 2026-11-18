@@ -44,6 +44,9 @@ public sealed class IslandChunker
     public const int ChunkSize = 64;
     private const int Bin = 256, PrimBin = 32;
 
+    /// <summary>The works of a bin where people built nothing but buildings, if anything.</summary>
+    private static readonly List<Item> NoWorks = [];
+
     // ground cover inside each biome, from open to closed ground, as (cover, cumulative share)
     private static readonly (Cover C, double Upto)[][] Mix = BuildMix();
 
@@ -448,8 +451,9 @@ public sealed class IslandChunker
                     if (!double.IsNaN(lv) && z < lv && kind[k] != 1) { kind[k] = 3; water[k] = (float)lv; }
                 }
                 // ---- the works: what people built (and caves, wrecks, ruins) ----
-                if (_bins.TryGetValue(Floor(x / Bin) * 4096 + Floor(y / Bin), out List<Item>? items))
-                    z = Works(items, k, x, y, z, kind, water, mark, lab);
+                // buildings are drawn even where nothing else people built is near (a lone station on a ridge)
+                List<Item> items = _bins.TryGetValue(Floor(x / Bin) * 4096 + Floor(y / Bin), out List<Item>? found) ? found : NoWorks;
+                z = Works(items, k, x, y, z, kind, water, mark, lab);
                 h[k] = (float)z;
             }
         }
@@ -628,6 +632,7 @@ public sealed class IslandChunker
         {
             if (it.Kind == ItemKind.Rail && SegDist(x, y, it.Ax, it.Ay, it.Bx, it.By, out _) < 1.6 && kind[k] != 1) mark[k] = MkRail;
         }
+        bool built = false; // a building stands here: yard rects (tram stops, car parks) lie beneath it
         if (_primBins.TryGetValue(Floor(x / PrimBin) * 8192 + Floor(y / PrimBin), out List<Prim>? prims))
         {
             foreach (Prim q in prims)
@@ -652,6 +657,7 @@ public sealed class IslandChunker
                         }
                         foreach ((int dx, int dy) in q.Doors!) if (dx == ix && dy == iy) m = MkDoor;
                         mark[k] = m; lab[k] = (short)lb;
+                        built = true;
                         break;
                     }
                     case PrimKind.Furniture:
@@ -674,7 +680,7 @@ public sealed class IslandChunker
                         break;
                     }
                     case PrimKind.Rect:
-                        if (ix >= q.X0 && ix <= q.X1 && iy >= q.Y0 && iy <= q.Y1)
+                        if (!built && ix >= q.X0 && ix <= q.X1 && iy >= q.Y0 && iy <= q.Y1)
                         {
                             mark[k] = q.Fence && (ix == q.X0 || ix == q.X1 || iy == q.Y0 || iy == q.Y1) ? MkFence : Mk(q.Cover);
                             lab[k] = (short)q.Label;

@@ -30,7 +30,7 @@ public class IslandChunkTests
             (533, 401, 0xFCC4157A7A73D4A8UL),
             (458, 107, 0x990A5216DCA78640UL),
             (448, 160, 0xEC9CDC046A080CE9UL),
-            (449, 167, 0x3171E8FFE0C50611UL),
+            (449, 167, 0xD3B144194B280EA7UL),
             (585, 431, 0xFDD6CE43339CF14AUL),
             (621, 572, 0x61F3BE97313F3BC9UL),
             (413, 442, 0x481A4161ABF8627FUL),
@@ -48,7 +48,7 @@ public class IslandChunkTests
             (527, 271, 0xDA53F7EDDE418CF1UL),
             (559, 279, 0xD91037275DE2ED40UL),
             (451, 114, 0x00424476E313E6C4UL),
-            (562, 269, 0xC006A7C71707CB68UL),
+            (562, 269, 0xFA7C4711818D154DUL),
             (776, 485, 0xEAFA2B6F6BFE222DUL),
             (391, 221, 0x4459ECEB7594347BUL),
             (393, 75, 0x20D81CD3620781D8UL),
@@ -71,7 +71,7 @@ public class IslandChunkTests
             (469, 323, 0xB08F337897FD21EDUL),
             (372, 90, 0xF3F2608AC37D97E8UL),
             (331, 162, 0xC4021F9A84712A4EUL),
-            (327, 169, 0x71A55A0CE96AD8DAUL),
+            (327, 169, 0xBAC089CCD7D72C00UL),
             (474, 305, 0x4EE7E470182EFD51UL),
             (415, 280, 0xBCC77E8C5279530EUL),
             (363, 468, 0x10088A1A7B93CE4BUL),
@@ -90,7 +90,7 @@ public class IslandChunkTests
             (349, 289, 0x19640DBCB104F0FCUL),
             (416, 319, 0x0C59F2704ECD758CUL),
             (376, 277, 0xF62A690346C1145BUL),
-            (371, 271, 0x648124AF4BE62441UL),
+            (371, 271, 0xDD14DEE75551FF86UL),
             (255, 201, 0xF179A018DA2C49F5UL),
             (163, 177, 0x7F085D88D2A5E30CUL),
             (239, 272, 0x92BD925DA3A7F5EDUL),
@@ -109,7 +109,7 @@ public class IslandChunkTests
             (407, 307, 0xF53A025091E4EECCUL),
             (432, 132, 0x32321436D96B7A53UL),
             (403, 236, 0xBCBFB6E16FB6060FUL),
-            (403, 243, 0x7C30B542FE478AF8UL),
+            (403, 243, 0x9800AF44D963BBB4UL),
             (458, 348, 0x3D9C4DACE942AAB7UL),
             (510, 395, 0xB3631E3B7CA0D2CBUL),
             (348, 381, 0x017234E5BD3696EBUL),
@@ -195,5 +195,43 @@ public class IslandChunkTests
         Assert.Equal(64 * 64 * 4, px.Length);
         for (int i = 3; i < px.Length; i += 4) Assert.Equal(255, px[i]);
         Assert.All(c.Cover, v => Assert.True(v <= (byte)Cover.Reef)); // the frame's corner is open sea
+    }
+
+    /// <summary>
+    /// Every door of every building is on the map: stations far from roads and sites are drawn too
+    /// (the skyway's far end used to be missing), and tram stop platforms lie beneath buildings rather
+    /// than wiping out their doors (step 25a-3).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CaseNames))]
+    public void EveryBuildingsDoors_AreDrawn(string name)
+    {
+        IslandWorks works = TestIslands.Works(name);
+        IslandChunker chunker = TestIslands.Chunker(name);
+        var chunks = new Dictionary<(int X, int Y), IslandChunk>();
+        IslandChunk ChunkAt(int x, int y)
+        {
+            var key = ((int)Math.Floor(x / 64.0), (int)Math.Floor(y / 64.0));
+            if (!chunks.TryGetValue(key, out IslandChunk? c))
+                chunks[key] = c = chunker.Build(key.Item1, key.Item2);
+            return c;
+        }
+        var missing = new List<string>();
+        int doors = 0;
+        foreach (Prim b in works.Prims.InOrder())
+        {
+            if (b.Kind != PrimKind.Building || b.Doors is null)
+                continue;
+            foreach ((int x, int y) in b.Doors)
+            {
+                doors++;
+                IslandChunk c = ChunkAt(x, y);
+                var cover = (Cover)c.Cover[(y - c.Y0) * c.Size + (x - c.X0)];
+                if (cover != Cover.Door)
+                    missing.Add($"{works.Labels[b.Label]} at ({x}, {y}): {cover}");
+            }
+        }
+        Assert.True(missing.Count == 0, $"{missing.Count} of {doors} doors aren't drawn: {string.Join("; ", missing)}");
+        Assert.Equal(name == "SmallNoCliffs" ? 323 : 315, doors); // from the island lab
     }
 }

@@ -48,6 +48,8 @@ public partial class Main
         _sim.Kindled += OnKindled;
         _sim.TanksBurst += OnTanksBurst;
         _sim.LightningHitGround += OnLightningHitGround;
+        _sim.ActorEnteredRoom += OnEnteredRoom;
+        _sim.ActorLeftRoom += OnLeftRoom;
         SubscribeToItemEvents();
         SubscribeToNeedEvents();
         // what the weather is at the start, without saying so
@@ -255,5 +257,31 @@ public partial class Main
     private void OnSparksDied(SparkingFence sparks)
     {
         Say("The sagging fence snaps with a shower of sparks. Something is coming through.");
+    }
+
+    // ---------- rooms (step 25a-2) ----------
+
+    /// <summary>Stepping back into the room you just left within this long isn't logged again.</summary>
+    private const long RoomRepeatTicks = 10 * Ticks.PerSecond;
+
+    private int _lastLeftRoom = -1;
+    private long _lastLeftTick = long.MinValue;
+
+    /// <summary>The player walks into a room: one quiet line naming the facility and the room.</summary>
+    private void OnEnteredRoom(Actor actor, BlueHarvest.Sim.World.Generation.IndexedRoom room)
+    {
+        if (actor != _playerActor)
+            return;
+        if (room.Id == _lastLeftRoom && _sim.CurrentTick - _lastLeftTick <= RoomRepeatTicks)
+            return;
+        Say(BlueHarvest.Sim.World.Generation.RoomIndex.Describe(room), quiet: true);
+    }
+
+    private void OnLeftRoom(Actor actor, BlueHarvest.Sim.World.Generation.IndexedRoom room)
+    {
+        if (actor != _playerActor)
+            return;
+        _lastLeftRoom = room.Id;
+        _lastLeftTick = _sim.CurrentTick;
     }
 }

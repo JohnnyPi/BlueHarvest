@@ -131,8 +131,8 @@ public partial class Main
         _pendingLog.Clear();
     }
 
-    /// <summary>Adds a line to the log, stamped with the game clock.</summary>
-    private void Say(string text)
+    /// <summary>Adds a line to the log, stamped with the game clock. A quiet line stays muted (where you are, say).</summary>
+    private void Say(string text, bool quiet = false)
     {
         if (string.IsNullOrWhiteSpace(text))
             return;
@@ -141,7 +141,7 @@ public partial class Main
             _pendingLog.Add(text);
             return;
         }
-        _log.Add(Clock(_sim.CurrentTick), text, _turn);
+        _log.Add(Clock(_sim.CurrentTick), text, _turn, quiet);
     }
 
     /// <summary>The line at the top of the map while a key mode waits; null hides it.</summary>
@@ -351,7 +351,11 @@ public partial class Main
             return vehicle.Breached
                 ? $"[color={HudTheme.Hex(HudTheme.Danger)}]In {HudTheme.Escape(vehicle.Name)}: BREACHED, no protection.[/color]"
                 : $"In {HudTheme.Escape(vehicle.Name)} ({vehicle.Integrity}%): the cab hides you and stops bites.";
-        return _sim.Map.IsIndoor(here) ? "Indoors, under a roof nothing big can reach under." : null;
+        if (!_sim.Map.IsIndoor(here))
+            return null;
+        return _sim.RoomAt(here) is { } room
+            ? $"Indoors ({HudTheme.Escape(room.Name)}), under a roof nothing big can reach under."
+            : "Indoors, under a roof nothing big can reach under.";
     }
 
     private (int Distance, string Compass) DistanceAndCompass(TilePos from, TilePos to)
