@@ -1581,7 +1581,9 @@ var IslandGen = (function () {
     lap('wildlife');
     if (p.stopAfter === 'works') return { stop: { caves, wrecks, ruins, fauna } };
 
-    return { sites, paddocks, roads, power, caves, wrecks, ruins, leylines, walk, walkTransit, transit, objectives, labels, prims, fauna, roadKm, mainKm, bridges, tunnels, powerKm };
+    // the walking grid, kept for facilityAreas (step 25b-2)
+    const walkGrid = { cnx, cny, cs, ch, pass, spd, wade, onRoad, targets };
+    return { sites, paddocks, roads, power, caves, wrecks, ruins, leylines, walk, walkTransit, transit, objectives, labels, prims, fauna, roadKm, mainKm, bridges, tunnels, powerKm, walkGrid };
   }
 
   // ---------- the pipeline ----------
@@ -2455,8 +2457,71 @@ var IslandGen = (function () {
     return { size, x0: ccx * CHUNK, y0: ccy * CHUNK, height: outH, cover, water: lvl, shade, biome: tBiome, label };
   }
 
+  // ---------- facility areas (step 25b-2): BlueHarvest.Sim.World.Generation.FacilityAreas ----------
+  // Every land cell goes to the facility quickest to walk to, minor facilities' times counting double;
+  // cells nobody can walk to go to the nearest facility in a straight line. Each area is cut like a pie
+  // round its facility into five sheets of equal cell count.
+  const AREA_SHEETS = 5;
+  function facilityAreas(w) {
+    const W = w.works, G = W.walkGrid, sites = W.sites, nx = w.nx, ny = w.ny, cell = w.cell;
+    const cn = G.cnx * G.cny, cs = G.cs;
+    function spread(group) {
+      const sec = new Float64Array(cn).fill(Infinity), from = new Int32Array(cn).fill(-1), done = new Uint8Array(cn), h = new Heap(cn * 8 + sites.length);
+      for (const a of group) { const s0 = G.targets[a]; if (!G.pass[s0] || from[s0] >= 0) continue; sec[s0] = 0; from[s0] = a; h.push(0, s0); }
+      while (h.n > 0) {
+        const c = h.pop(); if (done[c]) continue; done[c] = 1;
+        const x = c % G.cnx, y = (c - x) / G.cnx;
+        for (let k = 0; k < 8; k++) {
+          const xx = x + DX[k], yy = y + DY[k]; if (xx < 0 || yy < 0 || xx >= G.cnx || yy >= G.cny) continue;
+          const j = yy * G.cnx + xx; if (!G.pass[j] || done[j]) continue;
+          const d = DL[k] * cs, sl = (G.ch[j] - G.ch[c]) / d, roads = G.onRoad[c] && G.onRoad[j];
+          if (Math.abs(sl) > 0.8 && !roads) continue;
+          const v = 6 * D.exp(-3.5 * Math.abs((roads ? sl * 0.6 : sl) + 0.05)) / 3.6 / (6 * D.exp(-3.5 * 0.05) / 3.6) * 1.4 * (G.spd[c] + G.spd[j]) / 2;
+          const nd = sec[c] + d / Math.max(0.05, v) + G.wade[j];
+          if (nd < sec[j]) { sec[j] = nd; from[j] = from[c]; h.push(nd, j); }
+        }
+      }
+      return { sec, from };
+    }
+    const majors = [], minors = [];
+    sites.forEach((t, a) => (t.major ? majors : minors).push(a));
+    const M = spread(majors), m = spread(minors);
+    const area = new Int32Array(nx * ny).fill(-1);
+    for (let i = 0; i < nx * ny; i++) {
+      if (!w.land[i]) continue;
+      const x = (i % nx + 0.5) * cell, y = (Math.floor(i / nx) + 0.5) * cell;
+      const c = Math.min(Math.max(Math.floor(y / cs), 0), G.cny - 1) * G.cnx + Math.min(Math.max(Math.floor(x / cs), 0), G.cnx - 1);
+      const tM = M.sec[c], tm = 2 * m.sec[c];
+      if (tM === Infinity && tm === Infinity) {
+        let best = -1, bd = Infinity;
+        sites.forEach((t, a) => { const d2 = (t.x - x) * (t.x - x) + (t.y - y) * (t.y - y); if (d2 < bd) { bd = d2; best = a; } });
+        area[i] = best;
+      } else area[i] = tM <= tm ? M.from[c] : m.from[c];
+    }
+    const sheet = new Int8Array(nx * ny).fill(-1), facilitySheet = [], order = [];
+    const st = stream(w.params.seed >>> 0, 'parkmap.sheets');
+    sites.forEach((t, a) => {
+      const cells = [];
+      for (let i = 0; i < nx * ny; i++) if (area[i] === a) {
+        const dx = (i % nx + 0.5) * cell - t.x, dy = (Math.floor(i / nx) + 0.5) * cell - t.y;
+        cells.push({ i, ang: D.atan2(dy, dx), d2: dx * dx + dy * dy });
+      }
+      cells.sort((p, q) => p.ang - q.ang || p.d2 - q.d2 || p.i - q.i);
+      const n = cells.length;
+      for (let k = 0; k < AREA_SHEETS; k++) for (let j = Math.floor(k * n / AREA_SHEETS); j < Math.floor((k + 1) * n / AREA_SHEETS); j++) sheet[cells[j].i] = k;
+      let fs = -1, bd = Infinity, bi = -1;
+      for (const c of cells) if (c.d2 < bd || (c.d2 === bd && c.i < bi)) { bd = c.d2; bi = c.i; fs = sheet[c.i]; }
+      facilitySheet.push(fs);
+      const rest = [];
+      for (let k = 0; k < AREA_SHEETS; k++) if (k !== fs) rest.push({ k, h: hash2(st, a, k) });
+      rest.sort((p, q) => p.h - q.h || p.k - q.k);
+      order.push(fs >= 0 ? [fs, ...rest.map(r => r.k)] : rest.map(r => r.k));
+    });
+    return { area, sheet, facilitySheet, order };
+  }
+
   return {
-    DEFAULTS, COVER, BIOMES, REGIONS, FAC, CORPS, FAUNA, PADDOCKS, CHUNK, generate, classify, transferables, indexRivers, chunk, riverWidth, riverDepth, bicubic, bilinear, hash2,
+    DEFAULTS, COVER, BIOMES, REGIONS, FAC, CORPS, FAUNA, PADDOCKS, CHUNK, generate, classify, transferables, indexRivers, chunk, riverWidth, riverDepth, bicubic, bilinear, hash2, facilityAreas, AREA_SHEETS,
     _internal: { sample, makeAnchors, noise, fbm, ridged, hashStr, mix, hash2, stream, makeRng, Heap, chamfer, boxBlur, components, chaikin, D, smax, smoothstep, clamp, flood, buildTree, makeTree }
   };
 })();

@@ -20,6 +20,17 @@ public sealed class IslandWorld
     private readonly object _checkGate = new();
     private IslandCheckContext? _measures;
     private IslandValidation? _validation;
+    private FacilityAreas? _areas;
+
+    /// <summary>The island divided into facility areas (step 25b-2), worked out on first use and then kept. Thread-safe.</summary>
+    public FacilityAreas Areas()
+    {
+        lock (_checkGate)
+        {
+            _areas ??= FacilityAreas.Build(this);
+            return _areas;
+        }
+    }
 
     /// <summary>
     /// The island's measures and key-site routes, worked out on first use and then kept (seed validation,

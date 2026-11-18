@@ -212,6 +212,53 @@ public sealed partial class IslandWorks
     }
 
     /// <summary>
+    /// Seconds on foot from the nearest of a group of sites to every walking-grid cell, and which site that
+    /// is (−1 where none can walk to), by the same steps as the walking times (no transit, nothing shut).
+    /// Sites sharing a start cell: the first listed holds it. For facility areas (step 25b-2).
+    /// Thread-safe: uses its own scratch.
+    /// </summary>
+    public (double[] Seconds, int[] From) WalkFrom(IReadOnlyList<int> sites)
+    {
+        int cn = _cn, cnx = _cnx, cny = _cny;
+        double cs = _cs;
+        var sec = new double[cn];
+        Array.Fill(sec, double.PositiveInfinity);
+        var from = new int[cn];
+        Array.Fill(from, -1);
+        var done = new byte[cn];
+        var heap = new GenHeap(cn * 8 + Sites.Count);
+        foreach (int a in sites)
+        {
+            int s0 = _targets[a];
+            if (_pass[s0] == 0 || from[s0] >= 0) continue;
+            sec[s0] = 0;
+            from[s0] = a;
+            heap.Push(0, s0);
+        }
+        while (heap.Count > 0)
+        {
+            int c = heap.Pop();
+            if (done[c] != 0) continue;
+            done[c] = 1;
+            int x = c % cnx, y = c / cnx;
+            for (int k = 0; k < 8; k++)
+            {
+                int xx = x + GenGrid.DX[k], yy = y + GenGrid.DY[k];
+                if (xx < 0 || yy < 0 || xx >= cnx || yy >= cny) continue;
+                int j = yy * cnx + xx;
+                if (_pass[j] == 0 || done[j] != 0) continue;
+                double d = GenGrid.DL[k] * cs, sl = (_ch[j] - _ch[c]) / d;
+                bool roads = _onRoad[c] != 0 && _onRoad[j] != 0;
+                if (Math.Abs(sl) > 0.8 && !roads) continue;
+                double v = Tobler(roads ? sl * 0.6 : sl) * (_spd[c] + _spd[j]) / 2;
+                double nd = sec[c] + d / Math.Max(0.05, v) + _wade[j];
+                if (nd < sec[j]) { sec[j] = nd; from[j] = from[c]; heap.Push(nd, j); }
+            }
+        }
+        return (sec, from);
+    }
+
+    /// <summary>
     /// Whether a diagonal step from (x, y) to (xx, yy) passes between two closed corner cells, at least one shut.
     /// "Closed" is shut or impassable; two impassable corners alone don't stop it, as in the island's own timing.
     /// </summary>

@@ -259,6 +259,8 @@ public sealed partial class Simulation
                 break;
             }
         }
+        if (use == ItemUse.Read)
+            ReadParkMap(actor, item); // the first read may turn up something marked on it
         ItemUsed?.Invoke(actor, item, use, used);
         return Math.Max(RefuseTicks, def.UseTicks * NeedEffectsOf(actor).HandsPercent / 100);
     }

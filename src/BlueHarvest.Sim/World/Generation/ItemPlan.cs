@@ -60,7 +60,6 @@ public static class ItemPlan
         new(Offices, 40, ">notebook"),
         new(Offices, 35, ">keycard level=1"),
         new(Offices, 15, ">security-log"),
-        new(Offices, 25, ">park-map"),
         new(Offices, 15, ">painkillers"),
         new(Offices, 20, ">chocolate"),
         new(Offices, 15, ">flashlight"),
@@ -70,7 +69,6 @@ public static class ItemPlan
         // front desks
         new(Lobbies, 50, "desk"),
         new(Lobbies, 60, ">keycard level=1"),
-        new(Lobbies, 40, ">park-map"),
         new(Lobbies, 40, "fire-extinguisher"),
 
         // security: the duty desk, then the locked gun locker
@@ -201,7 +199,6 @@ public static class ItemPlan
         // control rooms and lookouts
         new(Control, 70, "desk"),
         new(Control, 40, ">radio"),
-        new(Control, 40, ">park-map"),
         new(Control, 30, ">flashlight"),
         new(Control, 30, ">battery-aa x2"),
         new(Control, 30, ">keycard level=2"),
@@ -209,7 +206,6 @@ public static class ItemPlan
         new(Lookouts, 70, "binoculars"),
 
         new(["Map room"], 80, "desk"),
-        new(["Map room"], 90, ">park-map"),
         new(["Map room"], 60, ">compass"),
         new(["Map room"], 50, ">notebook"),
 
@@ -224,6 +220,30 @@ public static class ItemPlan
         new(Animals, 15, "tranq-dart x2"),
 
         new(["Cryo vault"], 20, "data-drive"),
+
+        // park maps (step 25b-2): in one front office per kind of facility, and at the transit stations;
+        // each charts a fifth of its facility's area (the area a station stands in)
+        new(["Lobby", "Security office"], 40, ">park-map", ["genetics"]),
+        new(["Offices"], 40, ">park-map", ["control", "lab"]),
+        new(["Harbourmaster's office"], 40, ">park-map", ["docks"]),
+        new(["Operations office"], 40, ">park-map", ["airstrip"]),
+        new(["Gatehouse", "Shift office"], 40, ">park-map", ["nuclear"]),
+        new(["Control room"], 40, ">park-map", ["geothermal"]),
+        new(["Array control"], 40, ">park-map", ["weather"]),
+        new(["Observation room"], 40, ">park-map", ["orgone"]),
+        new(["Office"], 40, ">park-map", ["depot"]),
+        new(["Map room"], 40, ">park-map", ["ley"]),
+        new(["Radio room"], 40, ">park-map", ["comms"]),
+        new(["Keeper's office"], 40, ">park-map", ["raptors"]),
+        new(["Elevator lobby", "Cabin hall"], 60, ">park-map", ["transit"]),
+
+        // keycards outside the doors they open (step 25b-2): every facility with secure rooms has a card
+        // for its top level somewhere that isn't itself behind one of those doors
+        new(["Offices"], 40, ">keycard level=2", ["lab"]),
+        new(["Lab offices"], 35, ">keycard level=2", ["genetics"]),
+        new(["Shift office"], 40, ">keycard level=3", ["nuclear"]),
+        new(["Observation room"], 40, ">keycard level=3", ["orgone"]),
+        new(["Keeper's office"], 40, ">keycard level=3", ["raptors"]),
     ];
 
     /// <summary>A building of this many rooms or more keeps a fire extinguisher by its first room's door, most of the time.</summary>
@@ -236,8 +256,14 @@ public static class ItemPlan
         ulong seed = new StateHasher().Add((ulong)world.Params.Seed).Add("loot").Add(runSeed).Value;
         var ledger = new ItemLedger();
         var siteKinds = new Dictionary<string, string>();
-        foreach (Site site in works.Sites)
-            siteKinds.TryAdd(site.Name, site.Kind);
+        var siteIndex = new Dictionary<string, int>();
+        for (int i = 0; i < works.Sites.Count; i++)
+        {
+            siteKinds.TryAdd(works.Sites[i].Name, works.Sites[i].Kind);
+            siteIndex.TryAdd(works.Sites[i].Name, i);
+        }
+        FacilityAreas areas = world.Areas();
+        var mapsIn = new Dictionary<int, int>(); // park maps placed so far in each area
 
         // the furniture of each room, by the room's label
         var furniture = new Dictionary<int, List<Prim>>();
@@ -266,6 +292,8 @@ public static class ItemPlan
                 var floor = new Floor(FreeTiles(room, furniture.TryGetValue(room.Label, out var stuff) ? stuff : null, doors), seed, label);
                 if (floor.IsEmpty)
                     continue;
+                // the area a park map found here charts: its facility's, or the one a station stands in
+                int area = siteIndex.TryGetValue(site, out int si) ? si : areas.AreaAt((room.X0 + room.X1) / 2.0, (room.Y0 + room.Y1) / 2.0);
 
                 Item? container = null;
                 for (int row = 0; row < Table.Length; row++)
@@ -277,6 +305,12 @@ public static class ItemPlan
                     {
                         foreach (Item item in Make(ledger, spec, site, seed, label, row))
                         {
+                            if (item.Kind == ItemKind.ParkMap && area >= 0 && areas.SheetOrder(area) is { Count: > 0 } order)
+                            {
+                                int nth = mapsIn.GetValueOrDefault(area);
+                                mapsIn[area] = nth + 1;
+                                item.Tag = ParkMaps.Tag(area, order[nth % order.Count]);
+                            }
                             if (loot.Inside && container is not null && container.RefusesToHold(item) is null)
                             {
                                 container.Insert(item);

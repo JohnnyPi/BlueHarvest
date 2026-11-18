@@ -34,6 +34,9 @@ public partial class IslandExplorer : Node2D
 
     private Sprite2D _sprite = null!;
     private IslandOverlay _overlay = null!;
+    private SpawnMarker _marker = null!;
+    /// <summary>Where the left button went down, to tell a click (pick a spot) from a drag (pan).</summary>
+    private Vector2? _pressedAt;
     private IslandTileLayer _tiles = null!;
     private Camera2D _camera = null!;
     private float _zoom = 1f;
@@ -72,6 +75,8 @@ public partial class IslandExplorer : Node2D
         _overlay = new IslandOverlay();
         _overlay.Bind(font);
         AddChild(_overlay);
+        _marker = new SpawnMarker();
+        AddChild(_marker); // above the overlay, in both views
         _camera = new Camera2D();
         AddChild(_camera);
         _camera.MakeCurrent();
@@ -97,11 +102,25 @@ public partial class IslandExplorer : Node2D
         else StartGeneration();
     }
 
-    /// <summary>Starts the game on foot at the cursor (or the middle of the view), on the nearest ground you can stand on.</summary>
+    /// <summary>Picks a spot to start from (or clears the pick, off the island), marking it on the map.</summary>
+    private void Pick(Vector2 at)
+    {
+        if (_world == null) return;
+        double xm = at.X * _world.Shape.Cell, ym = at.Y * _world.Shape.Cell;
+        if (xm < 0 || ym < 0 || xm >= _world.WidthM || ym >= _world.HeightM)
+        {
+            _marker.SetSpot(null);
+            return;
+        }
+        _marker.SetSpot(at);
+        _status.Text = $"Start picked: {xm / 1000:0.0} km east, {ym / 1000:0.0} km south. Enter to walk there.";
+    }
+
+    /// <summary>Starts the game on foot at the picked spot (or the cursor, if none is picked), on the nearest ground you can stand on.</summary>
     private void WalkHere()
     {
         if (_world == null || _job != null) return;
-        Vector2 at = MouseCell();
+        Vector2 at = _marker.Spot ?? MouseCell();
         double xm = at.X * _world.Shape.Cell, ym = at.Y * _world.Shape.Cell;
         if (xm < 0 || ym < 0 || xm >= _world.WidthM || ym >= _world.HeightM)
         {
@@ -198,7 +217,7 @@ public partial class IslandExplorer : Node2D
 
         column.AddChild(new Control { SizeFlagsVertical = Control.SizeFlags.ExpandFill });
         column.AddChild(HudTheme.Text("Drag to pan, wheel to zoom, Home to fit. In the debug view, zoom far in to see the 1 m tiles; E saves the 320 m around the cursor as a .bhmap.", HudTheme.SmallSize, HudTheme.Muted));
-        column.AddChild(HudTheme.Text("Point at a spot and press Enter to walk there.", HudTheme.SmallSize, HudTheme.Amber));
+        column.AddChild(HudTheme.Text("Click a spot to pick it, then press Enter to walk there.", HudTheme.SmallSize, HudTheme.Amber));
         Button back = HudTheme.PlainButton("Back to menu  (Esc)");
         back.Pressed += () => GetTree().ChangeSceneToFile(FrontMenu.MenuScene);
         column.AddChild(back);
@@ -271,6 +290,7 @@ public partial class IslandExplorer : Node2D
                     ShowFacts();
                     _overlay.SetWorld(_world);
                     _tiles.SetWorld(_world);
+                    _marker.SetSpot(null); // a new island: nothing picked yet
                     FitView();
                 }
             }
@@ -456,6 +476,7 @@ public partial class IslandExplorer : Node2D
         _zoom = Mathf.Clamp(zoom, 0.25f, MaxZoom);
         _camera.Zoom = new Vector2(_zoom, _zoom);
         _overlay.SetZoom(_zoom);
+        _marker.SetZoom(_zoom);
     }
 
     /// <summary>Fits the whole island in the space right of the panel.</summary>
@@ -481,6 +502,17 @@ public partial class IslandExplorer : Node2D
                 _camera.Position = anchor - offset / _zoom; // keep the point under the cursor still
                 break;
             }
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left } left:
+                if (left.Pressed)
+                    _pressedAt = left.Position;
+                else
+                {
+                    // a click, not the end of a drag: pick the spot under the cursor
+                    if (_pressedAt is { } from && from.DistanceTo(left.Position) < 5f && left.Position.X >= PanelWidth)
+                        Pick(MouseCell());
+                    _pressedAt = null;
+                }
+                break;
             case InputEventMouseMotion motion when (motion.ButtonMask & (MouseButtonMask.Left | MouseButtonMask.Middle | MouseButtonMask.Right)) != 0:
                 _camera.Position -= motion.Relative / _zoom;
                 break;

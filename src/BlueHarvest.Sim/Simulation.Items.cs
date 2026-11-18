@@ -243,6 +243,7 @@ public sealed partial class Simulation
         if (reach.At != actor.Position)
             actor.Facing = Directions.FromDelta(reach.At.X - actor.Position.X, reach.At.Y - actor.Position.Y);
         EmitNoise(actor.Position, ItemRules.PickUpLoudness, NoiseKinds.Rummaging, actor.Id);
+        ChartParkMap(actor, item); // a park map charts its sheet on the survivor's map
         ItemPickedUp?.Invoke(actor, item);
         return ItemRules.PickUpTicks
             + (grams > ItemRules.HeavyItemGrams ? ItemRules.HeavyPickUpTicks : 0)

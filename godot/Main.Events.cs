@@ -50,6 +50,9 @@ public partial class Main
         _sim.LightningHitGround += OnLightningHitGround;
         _sim.ActorEnteredRoom += OnEnteredRoom;
         _sim.ActorLeftRoom += OnLeftRoom;
+        _sim.FeatureFound += OnFeatureFound;
+        _sim.MapCharted += OnMapCharted;
+        _sim.ParkMapRead += OnParkMapRead;
         SubscribeToItemEvents();
         SubscribeToNeedEvents();
         // what the weather is at the start, without saying so
@@ -283,5 +286,44 @@ public partial class Main
             return;
         _lastLeftRoom = room.Id;
         _lastLeftTick = _sim.CurrentTick;
+    }
+
+    // ---------- the island map (steps 25b-1 and 25b-2; M shows it from 25b-3) ----------
+
+    /// <summary>A found ruin, wreck or cave's name, from the island being walked.</summary>
+    private static string FeatureName(FoundFeature f)
+    {
+        var works = Island.IslandLaunch.World?.Works;
+        string? name = works is null ? null : f.Kind switch
+        {
+            FeatureKind.Ruin => works.Ruins.FirstOrDefault(r => r.Id == f.Id)?.Name,
+            FeatureKind.Wreck => works.Wrecks.FirstOrDefault(r => r.Id == f.Id)?.Name,
+            _ => works.Caves.FirstOrDefault(c => c.Id == f.Id)?.Name,
+        };
+        return name ?? f.Kind.ToString().ToLowerInvariant();
+    }
+
+    private void OnFeatureFound(Actor actor, FoundFeature f)
+    {
+        if (actor != _playerActor || f.How == FoundHow.FromMap)
+            return; // a map's find is told by OnParkMapRead
+        Say(f.How == FoundHow.Entered ? $"You are in {FeatureName(f)}." : $"You spot {FeatureName(f)}.");
+    }
+
+    private void OnMapCharted(Actor actor, Item map, ChartedSheet sheet, bool fresh)
+    {
+        if (actor != _playerActor)
+            return;
+        string place = Island.IslandLaunch.World is { } world && sheet.Area >= 0 && sheet.Area < world.Works.Sites.Count
+            ? world.Works.Sites[sheet.Area].Name
+            : "the park";
+        Say(fresh ? $"The park map shows part of the ground round {place}." : $"You already have this part of the ground round {place} mapped.");
+    }
+
+    private void OnParkMapRead(Actor actor, Item map, FoundFeature? found)
+    {
+        if (actor != _playerActor || found is not { } f)
+            return;
+        Say($"Someone has marked the map by hand: {FeatureName(f)}.");
     }
 }

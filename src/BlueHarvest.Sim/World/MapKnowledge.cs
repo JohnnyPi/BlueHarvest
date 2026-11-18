@@ -49,6 +49,7 @@ public sealed class MapKnowledge
     private readonly SortedSet<int> _sites = new();
     private readonly SortedSet<int> _rooms = new();
     private readonly List<MapNote> _notes = new();
+    private readonly SortedSet<int> _mapsRead = new();
 
     public MapKnowledge(int nx, int ny)
     {
@@ -138,6 +139,15 @@ public sealed class MapKnowledge
 
     public bool EnterRoom(int room) => _rooms.Add(room);
 
+    /// <summary>
+    /// Park maps (item ids) this survivor has read: each rolls once for something marked on it, on its
+    /// first read. Item ids belong to one run, so these aren't merged into another survivor's map.
+    /// </summary>
+    public IReadOnlyCollection<int> MapsRead => _mapsRead;
+
+    /// <summary>Notes a park map read. True on its first read.</summary>
+    public bool MarkRead(int mapItemId) => _mapsRead.Add(mapItemId);
+
     /// <summary>Markers with text: memories, documents, echoes and the survivor's own notes. Echoes and memories add markers, never map areas.</summary>
     public IReadOnlyList<MapNote> Notes => _notes;
 
@@ -153,7 +163,8 @@ public sealed class MapKnowledge
     /// <summary>
     /// Takes in everything another map knows: the union of seen cells, features, sheets, places and
     /// markers. The other survivor's trail (and any trails merged into theirs) are kept as older
-    /// trails, never joined to this one. Merging the same map again changes nothing.
+    /// trails, never joined to this one. Maps read stay with their reader (item ids belong to one run).
+    /// Merging the same map again changes nothing.
     /// </summary>
     public void Merge(MapKnowledge other)
     {
@@ -208,6 +219,9 @@ public sealed class MapKnowledge
         hasher.Add(_rooms.Count);
         foreach (int r in _rooms)
             hasher.Add(r);
+        hasher.Add(_mapsRead.Count);
+        foreach (int m in _mapsRead)
+            hasher.Add(m);
         hasher.Add(_notes.Count);
         foreach (MapNote n in _notes)
             hasher.Add((int)n.Kind).Add((long)Math.Round(n.X * 100)).Add((long)Math.Round(n.Y * 100)).Add(n.Text).Add(n.Tick);
