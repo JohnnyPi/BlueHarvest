@@ -81,7 +81,11 @@ public static class MapLook
     public static bool OnPlan(CoverType cover) => cover is CoverType.Wall or CoverType.Door or CoverType.Fence
         or CoverType.WeakFence or CoverType.Track or CoverType.Floor or CoverType.Vehicle or CoverType.Support;
 
-    /// <summary>A stable per-tile hash for picking glyph variants and colour jitter (looks only).</summary>
+    /// <summary>
+    /// A stable per-tile hash for picking glyph variants and colour jitter (looks only). Give it the
+    /// tile's island position (map tile + AsciiMapView.LookOrigin), not its place on the streamed map,
+    /// so the same ground looks the same however the map lies.
+    /// </summary>
     public static uint Hash(int x, int y, int salt)
     {
         uint h = (uint)(x * 374761393) + (uint)(y * 668265263) + (uint)(salt * 1274126177);
@@ -110,10 +114,13 @@ public static class MapLook
 
     /// <summary>
     /// The varied glyph for a tile: hashed variants for ground, joined box-drawing for walls, posts
-    /// every 4 m on a fence. <paramref name="coverAt"/> gives the cover of any tile (null off the map).
+    /// every 4 m on a fence. (<paramref name="x"/>, <paramref name="y"/>) is the tile on the map, and
+    /// <paramref name="coverAt"/> gives the cover of any map tile (null off the map). The variants and
+    /// the posts go by the tile's island position, map tile + <paramref name="origin"/>.
     /// </summary>
-    public static char VariedGlyph(CoverType cover, int x, int y, System.Func<int, int, CoverType?> coverAt)
+    public static char VariedGlyph(CoverType cover, int x, int y, (int X, int Y) origin, System.Func<int, int, CoverType?> coverAt)
     {
+        int ax = x + origin.X, ay = y + origin.Y;
         switch (cover)
         {
             case CoverType.Wall:
@@ -128,9 +135,10 @@ public static class MapLook
                     or CoverType.BrokenFence or CoverType.Door or CoverType.Rock;
                 bool across = Fenceish(-1, 0) || Fenceish(1, 0);
                 bool along = Fenceish(0, -1) || Fenceish(0, 1);
+                // & 3 rather than % 4: island positions can be negative off the frame's west and north edges
                 if (along && !across)
-                    return y % 4 == 0 ? '┼' : '│';
-                return across && along ? '┼' : x % 4 == 0 ? '┼' : '─';
+                    return (ay & 3) == 0 ? '┼' : '│';
+                return across && along ? '┼' : (ax & 3) == 0 ? '┼' : '─';
             }
             case CoverType.WeakFence:
                 return '╌';
@@ -153,6 +161,6 @@ public static class MapLook
             CoverType.Rubble => RubbleGlyphs,
             _ => null,
         };
-        return glyphs is null ? Cover[(int)cover].Glyph : glyphs[Hash(x, y, 3) % (uint)glyphs.Length];
+        return glyphs is null ? Cover[(int)cover].Glyph : glyphs[Hash(ax, ay, 3) % (uint)glyphs.Length];
     }
 }

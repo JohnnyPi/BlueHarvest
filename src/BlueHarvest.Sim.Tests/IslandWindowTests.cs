@@ -142,6 +142,67 @@ public class IslandWindowTests
         AssertSameTiles(w, WindowAt(x + moveX, y + moveY));
     }
 
+    /// <summary>
+    /// The map view picks each tile's looks (glyph variant, jitter, textures, the height tint) by its
+    /// island position, map tile + Simulation.IslandOrigin. So through every scroll, one chunk over,
+    /// right out of sight and back, the simulation's origin must stay the window's, and the island
+    /// position must still lead to the same ground.
+    /// </summary>
+    [Fact]
+    public void ATile_KeepsItsIslandPositionAndGround_ThroughScrollingAwayAndBack()
+    {
+        (double x, double y) = Genetics();
+        IslandWorld world = TestIslands.World(Island);
+        IslandWindow w = WindowAt(x, y, chunks: 3);
+        var sim = new Simulation(w.Map, seed: 1);
+        sim.FollowWeather(IslandWeather.For(world, runSeed: 1), w.OriginX, w.OriginY);
+
+        // every fifth tile each way, by island position: 39 × 39 of them
+        var marks = new List<(long X, long Y, CoverType Cover, int HeightDm)>();
+        for (int ty = 0; ty < w.Size; ty += 5)
+        {
+            for (int tx = 0; tx < w.Size; tx += 5)
+            {
+                var p = new TilePos(tx, ty);
+                (long ix, long iy) = sim.ToIsland(p);
+                marks.Add((ix, iy, w.Map.Cover[p], w.Map.Heights[p]));
+            }
+        }
+        Assert.Equal(39 * 39, marks.Count);
+
+        int InView()
+        {
+            Assert.Equal(((long)w.OriginX, (long)w.OriginY), sim.IslandOrigin);
+            int seen = 0;
+            foreach (var m in marks)
+            {
+                TilePos p = sim.FromIsland(m.X, m.Y);
+                if (!w.Map.InBounds(p)) continue;
+                seen++;
+                Assert.Equal(m.Cover, w.Map.Cover[p]);
+                Assert.Equal(m.HeightDm, (int)w.Map.Heights[p]);
+            }
+            return seen;
+        }
+
+        void MoveTo(double wx, double wy)
+        {
+            (int dx, int dy) = w.Recenter(w.ToLocal(wx, wy));
+            Assert.True(dx != 0 || dy != 0);
+            sim.ShiftWindow(dx, dy);
+        }
+
+        // one chunk east: the marks at x 65, 70 … 190 stay, 26 columns of them
+        MoveTo(x + 64, y);
+        Assert.Equal(26 * 39, InView());
+        // right away: none of them
+        MoveTo(x + 640, y);
+        Assert.Equal(0, InView());
+        // and back where it started: all of them, as they were
+        MoveTo(x, y);
+        Assert.Equal(39 * 39, InView());
+    }
+
     [Fact]
     public void Recenter_DoesNothingAwayFromTheEdge()
     {

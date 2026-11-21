@@ -69,6 +69,12 @@ public partial class AmbientView : Node2D
     private Rect2 _onScreen;
     private bool _drewSomething;
 
+    /// <summary>
+    /// The map view's <see cref="AsciiMapView.LookOrigin"/> as this redraw began: each tile's beat, lane
+    /// and glint go by its island position, so the water and the fences move the same way when you come back.
+    /// </summary>
+    private (int X, int Y) _look;
+
     /// <summary>How many tiles the last draw animated: for the debug readout.</summary>
     public int DrawnTiles { get; private set; }
 
@@ -195,6 +201,7 @@ public partial class AmbientView : Node2D
             return;
         var sim = _sim;
         var map = _map;
+        _look = map.LookOrigin;
         DrawFenceSparks(sim, map, (float)(_time % 3600.0));
         DrawFire(sim, map, (float)(_time % 3600.0));
         if (_animated == 0)
@@ -226,7 +233,7 @@ public partial class AmbientView : Node2D
                 Motion motion = _motion[i];
                 if (motion == Motion.None)
                     continue;
-                if (stride > 1 && MapLook.Hash(x, y, 31) % (uint)stride != 0)
+                if (stride > 1 && MapLook.Hash(x + _look.X, y + _look.Y, 31) % (uint)stride != 0)
                     continue;
                 var p = new TilePos(x, y);
                 if (map.FogAt(p) != FogState.Visible || map.RoofShown(p))
@@ -411,7 +418,7 @@ public partial class AmbientView : Node2D
         float size = surf > 0 ? 0.35f + 0.65f * surf / 100f : 0.6f;
         float period = WavePeriod / (1f + wind / 12f) * (surf > 0 ? 1.3f - 0.5f * surf / 100f : 1f);
         // a slow wobble along the coast, so the whole beach doesn't break at the same instant
-        float offset = 0.15f * Mathf.Sin((x + y) * 0.35f);
+        float offset = 0.15f * Mathf.Sin((x + _look.X + y + _look.Y) * 0.35f);
         float front = SurfReach * (1f - Frac(time / period + offset));   // tiles from the land
         float distance = _amount[i];
         float local = distance - front;                                    // 0 at the tile's seaward edge, 1 at its landward edge
@@ -439,7 +446,7 @@ public partial class AmbientView : Node2D
         const float life = 0.9f;
         float clock = time / life + Unit(x, y, 21);
         int drop = Mathf.FloorToInt(clock);
-        if (MapLook.Hash(x * 7919 + drop, y, 22) % 100 >= (uint)(rain / 4))
+        if (MapLook.Hash((x + _look.X) * 7919 + drop, y + _look.Y, 22) % 100 >= (uint)(rain / 4))
             return;
         float u = clock - drop;
         var at = new Vector2(cell.Position.X + 4f + (Cell - 8f) * Unit(x + drop, y, 23), cell.Position.Y + 4f + (Cell - 8f) * Unit(x, y + drop, 24));
@@ -459,6 +466,6 @@ public partial class AmbientView : Node2D
 
     private static float Frac(float v) => v - Mathf.Floor(v);
 
-    /// <summary>A fixed value in [0, 1) for a tile and a channel.</summary>
-    private static float Unit(int x, int y, int channel) => MapLook.Hash(x, y, channel) % 1000 / 1000f;
+    /// <summary>A fixed value in [0, 1) for a map tile and a channel, by the tile's island position.</summary>
+    private float Unit(int x, int y, int channel) => MapLook.Hash(x + _look.X, y + _look.Y, channel) % 1000 / 1000f;
 }

@@ -183,7 +183,24 @@ public partial class AsciiMapView : Node2D
     private float[] _hillshade = Array.Empty<float>();
     private float _baseline;
 
+    /// <summary>On a generated island, the height tint's scale by island position; null on the testbed (see <see cref="Bind"/>).</summary>
+    private ReliefScale? _reliefScale;
+
+    /// <summary>The height tint per map tile, 0 to 1: how high the tile stands among the ground round it.</summary>
+    private float[] _relief = Array.Empty<float>();
+
+    /// <summary><see cref="LookOrigin"/> as it was when this redraw began.</summary>
+    private (int X, int Y) _look;
+
     public OverlayState Overlays { get; } = new();
+
+    /// <summary>
+    /// Where the map's tile (0, 0) lies on the island, in metres. Everything chosen per tile for looks
+    /// alone (glyph variants, colour jitter, face textures, fence posts, floor and roof patterns, what
+    /// moves on water) goes by the tile's island position, map tile + this, so the same ground looks the
+    /// same every time you see it, however the streamed map lies. (0, 0) on the testbed, which never scrolls.
+    /// </summary>
+    public (int X, int Y) LookOrigin => _sim is null ? (0, 0) : ((int)_sim.IslandOrigin.X, (int)_sim.IslandOrigin.Y);
 
     // ---- Culling: which tiles get drawn -------------------------------------------------------
 
@@ -232,11 +249,17 @@ public partial class AsciiMapView : Node2D
     /// <paramref name="cliffThresholdDm"/> between neighbours is drawn as a cliff edge.
     /// </summary>
     /// <param name="plan">Whether the player starts with the site plan; see <see cref="FogOfWar"/>.</param>
-    public void Bind(Simulation sim, Font font, int cliffThresholdDm, bool plan = true)
+    /// <param name="relief">
+    /// On a generated island, the height tint's scale (see <see cref="ReliefScale"/>), so a tile is tinted
+    /// the same wherever the streamed map lies. Without one (the testbed) the tint spans the map's own
+    /// lowest to highest ground, as it always has.
+    /// </param>
+    public void Bind(Simulation sim, Font font, int cliffThresholdDm, bool plan = true, ReliefScale? relief = null)
     {
         _sim = sim;
         _font = font;
         _cliffThresholdDm = cliffThresholdDm;
+        _reliefScale = relief;
         Fog = new FogOfWar(sim, plan);
         MeasureTerrain(sim);
         QueueRedraw();
@@ -270,6 +293,32 @@ public partial class AsciiMapView : Node2D
         _minHeightDm = min;
         _heightRangeDm = Math.Max(1, max - min);
         _hillshade = Hillshade(sim);
+        _relief = Relief(sim);
+    }
+
+    /// <summary>
+    /// The height tint per tile. On an island it comes from the relief scale, by island position; on the
+    /// testbed it spans the map's lowest to highest ground. (The raised view's lift still counts from the
+    /// map's lowest ground: that moves everything by the same amount, and the camera snaps to the player
+    /// after a scroll, so nothing on screen changes.)
+    /// </summary>
+    private float[] Relief(Simulation sim)
+    {
+        var terrain = sim.Terrain;
+        int w = terrain.Width, h = terrain.Height;
+        var relief = new float[w * h];
+        var (ox, oy) = sim.IslandOrigin;
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                int dm = terrain[new TilePos(x, y)];
+                relief[y * w + x] = _reliefScale is { } scale
+                    ? scale.At(ox + x + 0.5, oy + y + 0.5, dm)
+                    : (float)(dm - _minHeightDm) / _heightRangeDm;
+            }
+        }
+        return relief;
     }
 
     // ---- Where things are drawn ------------------------------------------------------------
@@ -382,6 +431,7 @@ public partial class AsciiMapView : Node2D
         var sim = _sim;
         var o = Overlays;
         int width = sim.Map.Width, height = sim.Map.Height;
+        _look = LookOrigin;
         float ascent = _font.GetAscent(FontSize);
         float descent = _font.GetDescent(FontSize);
         _baseline = (CellSize - (ascent + descent)) / 2f + ascent;
@@ -449,6 +499,7 @@ public partial class AsciiMapView : Node2D
         bool roofed = RoofShown(p);
         float top = p.Y * CellSize - Lift(p);
         var cell = new Rect2(p.X * CellSize, top, CellSize, CellSize);
+        int ax = p.X + _look.X, ay = p.Y + _look.Y; // the tile's island position, for everything chosen for looks
         var fog = Fog;
         var cover = state switch
         {
@@ -460,19 +511,19 @@ public partial class AsciiMapView : Node2D
         if (state == FogState.Plan)
         {
             DrawRect(cell, MapLook.PlanGround);
-            char planGlyph = roofed ? '·' : o.Varied ? MapLook.VariedGlyph(cover, p.X, p.Y, PlanCoverAt) : MapLook.Cover[(int)cover].Glyph;
+            char planGlyph = roofed ? '·' : o.Varied ? MapLook.VariedGlyph(cover, p.X, p.Y, _look, PlanCoverAt) : MapLook.Cover[(int)cover].Glyph;
             DrawGlyphAt(planGlyph, p.X * CellSize, top, MapLook.PlanInk);
             return;
         }
 
         var look = MapLook.Cover[(int)cover];
-        float t = (float)(sim.Terrain[p] - _minHeightDm) / _heightRangeDm;
+        float t = _relief[p.Y * sim.Map.Width + p.X];
         float shade = o.Raised ? _hillshade[p.Y * sim.Map.Width + p.X] * 0.92f + 0.12f * t : 0.55f + 0.65f * t;
         var background = roofed ? MapLook.Roof : look.Background;
         if (o.Varied && !roofed)
         {
-            float jitter = MapLook.Jitter(p.X, p.Y);
-            if (cover == CoverType.Floor && (p.X + p.Y) % 2 == 1)
+            float jitter = MapLook.Jitter(ax, ay);
+            if (cover == CoverType.Floor && ((ax + ay) & 1) == 1)
                 jitter *= 0.9f;
             background = ScaleColor(background, jitter);
         }
@@ -487,7 +538,7 @@ public partial class AsciiMapView : Node2D
             if (glyph != ' ')
                 DrawGlyphAt(glyph, p.X * CellSize, top, Tone(ink, Math.Min(1.25f, shade * 1.2f), light, state, dimmed, red));
         }
-        else if (o.Varied && p.Y % 2 == 0)
+        else if (o.Varied && (ay & 1) == 0)
         {
             DrawLine(new Vector2(cell.Position.X, top + CellSize - 0.5f), new Vector2(cell.End.X, top + CellSize - 0.5f),
                 Tone(MapLook.RoofSeam, 1f, light, state, dimmed), 1f);
@@ -545,11 +596,13 @@ public partial class AsciiMapView : Node2D
         }
         else if (cover != CoverType.Vehicle)
         {
-            float x = face.Position.X + 3f + MapLook.Hash(p.X, p.Y, 5) % 4;
+            // hashed by island position: the pixel column as it would be with the map's tile (0, 0) at the island's (0, 0)
+            int ay = p.Y + _look.Y, shift = _look.X * CellSize;
+            float x = face.Position.X + 3f + MapLook.Hash(p.X + _look.X, ay, 5) % 4;
             while (x < face.End.X)
             {
                 DrawLine(new Vector2(x, face.Position.Y + 1f), new Vector2(x, face.End.Y - 1f), FaceStripe, 1f);
-                x += 5f + MapLook.Hash((int)x, p.Y, 6) % 3;
+                x += 5f + MapLook.Hash((int)x + shift, ay, 6) % 3;
             }
         }
     }
@@ -596,7 +649,7 @@ public partial class AsciiMapView : Node2D
             var p = sparks.Position;
             if (!sparks.Live || p.Y != y || FogAt(p) != FogState.Visible)
                 continue;
-            bool bright = (sim.CurrentTick / 30 + p.X) % 2 == 0;
+            bool bright = ((sim.CurrentTick / 30 + p.X + _look.X) & 1) == 0;
             DrawGlyphAt(bright ? '*' : '+', p.X * CellSize, p.Y * CellSize - Lift(p), bright ? SparkInk : SparkDim);
         }
 
@@ -737,7 +790,7 @@ public partial class AsciiMapView : Node2D
         {
             case BodyPart.Core:
                 DrawRect(rect, RexCore);
-                DrawGlyphAt(varied ? (MapLook.Hash(p.X, p.Y, 9) % 2 == 0 ? '▓' : '▒') : 'O', p.X * CellSize, top, ink);
+                DrawGlyphAt(varied ? (MapLook.Hash(p.X + _look.X, p.Y + _look.Y, 9) % 2 == 0 ? '▓' : '▒') : 'O', p.X * CellSize, top, ink);
                 break;
             case BodyPart.Head:
                 DrawRect(rect, RexSoft);
@@ -982,13 +1035,13 @@ public partial class AsciiMapView : Node2D
         if (state == FogState.Visible && sim.FireAt(p) is not null)
             return ('^', FireInk);
         if (cover == CoverType.Fence && state == FogState.Visible && sim.IsLiveFence(p))
-            return (Overlays.Varied ? MapLook.VariedGlyph(cover, p.X, p.Y, CoverAt) : glyph, LiveFenceInk);
+            return (Overlays.Varied ? MapLook.VariedGlyph(cover, p.X, p.Y, _look, CoverAt) : glyph, LiveFenceInk);
         if (cover == CoverType.Vehicle && state == FogState.Visible && sim.VehicleAt(p) is { } vehicle)
         {
             var damaged = ink.Lerp(DamagedInk, 1f - vehicle.Integrity / (float)Vehicle.MaxIntegrity);
             return (vehicle.Breached ? '%' : Overlays.Varied ? '▒' : glyph, damaged);
         }
-        return (Overlays.Varied ? MapLook.VariedGlyph(cover, p.X, p.Y, CoverAt) : glyph, ink);
+        return (Overlays.Varied ? MapLook.VariedGlyph(cover, p.X, p.Y, _look, CoverAt) : glyph, ink);
     }
 
     private CoverType? CoverAt(int x, int y)

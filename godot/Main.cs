@@ -118,7 +118,9 @@ public partial class Main : Node2D
         SubscribeToEvents();
 
         _map = new AsciiMapView();
-        _map.Bind(_sim, font, MovementProfile.Human.MaxStepUpDm, plan: _island is null);
+        // on the island the height tint goes by island position, so ground keeps its shade as the map streams
+        _map.Bind(_sim, font, MovementProfile.Human.MaxStepUpDm, plan: _island is null,
+            relief: _island is null ? null : new ReliefScale(_island.World.Shape));
         _sim.WindowShifted += OnWindowShifted;
         var overlays = _map.Overlays;
         overlays.PlayerId = _playerActor.Id;

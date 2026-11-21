@@ -216,4 +216,20 @@ public class SimulationWindowTests
         Actor a = other.AddActor("A", 'a', new TilePos(1, 1), Species.Human, new HoldStillController());
         Assert.Throws<ArgumentException>(() => window.Follow(other, a));
     }
+
+    /// <summary>
+    /// The map view picks each tile's looks (glyph variant, jitter, textures) by tile + IslandOrigin. On a
+    /// plain map, the testbed, that is the tile itself, so the testbed looks as it always has; once such a
+    /// map scrolls, the origin follows it.
+    /// </summary>
+    [Fact]
+    public void APlainMap_HasItsIslandOriginAtZero_UntilItScrolls()
+    {
+        Simulation sim = Field();
+        Assert.Equal((0L, 0L), sim.IslandOrigin);
+        Shift(sim, 3, -2);
+        Assert.Equal((3L, -2L), sim.IslandOrigin);
+        Shift(sim, -3, 2);
+        Assert.Equal((0L, 0L), sim.IslandOrigin);
+    }
 }
