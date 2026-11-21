@@ -480,7 +480,7 @@ public partial class Main
         var here = _playerActor.Position;
         bool moving = _playerActor.MovedRecently(_sim.CurrentTick, PerceptionSystem.MotionWindowTicks);
         string text =
-            $"Blue Harvest {SimInfo.Version}   time {Ticks.Format(_sim.CurrentTick)}   seed {Seed}   turn {_turn}   drawing {_map.DrawnTiles} tiles, {_ambient.DrawnTiles} moving\n" +
+            $"Blue Harvest {SimInfo.Version}   time {Ticks.Format(_sim.CurrentTick)}   seed {Seed}   turn {_turn}   drawing {_map.DrawnTiles} tiles ({_map.DrawMs:0.0} ms), {_ambient.DrawnTiles} moving ({_ambient.DrawMs:0.0} ms)\n" +
             $"You at {here}   ground {Units.FormatMeters(_sim.Terrain[here])}   light {_sim.Light.LevelAt(here)}%   " +
             $"{(moving ? "moving" : "still")}\n" +
             (_sim.Clock is { } readoutClock

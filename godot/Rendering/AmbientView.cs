@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using BlueHarvest.Sim;
+using BlueHarvest.Sim.Power;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Sim.World.Generation;
 using Godot;
@@ -29,6 +30,8 @@ public partial class AmbientView : Node2D
         Surf,
         /// <summary>Land at the water's edge, next to surf: swash on a beach, spray on rock or a structure (Layered look only).</summary>
         Swash,
+        /// <summary>Plants the wind can move: gusts pass over them as a travelling shimmer (Layered look only, in wind).</summary>
+        Vegetation,
     }
 
     /// <summary>What kind of shore a <see cref="Motion.Swash"/> tile is, which decides how the waves end on it.</summary>
@@ -70,6 +73,19 @@ public partial class AmbientView : Node2D
     private static readonly Color Ember = new(1f, 0.6f, 0.2f, 0.9f);
     private static readonly Color SmokePuff = new(0.55f, 0.55f, 0.55f, 1f);
     private static readonly Color WetSheen = new(0.02f, 0.04f, 0.08f, 0.2f);
+    private static readonly Color Gust = new(0.88f, 0.96f, 0.72f, 1f);
+    private static readonly Color Leaf = new(0.75f, 0.90f, 0.45f, 0.9f);
+    private static readonly Color LampDim = new(0f, 0f, 0f, 0.38f);
+    private static readonly Color Beacon = new(1f, 0.32f, 0.25f, 0.5f);
+
+    /// <summary>Wind below this (m/s) moves no plants visibly; gusts are at their strongest from 15 m/s.</summary>
+    private const float GustFromWind = 3f, GustFullWind = 15f;
+
+    /// <summary>Distance between gust fronts, in tiles.</summary>
+    private const float GustSpacing = 18f;
+
+    /// <summary>A site's lamps flicker when it runs on its batteries and they're below this charge.</summary>
+    private const int FlickerBelowPercent = 25;
     private static readonly Color SwashFilm = new(0.85f, 0.94f, 1f, 0.16f);
 
     private Simulation? _sim;
@@ -85,6 +101,9 @@ public partial class AmbientView : Node2D
     private int[] _seaward = Array.Empty<int>();
     /// <summary>Water over coral (the generator's reef), where waves break offshore.</summary>
     private bool[] _reef = Array.Empty<bool>();
+    /// <summary>How many plant tiles the wind could move, and whether the lamps had something to show last frame.</summary>
+    private int _plants;
+    private bool _lampEffects;
     private int _width, _height, _animated;
 
     private double _time, _sinceDraw;
@@ -99,6 +118,9 @@ public partial class AmbientView : Node2D
 
     /// <summary>How many tiles the last draw animated: for the debug readout.</summary>
     public int DrawnTiles { get; private set; }
+
+    /// <summary>How long the last draw took, in milliseconds (smoothed), for the debug readout: the animation's frame cost.</summary>
+    public double DrawMs { get; private set; }
 
     public void Bind(Simulation sim, AsciiMapView map)
     {
@@ -133,6 +155,7 @@ public partial class AmbientView : Node2D
             _reef = new bool[n];
         }
         _animated = 0;
+        _plants = 0;
 
         // first pass: water or not, and which water is sea (water standing at sea level)
         var sea = new bool[n];
@@ -151,7 +174,14 @@ public partial class AmbientView : Node2D
                 _seaward[i] = -1;
                 _reef[i] = water && _map is not null && _map.GroundAt(p) == Cover.Reef;
                 if (!water)
+                {
+                    if (IsPlant(map.Cover[p]))
+                    {
+                        _motion[i] = Motion.Vegetation;
+                        _plants++;
+                    }
                     continue;
+                }
                 _animated++;
                 WaterFlow flow = _sim.CurrentAt(p); // faster when the river is high
                 if (!flow.IsNone)
@@ -239,6 +269,8 @@ public partial class AmbientView : Node2D
                     continue;
                 var p = new TilePos(x, y);
                 var source = new TilePos(seaward % _width, seaward / _width);
+                if (_motion[i] == Motion.Vegetation)
+                    _plants--;
                 _motion[i] = Motion.Swash;
                 _dirX[i] = towardX / length;
                 _dirY[i] = towardY / length;
@@ -249,6 +281,15 @@ public partial class AmbientView : Node2D
         }
         QueueRedraw();
     }
+
+    /// <summary>Whether the wind visibly moves this cover.</summary>
+    private static bool IsPlant(CoverType cover) => cover is CoverType.Grass or CoverType.Scrub or CoverType.SparseJungle
+        or CoverType.DenseJungle or CoverType.TallGrass or CoverType.Reeds or CoverType.Ferns;
+
+    /// <summary>Whether gusts show now: a Layered look, full motion, and enough wind.</summary>
+    private bool GustsShow(Simulation sim, AsciiMapView map) =>
+        map.Overlays.Look >= LookMode.Layered && map.Overlays.Varied && map.Overlays.Motion == MotionLevel.Full
+        && sim.Weather.Settings.WindSpeed >= GustFromWind;
 
     /// <summary>How the waves end on a tile of shore: by what it is, and by how far it stands above the water.</summary>
     private static Shore ShoreOf(CoverType cover, int stepDm) => cover switch
@@ -262,11 +303,15 @@ public partial class AmbientView : Node2D
 
     public override void _Process(double delta)
     {
-        _time += delta;
         _sinceDraw += delta;
         if (_sim is null || _map is null)
             return;
-        bool on = _map.Overlays.Animation && (_animated > 0 || _sim.LiveFenceTiles.Count > 0 || _sim.Fires.Count > 0);
+        // reduced motion runs everything at half speed; still stops the clock
+        var motion = _map.Overlays.Motion;
+        _time += motion == MotionLevel.Full ? delta : motion == MotionLevel.Reduced ? delta * 0.5 : 0;
+        bool on = _map.Overlays.Animation && motion != MotionLevel.Still
+            && (_animated > 0 || _sim.LiveFenceTiles.Count > 0 || _sim.Fires.Count > 0 || _lampEffects
+                || _plants > 0 && GustsShow(_sim, _map));
         // one more redraw after it's switched off (or the water scrolls away) clears what was drawn
         if ((on || _drewSomething) && _sinceDraw >= 1.0 / FramesPerSecond)
         {
@@ -277,16 +322,27 @@ public partial class AmbientView : Node2D
 
     public override void _Draw()
     {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        DrawAll();
+        double ms = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        DrawMs = DrawMs == 0 ? ms : DrawMs * 0.8 + ms * 0.2;
+    }
+
+    private void DrawAll()
+    {
         _drewSomething = false;
         DrawnTiles = 0;
-        if (_sim is null || _map is null || !_map.Overlays.Animation)
+        _lampEffects = false;
+        if (_sim is null || _map is null || !_map.Overlays.Animation || _map.Overlays.Motion == MotionLevel.Still)
             return;
         var sim = _sim;
         var map = _map;
         _look = map.LookOrigin;
         DrawFenceSparks(sim, map, (float)(_time % 3600.0));
         DrawFire(sim, map, (float)(_time % 3600.0));
-        if (_animated == 0)
+        DrawLamps(sim, map, (float)(_time % 3600.0));
+        bool gusts = _plants > 0 && GustsShow(sim, map);
+        if (_animated == 0 && !gusts)
             return;
         if (sim.Map.Width != _width || sim.Map.Height != _height)
             return; // the map changed size under us; MapChanged will catch up
@@ -305,7 +361,12 @@ public partial class AmbientView : Node2D
         int rain = weather.RainPercent;
         bool lighting = map.Overlays.Lighting;
         bool raised = map.Overlays.Raised;
-        bool layered = map.Overlays.Look == LookMode.Layered && map.Overlays.Varied;
+        bool layered = map.Overlays.Look >= LookMode.Layered && map.Overlays.Varied;
+        bool expressive = layered && map.Overlays.Look == LookMode.Expressive;
+        bool atmosphere = layered && map.Overlays.Motion == MotionLevel.Full; // swash, spray and reef crests are for atmosphere only
+        var (downX, downY) = sim.Weather.Downwind;
+        var downwind = new Vector2(downX, downY) / 1000f;
+        float gustStrength = Mathf.Clamp((wind - GustFromWind) / (GustFullWind - GustFromWind), 0f, 1f);
         int swell = sim.Waters is { } waters ? waters.SwellPercent(sim.GameMinute(sim.CurrentTick)) : 0;
         float time = (float)(_time % 3600.0); // kept small so the fractions below stay smooth
 
@@ -315,7 +376,7 @@ public partial class AmbientView : Node2D
             {
                 int i = y * _width + x;
                 Motion motion = _motion[i];
-                if (motion == Motion.None || motion == Motion.Swash && !layered)
+                if (motion == Motion.None || motion == Motion.Swash && !atmosphere || motion == Motion.Vegetation && !gusts)
                     continue;
                 if (stride > 1 && MapLook.Hash(x + _look.X, y + _look.Y, 31) % (uint)stride != 0)
                     continue;
@@ -361,10 +422,14 @@ public partial class AmbientView : Node2D
                             sim.SurfPercentAt(new TilePos(sea % _width, sea / _width)));
                         break;
                     }
+                    case Motion.Vegetation:
+                        if (IsPlant(sim.Cover[p])) // it may have burnt since
+                            DrawGust(cell, x, y, time, wind, downwind, gustStrength, expressive, lit);
+                        break;
                 }
-                if (layered && _reef[i] && sim.Cover[p] == CoverType.ShallowWater)
+                if (atmosphere && _reef[i] && sim.Cover[p] == CoverType.ShallowWater)
                     DrawReefBreak(cell, x, y, time, lit, swell);
-                if (rain > 0 && motion != Motion.Swash)
+                if (rain > 0 && motion is not (Motion.Swash or Motion.Vegetation))
                     DrawRainRing(cell, x, y, time, rain, lit);
                 DrawnTiles++;
             }
@@ -534,6 +599,89 @@ public partial class AmbientView : Node2D
     }
 
     /// <summary>A ring spreading where a raindrop lands. More tiles ring at once in heavier rain.</summary>
+    /// <summary>
+    /// A gust passing over plants: bands of lighter leaves (the undersides turning) sweep downwind,
+    /// one every <see cref="GustSpacing"/> tiles, faster and brighter in a stronger wind and patchy along
+    /// their front. In the Expressive look they're stronger and blow a few leaves along.
+    /// </summary>
+    private void DrawGust(Rect2 cell, int x, int y, float time, float wind, Vector2 downwind, float strength, bool expressive, float lit)
+    {
+        float ax = x + _look.X, ay = y + _look.Y;
+        float along = ax * downwind.X + ay * downwind.Y;
+        float across = -ax * downwind.Y + ay * downwind.X;
+        float speed = 1.5f + 0.35f * wind; // tiles a second
+        float wave = Mathf.Sin(Mathf.Tau * (along - time * speed) / GustSpacing);
+        if (wave <= 0f)
+            return;
+        float band = Mathf.Pow(wave, 8f);
+        float patch = 0.5f + 0.5f * Mathf.Sin(across / 23f + time * 0.05f + 1.7f * Mathf.Sin(across / 61f));
+        float alpha = band * patch * strength * (expressive ? 0.16f : 0.09f) * lit;
+        if (alpha > 0.012f)
+            DrawRect(cell, Faded(Gust, alpha));
+        if (!expressive || band < 0.55f || Unit(x, y, 95) >= 0.12f)
+            return;
+        // a leaf carried across the tile with the gust
+        float u = Frac(time * 0.9f + Unit(x, y, 96));
+        var center = new Vector2(cell.Position.X + Cell / 2f, cell.Position.Y + Cell / 2f);
+        var at = center + downwind * ((u - 0.5f) * Cell) + new Vector2(-downwind.Y, downwind.X) * ((Unit(x, y, 97) - 0.5f) * Cell * 0.6f);
+        if (Inside(cell, at))
+            DrawRect(new Rect2(at.X - 1f, at.Y - 1f, 2f, 2f), Faded(Leaf, band * strength * lit));
+    }
+
+    /// <summary>
+    /// What the facilities' lamps show of their power, in a Layered look (the power plan's lamps only:
+    /// carried lights, fires and flares are left alone). A ceiling light at a site running on its
+    /// batteries below <see cref="FlickerBelowPercent"/>% charge flickers (full motion) or stays dimmed
+    /// (reduced motion: nothing flashes). In the Expressive look a lit red emergency light sends out a
+    /// slow pulse. Only lamps in view, as the map draws them.
+    /// </summary>
+    private void DrawLamps(Simulation sim, AsciiMapView map, float time)
+    {
+        if (sim.Power is not { } grid || grid.Lamps.Count == 0 || map.Overlays.Look < LookMode.Layered || !map.Overlays.Varied)
+            return;
+        bool full = map.Overlays.Motion == MotionLevel.Full;
+        bool expressive = map.Overlays.Look == LookMode.Expressive && full;
+        foreach (PowerLamp lamp in grid.Lamps)
+        {
+            if (!lamp.Lit || lamp.Kind == LampKind.Flood || lamp.Kind == LampKind.Emergency && !expressive)
+                continue;
+            var p = sim.FromIsland(lamp.X, lamp.Y);
+            if (!sim.Map.InBounds(p) || map.FogAt(p) != FogState.Visible || map.RoofShown(p))
+                continue;
+            var center = map.CenterOf(p);
+            if (!_onScreen.Grow(Cell * 2f).HasPoint(center))
+                continue;
+            if (lamp.Kind == LampKind.Emergency)
+            {
+                _lampEffects = true;
+                float k = Frac(time / 2.4f + Unit(p.X, p.Y, 102));
+                DrawArc(center, Cell * (0.4f + 1.6f * k), 0f, Mathf.Tau, 24, Faded(Beacon, 1f - k), 1.5f);
+                _drewSomething = true;
+                continue;
+            }
+            if (lamp.SiteId < 0 || lamp.SiteId >= grid.Sites.Count)
+                continue;
+            var site = grid.Sites[lamp.SiteId];
+            if (site.Source != PowerSource.Battery || grid.BatteryOf(site) is not { ChargePercent: < FlickerBelowPercent })
+                continue;
+            _lampEffects = true;
+            float dim;
+            if (full)
+            {
+                // short drop-outs at an irregular beat, each lamp on its own
+                float u = Frac(time / (1.3f + Unit(p.X, p.Y, 100)) + Unit(p.X, p.Y, 101));
+                dim = (u < 0.06f || (u is > 0.11f and < 0.14f)) ? 1f : (u is > 0.40f and < 0.43f) ? 0.5f : 0f;
+            }
+            else
+            {
+                dim = 0.45f;
+            }
+            if (dim > 0f)
+                DrawCircle(center, Cell * 1.4f, Faded(LampDim, dim));
+            _drewSomething = true;
+        }
+    }
+
     /// <summary>
     /// The end of a wave on a tile of shore, in time with the surf tile it comes from (<paramref name="sx"/>,
     /// <paramref name="sy"/>): just as the wave line there reaches the land, foam runs up a beach and back

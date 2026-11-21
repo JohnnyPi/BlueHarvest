@@ -35,26 +35,35 @@ public partial class WeatherView : Node2D
     private const int MaxShadowCells = 600;
 
     private Simulation? _sim;
+    private OverlayState? _overlays;
     private float _time;
     private bool _drewSomething;
 
     /// <summary>How far the shadow lattice has slid downwind so far, in pixels. Grows with the wind, so a change of speed never makes it jump.</summary>
     private Vector2 _shadowDrift;
 
-    public void Bind(Simulation sim)
+    /// <param name="overlays">The map's settings, for its motion level (reduced runs at half speed, still stops); none moves at full speed.</param>
+    public void Bind(Simulation sim, OverlayState? overlays = null)
     {
         _sim = sim;
+        _overlays = overlays;
         QueueRedraw();
     }
 
     public override void _Process(double delta)
     {
-        _time += (float)delta;
+        float pace = _overlays?.Motion switch
+        {
+            MotionLevel.Reduced => 0.5f,
+            MotionLevel.Still => 0f,
+            _ => 1f,
+        };
+        _time += (float)delta * pace;
         if (_sim is null)
             return;
         var settings = _sim.Weather.Settings;
         var (dx, dy) = settings.WindFrom.Opposite().Delta();
-        _shadowDrift += new Vector2(dx, dy).Normalized() * settings.WindSpeed * ShadowDriftPerWind * (float)delta;
+        _shadowDrift += new Vector2(dx, dy).Normalized() * settings.WindSpeed * ShadowDriftPerWind * (float)delta * pace;
         bool active = settings.RainPercent > 0 || settings.FogPercent > 0 || ShadowStrength() > 0f;
         // Keep animating while it rains; one more redraw clears the screen when the weather clears.
         if (active || _drewSomething)

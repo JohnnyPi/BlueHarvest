@@ -9,6 +9,29 @@ namespace BlueHarvest.Sim.Tests;
 /// <summary>Step 20a: items as things, carried in hands, pockets and bags, lying about, and in containers.</summary>
 public class ItemTests
 {
+    /// <summary>
+    /// On the map an item must never pass for something else: no door (+ /), exit or ladder (&gt; &lt; H),
+    /// lamp (*), player (@) or body (%), and no letter or digit, which creatures and people use. And
+    /// every item of a family shares its family's glyph, so the families stay readable.
+    /// </summary>
+    [Fact]
+    public void ItemGlyphs_NeverLookLikeSomethingElseOnTheMap_AndGoByFamily()
+    {
+        foreach (ItemDef def in ItemCatalog.All)
+        {
+            Assert.False("+/<>H*@%".Contains(def.Glyph), $"{def.Id} uses '{def.Glyph}', which means something else on the map");
+            Assert.False(char.IsAsciiLetterOrDigit(def.Glyph), $"{def.Id} uses '{def.Glyph}', a letter or digit (creatures and people)");
+        }
+        char GlyphOf(ItemKind kind) => ItemCatalog.Of(kind).Glyph;
+        Assert.All(ItemCatalog.All.Where(d => d.Is(ItemCategory.Medical) && !d.Is(ItemCategory.Fixture)), d => Assert.Equal('✚', d.Glyph));
+        Assert.All(ItemCatalog.All.Where(d => d.Is(ItemCategory.Edible) && !d.Is(ItemCategory.Medical)), d => Assert.Equal('♨', d.Glyph)); // pills are medical
+        Assert.Equal('!', GlyphOf(ItemKind.Flashlight));
+        Assert.Equal('!', GlyphOf(ItemKind.Flare));
+        Assert.Equal(')', GlyphOf(ItemKind.Rifle));
+        Assert.Equal('▣', GlyphOf(ItemKind.Locker));
+        Assert.Equal('?', GlyphOf(ItemKind.ParkMap));
+    }
+
     private static (Simulation Sim, PlayerController Drive, Actor You) Person(Loadout? loadout = null, TilePos? at = null)
     {
         var sim = new Simulation(new WorldMap(20, 20), seed: 7);

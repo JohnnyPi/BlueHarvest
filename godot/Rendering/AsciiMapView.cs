@@ -25,7 +25,7 @@ public sealed class OverlayState
     /// <summary>Glyph variants, colour jitter, joined walls and fence posts.</summary>
     public bool Varied = true;
 
-    /// <summary>Classic or Layered (F3, saved in user://ui.cfg). Layered needs <see cref="Varied"/> on.</summary>
+    /// <summary>Classic, Layered or Expressive (F3, saved in user://ui.cfg). Layered and Expressive need <see cref="Varied"/> on.</summary>
     public LookMode Look = LookMode.Layered;
 
     /// <summary>Fog of war: only what you see now is live; the rest is memory, the park plan, or black.</summary>
@@ -39,6 +39,9 @@ public sealed class OverlayState
 
     /// <summary>Water that moves on its own: glints, river streaks, surf (drawn by the AmbientView).</summary>
     public bool Animation = true;
+
+    /// <summary>How much the map moves (F4, saved in user://ui.cfg): full, reduced, or still.</summary>
+    public MotionLevel Motion = MotionLevel.Full;
 
     /// <summary>Sense cues on the map: ripples, wisps and tremors where you sense something, ticks on a ring for what comes from a direction.</summary>
     public bool SenseCues = true;
@@ -167,6 +170,10 @@ public partial class AsciiMapView : Node2D
     private static readonly Color PaperInk = new(0.95f, 0.92f, 0.8f);
     private static readonly Color RememberedItem = new(0.6f, 0.6f, 0.55f, 0.55f);
 
+    /// <summary>The dark token every item lies on, so it reads as a thing on the ground and never as the ground.</summary>
+    private static readonly Color ItemBacking = new(0.03f, 0.035f, 0.03f, 0.62f);
+    private static readonly Color RememberedItemBacking = new(0.03f, 0.035f, 0.03f, 0.35f);
+
     /// <summary>The items on the map this redraw, by row: built once per redraw, drawn row by row.</summary>
     private readonly Dictionary<int, List<(WorldItem Lying, TilePos At)>> _itemRows = new();
     private static readonly Color ExitBacking = new(0.05f, 0.35f, 0.12f, 0.85f);
@@ -206,6 +213,12 @@ public partial class AsciiMapView : Node2D
     private int _recentHighDm;
     private bool _tidal;
     private float _rainWet;
+
+    /// <summary>
+    /// The built world each map tile belongs to (Layered look): from the room index, the compounds'
+    /// squares and the ruins' footprints, by island position. Worked out when the map is bound or scrolls.
+    /// </summary>
+    private Sector[] _sector = Array.Empty<Sector>();
 
     /// <summary>Map tiles (y × width + x) with an item drawn on them this redraw: their ground glyph is left out.</summary>
     private readonly HashSet<int> _itemTiles = new();
@@ -319,6 +332,7 @@ public partial class AsciiMapView : Node2D
         _heightRangeDm = Math.Max(1, max - min);
         _hillshade = Hillshade(sim);
         _relief = Relief(sim);
+        ComputeSectors(sim);
     }
 
     /// <summary>
@@ -345,6 +359,61 @@ public partial class AsciiMapView : Node2D
         }
         return relief;
     }
+
+    /// <summary>
+    /// Which sector each map tile is in: the ruins' footprints and the compounds' squares (a little
+    /// past their radius, for buildings at the edge; the first one marked keeps a tile), then the room
+    /// index's rooms, which are exact and also cover paddock viewing stations and transit stations.
+    /// The testbed is a paddock: all of it is the Menagerie's.
+    /// </summary>
+    private void ComputeSectors(Simulation sim)
+    {
+        int w = sim.Map.Width, h = sim.Map.Height;
+        if (_sector.Length != w * h)
+            _sector = new Sector[w * h];
+        if (_island is null)
+        {
+            Array.Fill(_sector, Sector.Menagerie);
+            return;
+        }
+        Array.Clear(_sector);
+        int ox = (int)sim.IslandOrigin.X, oy = (int)sim.IslandOrigin.Y;
+        void Mark(int x0, int y0, int x1, int y1, Sector sector, bool overwrite)
+        {
+            int left = Math.Max(x0 - ox, 0), top = Math.Max(y0 - oy, 0);
+            int right = Math.Min(x1 - ox, w - 1), bottom = Math.Min(y1 - oy, h - 1);
+            for (int y = top; y <= bottom; y++)
+            {
+                for (int x = left; x <= right; x++)
+                {
+                    if (overwrite || _sector[y * w + x] == Sector.None)
+                        _sector[y * w + x] = sector;
+                }
+            }
+        }
+        var works = _island.World.Works;
+        foreach (var ruin in works.Ruins)
+        {
+            int cx = (int)Math.Floor(ruin.X), cy = (int)Math.Floor(ruin.Y), r = ruin.R + 3;
+            Mark(cx - r, cy - r, cx + r, cy + r, FacilityLook.OfRuin(ruin.Kind), false);
+        }
+        foreach (var site in works.Sites)
+        {
+            int cx = (int)Math.Floor(site.X), cy = (int)Math.Floor(site.Y), r = site.R + 2;
+            Mark(cx - r, cy - r, cx + r, cy + r, FacilityLook.OfKind(site.Kind), false);
+        }
+        if (sim.Rooms is { } rooms)
+        {
+            foreach (var room in rooms.In(ox, oy, ox + w - 1, oy + h - 1))
+                Mark(room.X0, room.Y0, room.X1, room.Y1, FacilityLook.OfKind(room.Kind), true);
+        }
+    }
+
+    /// <summary>The look for a built tile in the Layered look, or null in Classic (or with variants off).</summary>
+    private SectorLook? BuiltLook(TilePos p, CoverType cover) =>
+        Overlays.Varied && Overlays.Look >= LookMode.Layered && _sector.Length == _sim!.Map.Width * _sim.Map.Height
+            ? FacilityLook.For(FacilityLook.Effective(_sector[p.Y * _sim.Map.Width + p.X], cover))
+            : null;
 
     // ---- Where things are drawn ------------------------------------------------------------
 
@@ -452,12 +521,19 @@ public partial class AsciiMapView : Node2D
     {
         if (_sim is null)
             return;
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        DrawMap();
+        double ms = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        DrawMs = DrawMs == 0 ? ms : DrawMs * 0.8 + ms * 0.2;
+    }
 
-        var sim = _sim;
+    private void DrawMap()
+    {
+        var sim = _sim!;
         var o = Overlays;
         int width = sim.Map.Width, height = sim.Map.Height;
         _look = LookOrigin;
-        if (o.Look == LookMode.Layered)
+        if (o.Look >= LookMode.Layered)
         {
             _tidal = sim.Waters is not null;
             _recentHighDm = _tidal ? sim.RecentHighWaterDm : 0;
@@ -541,10 +617,16 @@ public partial class AsciiMapView : Node2D
             _ => sim.Cover[p],
         };
 
+        // the facility's look for built things: wall line, palette, roof (Layered only)
+        var built = BuiltLook(p, cover);
+        bool perimeter = built is not null && _island?.GroundAt(p) == Cover.BigWall;
+
         if (state == FogState.Plan)
         {
             DrawRect(cell, MapLook.PlanGround);
             char planGlyph = roofed ? '·' : o.Varied ? MapLook.VariedGlyph(cover, p.X, p.Y, _look, PlanCoverAt) : MapLook.Cover[(int)cover].Glyph;
+            if (built is not null && !roofed)
+                planGlyph = FacilityLook.Restyle(planGlyph, cover, built, perimeter, ax, ay);
             DrawGlyphAt(planGlyph, p.X * CellSize, top, MapLook.PlanInk);
             return;
         }
@@ -552,10 +634,32 @@ public partial class AsciiMapView : Node2D
         var look = MapLook.Cover[(int)cover];
         float t = _relief[p.Y * sim.Map.Width + p.X];
         float shade = o.Raised ? _hillshade[p.Y * sim.Map.Width + p.X] * 0.92f + 0.12f * t : 0.55f + 0.65f * t;
-        var background = roofed ? MapLook.Roof : look.Background;
-        GroundPick? layered = !roofed && o.Varied && o.Look == LookMode.Layered ? LayeredLook(p, cover, ax, ay) : null;
+        var background = roofed ? built?.Roof ?? MapLook.Roof : look.Background;
+        var baseInk = look.Ink;
+        GroundPick? layered = !roofed && o.Varied && o.Look >= LookMode.Layered ? LayeredLook(p, cover, ax, ay) : null;
         if (layered is { } chosen)
+        {
             background = chosen.Ground;
+        }
+        else if (built is not null && !roofed)
+        {
+            switch (cover)
+            {
+                case CoverType.Wall:
+                    background = built.WallGround;
+                    baseInk = built.WallInk;
+                    break;
+                case CoverType.Floor:
+                    bool yard = _island?.GroundAt(p) is Cover.Yard or Cover.Helipad or Cover.Pier;
+                    background = yard ? built.YardGround : built.FloorGround;
+                    baseInk = yard ? built.YardInk : built.FloorInk;
+                    break;
+                case CoverType.Equipment:
+                    background = built.EquipmentGround;
+                    baseInk = built.EquipmentInk;
+                    break;
+            }
+        }
         if (o.Varied && !roofed)
         {
             float jitter = MapLook.Jitter(ax, ay);
@@ -570,7 +674,9 @@ public partial class AsciiMapView : Node2D
         DrawRect(cell, Tone(background, shade, light, state, dimmed, red));
         if (!roofed)
         {
-            var (glyph, ink) = GlyphFor(p, cover, look.Glyph, look.Ink, state, layered);
+            var (glyph, ink) = GlyphFor(p, cover, look.Glyph, baseInk, state, layered);
+            if (built is not null)
+                glyph = FacilityLook.Restyle(glyph, cover, built, perimeter, ax, ay);
             var inkTone = Tone(ink, Math.Min(1.25f, shade * 1.2f), light, state, dimmed, red);
             bool live = state == FogState.Visible;
             // a speck of grit or a seed head: rare, fixed, and only on ground in view
@@ -588,7 +694,7 @@ public partial class AsciiMapView : Node2D
         else if (o.Varied && (ay & 1) == 0)
         {
             DrawLine(new Vector2(cell.Position.X, top + CellSize - 0.5f), new Vector2(cell.End.X, top + CellSize - 0.5f),
-                Tone(MapLook.RoofSeam, 1f, light, state, dimmed), 1f);
+                Tone(built?.RoofSeam ?? MapLook.RoofSeam, 1f, light, state, dimmed), 1f);
         }
 
         if (!o.Raised)
@@ -600,7 +706,8 @@ public partial class AsciiMapView : Node2D
         {
             var south = new TilePos(p.X, p.Y + 1);
             int faceLight = sim.Map.InBounds(south) ? Math.Max(light, sim.Light.LevelAt(south)) : light;
-            var faceColor = roofed ? MapLook.RoofFace : MapLook.Face(cover);
+            var faceColor = roofed ? built?.RoofFace ?? MapLook.RoofFace
+                : built is not null && cover == CoverType.Wall ? built.WallFace : MapLook.Face(cover);
             var faceRect = new Rect2(p.X * CellSize, top + CellSize, CellSize, face);
             DrawRect(faceRect, Tone(faceColor, 1f, faceLight, state, dimmed, red));
             DrawFaceTexture(p, cover, roofed, faceRect);
@@ -726,6 +833,7 @@ public partial class AsciiMapView : Node2D
                 var shown = group.OrderByDescending(i => i.Lying.Item.Def.Is(ItemCategory.Fixture)).ThenBy(i => i.Lying.Item.Id).First();
                 var def = shown.Lying.Item.Def;
                 float top = p.Y * CellSize - Lift(p);
+                DrawItemToken(p.X * CellSize, top, ItemInk(def), ItemBacking);
                 DrawGlyphAt(def.Glyph, p.X * CellSize, top, ItemInk(def));
                 if (group.Count() > 1 || shown.Lying.Item.IsAccessible && shown.Lying.Item.Contents.Count > 0)
                     DrawRect(new Rect2(p.X * CellSize + CellSize - 4, top + 1, 3, 3), PaperInk);
@@ -740,6 +848,7 @@ public partial class AsciiMapView : Node2D
                 if (FogAt(p) != FogState.Remembered || RoofShown(p) || !memory.RememberedItem(p, out var def, out bool more))
                     continue;
                 float top = p.Y * CellSize - Lift(p);
+                DrawItemToken(p.X * CellSize, top, RememberedItem, RememberedItemBacking);
                 DrawGlyphAt(def.Glyph, p.X * CellSize, top, RememberedItem);
                 if (more)
                     DrawRect(new Rect2(p.X * CellSize + CellSize - 4, top + 1, 3, 3), RememberedItem);
@@ -1116,7 +1225,8 @@ public partial class AsciiMapView : Node2D
         bool tideWet = _tidal && water.Kind == WaterKind.Sea && cover is not (CoverType.ShallowWater or CoverType.DeepWater)
             && water.GroundDm <= _recentHighDm;
         return GroundLook.Choose(cover, ax, ay, _lookSeed, _island?.BiomeAt(p), _island?.GroundAt(p), slope,
-            CoverAt(p.X, p.Y - 1), CoverAt(p.X + 1, p.Y), CoverAt(p.X, p.Y + 1), CoverAt(p.X - 1, p.Y), tideWet, _rainWet);
+            CoverAt(p.X, p.Y - 1), CoverAt(p.X + 1, p.Y), CoverAt(p.X, p.Y + 1), CoverAt(p.X - 1, p.Y), tideWet, _rainWet,
+            rich: Overlays.Look == LookMode.Expressive);
     }
 
     /// <summary>The generator's own cover for a map tile on a generated island (a reef, cloud forest…); null on the testbed. For looks.</summary>
@@ -1222,6 +1332,20 @@ public partial class AsciiMapView : Node2D
         DrawRect(new Rect2(x * CellSize, shadowY, CellSize, ShadowWidth), CliffShadow);
         DrawLine(new Vector2(x * CellSize, edgeY), new Vector2((x + 1) * CellSize, edgeY), CliffLine, 2f);
     }
+
+    /// <summary>
+    /// An item's token: a dark square inset in the cell, edged faintly in the item's colour, so an item on
+    /// the ground is plainly a thing lying there (actors have a fuller backing; ground has none).
+    /// </summary>
+    private void DrawItemToken(float left, float top, Color ink, Color backing)
+    {
+        var token = new Rect2(left + 3f, top + 3f, CellSize - 6f, CellSize - 6f);
+        DrawRect(token, backing);
+        DrawRect(token, new Color(ink.R, ink.G, ink.B, ink.A * 0.4f), false, 1f);
+    }
+
+    /// <summary>How long the last redraw took, in milliseconds (smoothed), for the debug readout.</summary>
+    public double DrawMs { get; private set; }
 
     /// <summary>The colour an item is drawn in, by what it is.</summary>
     private static Color ItemInk(ItemDef def) =>

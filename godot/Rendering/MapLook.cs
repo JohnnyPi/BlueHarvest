@@ -126,6 +126,9 @@ public static class MapLook
         '■', '║', '═', '╚', '║', '║', '╔', '╠', '═', '╝', '═', '╩', '╗', '╣', '╦', '╬',
     };
 
+    /// <summary>Which wall piece (its neighbour mask, 0–15) a glyph is, or −1 if it isn't one.</summary>
+    public static int WallPieceIndex(char glyph) => System.Array.IndexOf(WallPieces, glyph);
+
     /// <summary>
     /// The varied glyph for a tile: hashed variants for ground, joined box-drawing for walls, posts
     /// every 4 m on a fence. (<paramref name="x"/>, <paramref name="y"/>) is the tile on the map, and

@@ -120,6 +120,7 @@ public partial class Main : Node2D
             relief: _island is null ? null : new ReliefScale(_island.World.Shape),
             island: _island, lookSeed: _island is null ? 0 : (int)_island.World.Params.Seed);
         _map.Overlays.Look = UiSettings.LoadLook();
+        _map.Overlays.Motion = UiSettings.LoadMotion();
         _sim.WindowShifted += OnWindowShifted;
         var overlays = _map.Overlays;
         overlays.PlayerId = _playerActor.Id;
@@ -141,7 +142,7 @@ public partial class Main : Node2D
         AddChild(_senseRings);
 
         _weather = new WeatherView();
-        _weather.Bind(_sim);
+        _weather.Bind(_sim, _map.Overlays);
         AddChild(_weather);
 
         _camera = new Camera2D { PositionSmoothingEnabled = true, PositionSmoothingSpeed = 12f };
@@ -258,13 +259,42 @@ public partial class Main : Node2D
         if (!key.Echo && key.Keycode == Key.F3)
         {
             viewport.SetInputAsHandled();
-            var look = _map.Overlays.Look == LookMode.Classic ? LookMode.Layered : LookMode.Classic;
+            var look = _map.Overlays.Look switch
+            {
+                LookMode.Classic => LookMode.Layered,
+                LookMode.Layered => LookMode.Expressive,
+                _ => LookMode.Classic,
+            };
             _map.Overlays.Look = look;
             UiSettings.SaveLook(look);
-            Say(look == LookMode.Layered
-                ? "Map look: Layered (patches, accents, biome colours). F3 for Classic."
-                : "Map look: Classic (one glyph family per ground). F3 for Layered.", quiet: true);
+            Say(look switch
+            {
+                LookMode.Layered => "Map look: Layered (patches, accents, biome colours, facility styles). F3 for Expressive.",
+                LookMode.Expressive => "Map look: Expressive (richer texture, stronger motion). F3 for Classic.",
+                _ => "Map look: Classic (one glyph family per ground). F3 for Layered.",
+            }, quiet: true);
             _map.QueueRedraw();
+            return;
+        }
+        if (!key.Echo && key.Keycode == Key.F4)
+        {
+            viewport.SetInputAsHandled();
+            var motion = _map.Overlays.Motion switch
+            {
+                MotionLevel.Full => MotionLevel.Reduced,
+                MotionLevel.Reduced => MotionLevel.Still,
+                _ => MotionLevel.Full,
+            };
+            _map.Overlays.Motion = motion;
+            UiSettings.SaveMotion(motion);
+            Say(motion switch
+            {
+                MotionLevel.Reduced => "Map motion: reduced (half speed, nothing just for atmosphere, nothing flashes). F4 for still.",
+                MotionLevel.Still => "Map motion: still (nothing moves). F4 for full.",
+                _ => "Map motion: full. F4 for reduced.",
+            }, quiet: true);
+            _map.QueueRedraw();
+            _ambient.QueueRedraw();
             return;
         }
         if (!key.Echo && key.Keycode == Key.F1)

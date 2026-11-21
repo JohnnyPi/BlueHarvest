@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://iu7706dvdqiq"]
 
-[ext_resource type="Script" path="res://Island/FrontMenu.cs" id="1_menu"]
+[ext_resource type="Script" uid="uid://cf74v5g2ru4d" path="res://Island/FrontMenu.cs" id="1_menu"]
 
-[node name="FrontMenu" type="Control"]
+[node name="FrontMenu" type="Control" unique_id=1968518637]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

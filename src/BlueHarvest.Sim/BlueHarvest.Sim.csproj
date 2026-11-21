@@ -1,7 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net11.0</TargetFramework>
+    <!-- net9.0, not net11.0: the Godot editor (4.7.2, built for .NET 8) loads the game's scripts on the
+         oldest runtime above .NET 8 it finds (9.0.2 here), and can't read anything built for .NET 11.
+         The game project references this one, so both stay on net9.0. Built with the .NET 11 SDK. -->
+    <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

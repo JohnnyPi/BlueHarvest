@@ -41,8 +41,9 @@ public static class GroundLook
     /// <param name="slopeDm">The biggest height difference to a neighbouring tile, in decimetres.</param>
     /// <param name="tideWet">The sea's edge, uncovered by the tide within the last half tide: wet sand, darker ground.</param>
     /// <param name="rainWet">How wet the ground is from recent rain, 0 to 1 (Simulation.RecentRainPercent / 100).</param>
+    /// <param name="rich">The Expressive look: half as many accents again and twice the micro-marks.</param>
     public static GroundPick? Choose(CoverType cover, int x, int y, int seed, Biome? biome, Cover? ground, int slopeDm,
-        CoverType? north, CoverType? east, CoverType? south, CoverType? west, bool tideWet = false, float rainWet = 0f)
+        CoverType? north, CoverType? east, CoverType? south, CoverType? west, bool tideWet = false, float rainWet = 0f, bool rich = false)
     {
         var profile = tideWet && cover == CoverType.Sand ? VisualProfiles.WetSand : VisualProfiles.For(cover, ground);
         if (profile is null)
@@ -61,6 +62,8 @@ public static class GroundLook
         bool steep = profile.Soft && slopeDm >= SteepDm;
         string accents = steep ? SteepAccents : profile.Accents;
         int accentOdds = steep ? Math.Max(120, profile.AccentPerMille * 2) : profile.AccentPerMille;
+        if (rich)
+            accentOdds = accentOdds * 3 / 2;
         if (accents.Length > 0 && LookNoise.Chance(seed, x, y, salt + 3, accentOdds))
         {
             glyph = Pick(accents, seed, x, y, salt + 4);
@@ -98,7 +101,7 @@ public static class GroundLook
         if (rainWet > 0f && !water)
             groundColor = Scale(groundColor, 1f - 0.16f * Math.Clamp(rainWet, 0f, 1f));
 
-        bool mark = LookNoise.Chance(seed, x, y, salt + 8, profile.MarkPerMille);
+        bool mark = LookNoise.Chance(seed, x, y, salt + 8, rich ? profile.MarkPerMille * 2 : profile.MarkPerMille);
         float markX = mark ? LookNoise.Unit(seed, x, y, salt + 9) : 0f;
         float markY = mark ? LookNoise.Unit(seed, x, y, salt + 10) : 0f;
         return new GroundPick(glyph, ink, groundColor, profile.Shadow, mark, markX, markY);

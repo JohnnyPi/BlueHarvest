@@ -22,7 +22,9 @@ public static class GlyphSet
         "▲△▴∩▰▧▪■" +                // stone and elevation
         "≈∼≋∽⌒~" +                  // water and air
         "≡∕◌○◉↑↗" +                 // tracks, breaks, rings and devices, direction
+        "✚♨☕•▣" +                   // item families: medical, food, drinks, ammunition, furniture
         "─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬╤╧╪╫╌╭╮╰╯╱╲" + // architecture (drawn as shapes)
+        "━┃┏┓┗┛┣┫┳┻╋" +             // heavy framing (drawn as shapes)
         "░▒▓█▀▄▌▐";                 // shade and mass (drawn as shapes)
 
     /// <summary>
@@ -60,6 +62,26 @@ public static class GlyphSet
             if (!IsApproved(c))
             {
                 GD.PushWarning($"Glyph check: MapLook draws '{c}' (U+{(int)c:X4}), which isn't in the approved set.");
+                problems++;
+            }
+        }
+        // items: approved, never a glyph that means something else, and never one the ground uses
+        var ground = new HashSet<char>(MapLook.AllGlyphs + FacilityLook.AllGlyphs + string.Concat(VisualProfiles.All.Select(v => v.AllGlyphs)));
+        foreach (var def in BlueHarvest.Sim.Actors.ItemCatalog.All)
+        {
+            char c = def.Glyph;
+            if (!IsApproved(c) || IsReserved(c) || ground.Contains(c))
+            {
+                GD.PushWarning($"Glyph check: the {def.Name} uses '{c}', which " +
+                    (!IsApproved(c) ? "isn't in the approved set." : IsReserved(c) ? "is reserved for things that carry meaning." : "the ground also uses."));
+                problems++;
+            }
+        }
+        foreach (char c in FacilityLook.AllGlyphs.Distinct())
+        {
+            if (!IsApproved(c))
+            {
+                GD.PushWarning($"Glyph check: FacilityLook draws '{c}' (U+{(int)c:X4}), which isn't in the approved set.");
                 problems++;
             }
         }

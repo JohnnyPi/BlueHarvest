@@ -3,8 +3,8 @@
     <ProjectReference Include="..\src\BlueHarvest.Sim\BlueHarvest.Sim.csproj" />
   </ItemGroup>
   <PropertyGroup>
-    <TargetFramework>net11.0</TargetFramework>
-    <TargetFramework Condition=" '$(GodotTargetPlatform)' == 'android' ">net9.0</TargetFramework>
+    <!-- net9.0 so the Godot editor can load the scripts (see BlueHarvest.Sim.csproj); the tests and runner stay on net11.0 -->
+    <TargetFramework>net9.0</TargetFramework>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <RootNamespace>BlueHarvest.Game</RootNamespace>
   </PropertyGroup>
