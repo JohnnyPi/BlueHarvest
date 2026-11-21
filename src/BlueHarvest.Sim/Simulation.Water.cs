@@ -59,6 +59,31 @@ public sealed partial class Simulation
     /// <summary>The sea against its mean level now, dm.</summary>
     public int SeaLevelDm => _seaLevelDm;
 
+    /// <summary>
+    /// The highest the sea has stood over the last half tide (about six hours, sampled every 5 game
+    /// minutes), dm against its mean, and never below <see cref="SeaLevelDm"/>. Sand the tide has
+    /// uncovered since is still wet: the renderer darkens the sea's edge below it. Without tides, the
+    /// sea level now. Reads only; nothing changes.
+    /// </summary>
+    public int RecentHighWaterDm
+    {
+        get
+        {
+            if (Waters is not { } waters)
+                return _seaLevelDm;
+            long now = GameMinute(CurrentTick);
+            int high = _seaLevelDm;
+            for (long back = 5; back <= WaterLevels.TidePeriodMinutes / 2; back += 5)
+            {
+                long minute = now - back;
+                if (minute < 0)
+                    break;
+                high = Math.Max(high, waters.SeaLevelDm(minute, MoonPhaseAt(minute)));
+            }
+            return high;
+        }
+    }
+
     /// <summary>Whether the tide is coming in.</summary>
     public bool TideRising => Waters is { } w && w.TideRising(GameMinute(CurrentTick), MoonPhaseAt(GameMinute(CurrentTick)));
 

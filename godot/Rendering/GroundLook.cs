@@ -39,10 +39,12 @@ public static class GroundLook
     /// <param name="biome">The generator's biome there; null where there is none (the testbed).</param>
     /// <param name="ground">The generator's own cover there; null where there is none.</param>
     /// <param name="slopeDm">The biggest height difference to a neighbouring tile, in decimetres.</param>
+    /// <param name="tideWet">The sea's edge, uncovered by the tide within the last half tide: wet sand, darker ground.</param>
+    /// <param name="rainWet">How wet the ground is from recent rain, 0 to 1 (Simulation.RecentRainPercent / 100).</param>
     public static GroundPick? Choose(CoverType cover, int x, int y, int seed, Biome? biome, Cover? ground, int slopeDm,
-        CoverType? north, CoverType? east, CoverType? south, CoverType? west)
+        CoverType? north, CoverType? east, CoverType? south, CoverType? west, bool tideWet = false, float rainWet = 0f)
     {
-        var profile = VisualProfiles.For(cover, ground);
+        var profile = tideWet && cover == CoverType.Sand ? VisualProfiles.WetSand : VisualProfiles.For(cover, ground);
         if (profile is null)
             return null;
         int salt = profile.Salt * 16;
@@ -89,6 +91,12 @@ public static class GroundLook
         }
         if (steep)
             groundColor = groundColor.Lerp(SteepGround, 0.25f);
+        // wet ground is darker: the tide's edge (wet sand has its own profile), and anything but water after rain
+        bool water = cover is CoverType.ShallowWater or CoverType.DeepWater;
+        if (tideWet && cover != CoverType.Sand && !water)
+            groundColor = Scale(groundColor, 0.8f);
+        if (rainWet > 0f && !water)
+            groundColor = Scale(groundColor, 1f - 0.16f * Math.Clamp(rainWet, 0f, 1f));
 
         bool mark = LookNoise.Chance(seed, x, y, salt + 8, profile.MarkPerMille);
         float markX = mark ? LookNoise.Unit(seed, x, y, salt + 9) : 0f;
@@ -98,6 +106,8 @@ public static class GroundLook
 
     private static char Pick(string glyphs, int seed, int x, int y, int salt) =>
         glyphs[(int)(LookNoise.Hash(seed, x, y, salt) % (uint)glyphs.Length)];
+
+    private static Color Scale(Color c, float f) => new(c.R * f, c.G * f, c.B * f, c.A);
 
     /// <summary>Colour times tint, channel by channel; the alpha stays the colour's.</summary>
     private static Color Multiply(Color c, Color tint) => new(c.R * tint.R, c.G * tint.G, c.B * tint.B, c.A);

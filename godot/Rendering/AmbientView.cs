@@ -2,6 +2,7 @@
 using System;
 using BlueHarvest.Sim;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Sim.World.Generation;
 using Godot;
 
 namespace BlueHarvest.Game.Rendering;
@@ -26,6 +27,20 @@ public partial class AmbientView : Node2D
         Running,
         /// <summary>Sea within a few tiles of land: wave lines moving to the shore.</summary>
         Surf,
+        /// <summary>Land at the water's edge, next to surf: swash on a beach, spray on rock or a structure (Layered look only).</summary>
+        Swash,
+    }
+
+    /// <summary>What kind of shore a <see cref="Motion.Swash"/> tile is, which decides how the waves end on it.</summary>
+    private enum Shore : byte
+    {
+        None,
+        /// <summary>Sand, mud or low ground: foam runs up and back, and the sand gleams wet a moment.</summary>
+        Beach,
+        /// <summary>Rock, a boulder or a step of a metre or more: the wave bursts into spray.</summary>
+        Rocky,
+        /// <summary>A wall, pier, road or anything built: a small splash.</summary>
+        Built,
     }
 
     private const int Cell = AsciiMapView.CellSize;
@@ -54,6 +69,8 @@ public partial class AmbientView : Node2D
     private static readonly Color FlameEdge = new(1f, 0.35f, 0.08f, 0.9f);
     private static readonly Color Ember = new(1f, 0.6f, 0.2f, 0.9f);
     private static readonly Color SmokePuff = new(0.55f, 0.55f, 0.55f, 1f);
+    private static readonly Color WetSheen = new(0.02f, 0.04f, 0.08f, 0.2f);
+    private static readonly Color SwashFilm = new(0.85f, 0.94f, 1f, 0.16f);
 
     private Simulation? _sim;
     private AsciiMapView? _map;
@@ -63,6 +80,11 @@ public partial class AmbientView : Node2D
     private float[] _dirX = Array.Empty<float>(), _dirY = Array.Empty<float>();
     /// <summary>Running water: speed in m/s. Surf: distance from land in tiles.</summary>
     private float[] _amount = Array.Empty<float>();
+    /// <summary>Swash tiles: the kind of shore, and the map index of the surf tile the waves come from.</summary>
+    private Shore[] _shore = Array.Empty<Shore>();
+    private int[] _seaward = Array.Empty<int>();
+    /// <summary>Water over coral (the generator's reef), where waves break offshore.</summary>
+    private bool[] _reef = Array.Empty<bool>();
     private int _width, _height, _animated;
 
     private double _time, _sinceDraw;
@@ -106,6 +128,9 @@ public partial class AmbientView : Node2D
             _dirX = new float[n];
             _dirY = new float[n];
             _amount = new float[n];
+            _shore = new Shore[n];
+            _seaward = new int[n];
+            _reef = new bool[n];
         }
         _animated = 0;
 
@@ -122,6 +147,9 @@ public partial class AmbientView : Node2D
                 land[i] = !water;
                 _motion[i] = Motion.None;
                 _dirX[i] = _dirY[i] = _amount[i] = 0f;
+                _shore[i] = Shore.None;
+                _seaward[i] = -1;
+                _reef[i] = water && _map is not null && _map.GroundAt(p) == Cover.Reef;
                 if (!water)
                     continue;
                 _animated++;
@@ -175,8 +203,62 @@ public partial class AmbientView : Node2D
                 _amount[i] = nearest;
             }
         }
+
+        // third pass: land touching surf is where the waves end (drawn in the Layered look only)
+        for (int y = 0; y < _height; y++)
+        {
+            for (int x = 0; x < _width; x++)
+            {
+                int i = y * _width + x;
+                if (!land[i])
+                    continue;
+                float towardX = 0f, towardY = 0f;
+                int seaward = -1, best = int.MaxValue;
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int xx = x + dx, yy = y + dy;
+                        if ((dx == 0 && dy == 0) || xx < 0 || yy < 0 || xx >= _width || yy >= _height)
+                            continue;
+                        int k = yy * _width + xx;
+                        if (_motion[k] != Motion.Surf)
+                            continue;
+                        towardX -= dx;
+                        towardY -= dy;
+                        int rank = dx * dx + dy * dy; // a side neighbour before a corner one
+                        if (rank < best)
+                        {
+                            best = rank;
+                            seaward = k;
+                        }
+                    }
+                }
+                float length = Mathf.Sqrt(towardX * towardX + towardY * towardY);
+                if (seaward < 0 || length < 0.001f)
+                    continue;
+                var p = new TilePos(x, y);
+                var source = new TilePos(seaward % _width, seaward / _width);
+                _motion[i] = Motion.Swash;
+                _dirX[i] = towardX / length;
+                _dirY[i] = towardY / length;
+                _seaward[i] = seaward;
+                _shore[i] = ShoreOf(map.Cover[p], map.Heights[p] - map.Heights[source]);
+                _animated++;
+            }
+        }
         QueueRedraw();
     }
+
+    /// <summary>How the waves end on a tile of shore: by what it is, and by how far it stands above the water.</summary>
+    private static Shore ShoreOf(CoverType cover, int stepDm) => cover switch
+    {
+        _ when stepDm >= 10 => Shore.Rocky,
+        CoverType.Rock or CoverType.BareRock or CoverType.Lava => Shore.Rocky,
+        CoverType.Wall or CoverType.Floor or CoverType.Track or CoverType.Door or CoverType.Fence or CoverType.WeakFence
+            or CoverType.BrokenFence or CoverType.Support or CoverType.Equipment or CoverType.Vehicle or CoverType.Rubble => Shore.Built,
+        _ => Shore.Beach,
+    };
 
     public override void _Process(double delta)
     {
@@ -223,6 +305,8 @@ public partial class AmbientView : Node2D
         int rain = weather.RainPercent;
         bool lighting = map.Overlays.Lighting;
         bool raised = map.Overlays.Raised;
+        bool layered = map.Overlays.Look == LookMode.Layered && map.Overlays.Varied;
+        int swell = sim.Waters is { } waters ? waters.SwellPercent(sim.GameMinute(sim.CurrentTick)) : 0;
         float time = (float)(_time % 3600.0); // kept small so the fractions below stay smooth
 
         for (int y = y0; y <= y1; y++)
@@ -231,7 +315,7 @@ public partial class AmbientView : Node2D
             {
                 int i = y * _width + x;
                 Motion motion = _motion[i];
-                if (motion == Motion.None)
+                if (motion == Motion.None || motion == Motion.Swash && !layered)
                     continue;
                 if (stride > 1 && MapLook.Hash(x + _look.X, y + _look.Y, 31) % (uint)stride != 0)
                     continue;
@@ -270,8 +354,17 @@ public partial class AmbientView : Node2D
                     case Motion.Surf:
                         DrawWave(cell, x, y, time, wind, i, lit, sim.SurfPercentAt(p));
                         break;
+                    case Motion.Swash:
+                    {
+                        int sea = _seaward[i];
+                        DrawSwash(cell, i, sea % _width, sea / _width, time, wind, lit,
+                            sim.SurfPercentAt(new TilePos(sea % _width, sea / _width)));
+                        break;
+                    }
                 }
-                if (rain > 0)
+                if (layered && _reef[i] && sim.Cover[p] == CoverType.ShallowWater)
+                    DrawReefBreak(cell, x, y, time, lit, swell);
+                if (rain > 0 && motion != Motion.Swash)
                     DrawRainRing(cell, x, y, time, rain, lit);
                 DrawnTiles++;
             }
@@ -441,6 +534,83 @@ public partial class AmbientView : Node2D
     }
 
     /// <summary>A ring spreading where a raindrop lands. More tiles ring at once in heavier rain.</summary>
+    /// <summary>
+    /// The end of a wave on a tile of shore, in time with the surf tile it comes from (<paramref name="sx"/>,
+    /// <paramref name="sy"/>): just as the wave line there reaches the land, foam runs up a beach and back
+    /// with a thin film behind it and the sand darkens wet for a moment; on rock or a structure it bursts
+    /// into spray thrown up and landward.
+    /// </summary>
+    private void DrawSwash(Rect2 cell, int i, int sx, int sy, float time, float wind, float lit, int surf)
+    {
+        float size = surf > 0 ? 0.35f + 0.65f * surf / 100f : 0.6f;
+        float period = WavePeriod / (1f + wind / 12f) * (surf > 0 ? 1.3f - 0.5f * surf / 100f : 1f);
+        float offset = 0.15f * Mathf.Sin((sx + _look.X + sy + _look.Y) * 0.35f);
+        float s = Frac(time / period + offset); // 0 the moment the wave reaches the land (see DrawWave)
+        var dir = new Vector2(_dirX[i], _dirY[i]);
+        var along = new Vector2(-dir.Y, dir.X);
+        var center = new Vector2(cell.Position.X + Cell / 2f, cell.Position.Y + Cell / 2f);
+        var edge = center - dir * (Cell / 2f);   // the seaward side of the tile
+        int x = i % _width, y = i / _width;
+
+        if (_shore[i] == Shore.Beach)
+        {
+            const float run = 0.35f, wet = 0.65f;
+            if (s < wet)
+                DrawRect(cell, Faded(WetSheen, (1f - s / wet) * lit * 1.5f));
+            if (s >= run)
+                return;
+            float reach = 0.7f * size * Mathf.Sin(Mathf.Pi * s / run);
+            var mid = edge + dir * (reach * Cell);
+            Vector2 a = Clamped(cell, mid - along * (Cell / 2f)), b = Clamped(cell, mid + along * (Cell / 2f));
+            Vector2 ea = Clamped(cell, edge - along * (Cell / 2f)), eb = Clamped(cell, edge + along * (Cell / 2f));
+            DrawColoredPolygon(new[] { ea, eb, b, a }, Faded(SwashFilm, (1f - s / run) * lit * 1.5f));
+            DrawLine(a, b, Faded(Foam, (1f - s / run) * lit * size * 1.4f), 1.5f);
+            return;
+        }
+
+        // rock or a structure: a white flash along the seaward side, then spray in an arc
+        const float burst = 0.3f;
+        if (s >= burst)
+            return;
+        float t = s / burst;
+        if (t < 0.3f)
+            DrawLine(Clamped(cell, edge - along * (Cell / 2f)), Clamped(cell, edge + along * (Cell / 2f)),
+                Faded(Foam, (1f - t / 0.3f) * lit * size * 1.6f), 2f);
+        int drops = _shore[i] == Shore.Rocky ? 6 : 3;
+        float height = Cell * (_shore[i] == Shore.Rocky ? 0.9f : 0.45f) * size;
+        for (int k = 0; k < drops; k++)
+        {
+            float angle = (Unit(x, y, 70 + k) - 0.5f) * 1.8f;
+            float speed = 0.5f + 0.5f * Unit(x, y, 80 + k);
+            var heading = dir.Rotated(angle);
+            var at = edge + heading * (t * Cell * 0.8f * speed) - new Vector2(0f, 4f * height * speed * t * (1f - t));
+            DrawCircle(at, 1.2f + 0.8f * Unit(x, y, 90 + k), Faded(WhiteWater, (1f - t) * lit * size * 1.3f));
+        }
+    }
+
+    /// <summary>
+    /// Waves breaking over a reef, out from the shore: now and then a short white crest crosses a reef
+    /// tile in the swell's direction, more often and brighter in a big swell. Half the reef's tiles break.
+    /// </summary>
+    private void DrawReefBreak(Rect2 cell, int x, int y, float time, float lit, int swell)
+    {
+        if (Unit(x, y, 64) >= 0.5f || _sim?.Waters is not { } waters)
+            return;
+        const float duty = 0.12f;
+        float period = 7f + 5f * Unit(x, y, 61);
+        float u = Frac(time / period + Unit(x, y, 62));
+        if (u >= duty)
+            return;
+        var (dx, dy) = waters.SwellFrom.Delta();
+        var travel = new Vector2(-dx, -dy).Normalized(); // the swell runs away from where it comes from
+        var along = new Vector2(-travel.Y, travel.X);
+        float k = u / duty;
+        var center = new Vector2(cell.Position.X + Cell / 2f, cell.Position.Y + Cell / 2f) + travel * ((k - 0.5f) * Cell * 0.6f);
+        float half = Cell * 0.35f * (0.6f + 0.4f * Unit(x, y, 63));
+        DrawLine(Clamped(cell, center - along * half), Clamped(cell, center + along * half),
+            Faded(WhiteWater, Mathf.Sin(Mathf.Pi * k) * lit * (0.25f + 0.75f * swell / 100f) * 1.4f), 2f);
+    }
+
     private void DrawRainRing(Rect2 cell, int x, int y, float time, int rain, float lit)
     {
         const float life = 0.9f;

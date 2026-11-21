@@ -207,6 +207,37 @@ public class WaterSimulationTests
         Assert.Equal(CoverType.Grass, sim.Cover[new TilePos(3, 2)]); // above the water layer, nothing changes
     }
 
+    /// <summary>
+    /// The renderer darkens sand below the recent high water. That mark must never be below the sea
+    /// now, must cover every level seen in the last five hours (a decimetre's slack for where a minute
+    /// boundary falls), must stay within what was seen in the last seven, and must stand clear above the
+    /// sea some time while the tide ebbs.
+    /// </summary>
+    [Fact]
+    public void TheRecentHighWater_IsTheHighestTheSeaStoodInTheLastHalfTide()
+    {
+        var sim = new Simulation(Beach(), seed: 3);
+        sim.UseWater(new WaterLevels(11, Direction.NorthWest, []));
+        var seen = new List<int>();
+        bool clearAbove = false;
+        const int step = 15; // game minutes between looks
+        for (int k = 1; k <= 16 * 60 / step; k++)
+        {
+            sim.RunUntil(k * step * WorldClock.TicksPerGameMinute);
+            seen.Add(sim.SeaLevelDm);
+            int high = sim.RecentHighWaterDm;
+            Assert.True(high >= sim.SeaLevelDm, $"high water {high} below the sea {sim.SeaLevelDm} dm");
+            int last5 = seen.Skip(Math.Max(0, seen.Count - 5 * 60 / step)).Max();
+            int last7 = seen.Skip(Math.Max(0, seen.Count - 7 * 60 / step)).Max();
+            Assert.True(high >= last5 - 1, $"look {k}: high water {high} dm, but the sea stood at {last5} dm within five hours");
+            Assert.True(high <= last7 + 1, $"look {k}: high water {high} dm, above anything seen in seven hours ({last7} dm)");
+            if (!sim.TideRising && high >= sim.SeaLevelDm + 2)
+                clearAbove = true;
+        }
+        Assert.True(clearAbove, "the high-water mark never stood above an ebbing sea");
+        Assert.Equal(0, new Simulation(Beach(), seed: 3).RecentHighWaterDm); // no tides: the sea now
+    }
+
     [Fact]
     public void TheTide_LeavesAloneWhatSomeoneChanged()
     {

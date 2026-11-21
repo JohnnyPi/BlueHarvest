@@ -27,8 +27,19 @@ public static class VisualProfiles
         {
             foreach (var p in ByCover.Values) yield return p;
             foreach (var p in ByGround.Values) yield return p;
+            yield return WetSand;
         }
     }
+
+    /// <summary>
+    /// Sand at the sea's edge that the tide has uncovered within the last half tide (below
+    /// Simulation.RecentHighWaterDm): darker and smoother, with the odd shell or puddle.
+    /// </summary>
+    public static readonly VisualProfile WetSand = new("VIS-WET-SAND", CoverType.Sand,
+        Primary: "·.·˙", Patch: "∴·.·", Accents: "°", AccentPerMille: 30,
+        GroundA: C(0.46f, 0.41f, 0.29f), GroundB: C(0.43f, 0.39f, 0.29f),
+        InkA: C(0.80f, 0.76f, 0.62f, 0.42f), InkB: C(0.76f, 0.74f, 0.64f, 0.45f),
+        PatchScaleM: 9, Salt: 28, Motion: "water", MarkPerMille: 40);
 
     static VisualProfiles()
     {
@@ -114,6 +125,17 @@ public static class VisualProfiles
             InkA: C(0.31f, 0.53f, 0.72f, 0.6f), InkB: C(0.34f, 0.56f, 0.74f, 0.6f),
             PatchScaleM: 20, Salt: 26, Motion: "water", Soft: false));
 
+        // water over coral: paler, greener, with branching coral showing through (still no ≈ in the shallows)
+        AddOnGround(Cover.Reef, new VisualProfile("VIS-REEF-SHALLOWS", CoverType.ShallowWater,
+            Primary: "~∼~∼", Patch: "∼°~∼", Accents: "♧ψ", AccentPerMille: 70,
+            GroundA: C(0.13f, 0.37f, 0.42f), GroundB: C(0.15f, 0.40f, 0.42f),
+            InkA: C(0.62f, 0.86f, 0.84f, 0.6f), InkB: C(0.70f, 0.88f, 0.82f, 0.62f),
+            PatchScaleM: 7, Salt: 29, Motion: "water", Soft: false));
+        AddOnGround(Cover.Reef, new VisualProfile("VIS-REEF-DEEP", CoverType.DeepWater,
+            Primary: "≈≋≈≈", Patch: "≋≈∼≈", Accents: "♧", AccentPerMille: 30,
+            GroundA: C(0.08f, 0.24f, 0.32f), GroundB: C(0.09f, 0.26f, 0.32f),
+            InkA: C(0.42f, 0.66f, 0.76f, 0.6f), InkB: C(0.48f, 0.70f, 0.76f, 0.6f),
+            PatchScaleM: 9, Salt: 30, Motion: "water", Soft: false));
         AddOnGround(Cover.Cloud, new VisualProfile("VIS-CLOUD-FOREST", CoverType.DenseJungle,
             Primary: "♣Ψψ♣", Patch: "ψ¦ψΨ", Accents: "°¦", AccentPerMille: 45,
             GroundA: C(0.08f, 0.17f, 0.12f), GroundB: C(0.10f, 0.19f, 0.15f),

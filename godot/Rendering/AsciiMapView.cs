@@ -202,6 +202,11 @@ public partial class AsciiMapView : Node2D
     /// <summary>Seeds the Layered look's patches and accents: the island's seed (0 on the testbed).</summary>
     private int _lookSeed;
 
+    /// <summary>This redraw's wetness: the recent high water (sand below it is wet) and the recent rain, 0 to 1. Read once per redraw.</summary>
+    private int _recentHighDm;
+    private bool _tidal;
+    private float _rainWet;
+
     /// <summary>Map tiles (y × width + x) with an item drawn on them this redraw: their ground glyph is left out.</summary>
     private readonly HashSet<int> _itemTiles = new();
 
@@ -452,6 +457,12 @@ public partial class AsciiMapView : Node2D
         var o = Overlays;
         int width = sim.Map.Width, height = sim.Map.Height;
         _look = LookOrigin;
+        if (o.Look == LookMode.Layered)
+        {
+            _tidal = sim.Waters is not null;
+            _recentHighDm = _tidal ? sim.RecentHighWaterDm : 0;
+            _rainWet = sim.RecentRainPercent / 100f;
+        }
         float ascent = _font.GetAscent(FontSize);
         float descent = _font.GetDescent(FontSize);
         _baseline = (CellSize - (ascent + descent)) / 2f + ascent;
@@ -1101,9 +1112,15 @@ public partial class AsciiMapView : Node2D
         Slope(1, 0);
         Slope(0, 1);
         Slope(-1, 0);
+        var water = map.Water[p];
+        bool tideWet = _tidal && water.Kind == WaterKind.Sea && cover is not (CoverType.ShallowWater or CoverType.DeepWater)
+            && water.GroundDm <= _recentHighDm;
         return GroundLook.Choose(cover, ax, ay, _lookSeed, _island?.BiomeAt(p), _island?.GroundAt(p), slope,
-            CoverAt(p.X, p.Y - 1), CoverAt(p.X + 1, p.Y), CoverAt(p.X, p.Y + 1), CoverAt(p.X - 1, p.Y));
+            CoverAt(p.X, p.Y - 1), CoverAt(p.X + 1, p.Y), CoverAt(p.X, p.Y + 1), CoverAt(p.X - 1, p.Y), tideWet, _rainWet);
     }
+
+    /// <summary>The generator's own cover for a map tile on a generated island (a reef, cloud forest…); null on the testbed. For looks.</summary>
+    public Cover? GroundAt(TilePos p) => _island?.GroundAt(p);
 
     /// <summary>Whether an item is drawn on this tile (one in view, or one remembered there), mirroring <see cref="DrawRow"/>.</summary>
     private bool ItemShownAt(TilePos p, FogState state) => state switch
