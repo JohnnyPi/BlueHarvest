@@ -22,8 +22,10 @@ public static class HudTheme
     public static readonly Color Caution = new(0.941f, 0.784f, 0.251f);
     public static readonly Color Earth = new(0.753f, 0.541f, 0.333f);
 
-    public const int TextSize = 15;
-    public const int SmallSize = 13;
+    // DejaVu Sans Mono (GameFont) is about 9% wider than Consolas was and has a taller x-height, so a
+    // point smaller keeps every panel's width and reads the same size
+    public const int TextSize = 14;
+    public const int SmallSize = 12;
     public const int HeadingSize = 12;
 
     /// <summary>"#rrggbb" for BBCode color tags.</summary>

@@ -64,10 +64,7 @@ public partial class IslandExplorer : Node2D
     public override void _Ready()
     {
         RenderingServer.SetDefaultClearColor(new Color(0.02f, 0.02f, 0.03f));
-        var font = new SystemFont
-        {
-            FontNames = new[] { "Consolas", "Cascadia Mono", "DejaVu Sans Mono", "Courier New", "monospace" },
-        };
+        var font = GameFont.Load();
 
         _sprite = new Sprite2D { Centered = false, TextureFilter = TextureFilterEnum.Nearest };
         AddChild(_sprite);

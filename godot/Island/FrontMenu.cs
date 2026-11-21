@@ -16,10 +16,7 @@ public partial class FrontMenu : Control
     public override void _Ready()
     {
         RenderingServer.SetDefaultClearColor(new Color(0.02f, 0.02f, 0.03f));
-        var font = new SystemFont
-        {
-            FontNames = new[] { "Consolas", "Cascadia Mono", "DejaVu Sans Mono", "Courier New", "monospace" },
-        };
+        var font = GameFont.Load();
         Theme = HudTheme.Build(font);
 
         var center = new CenterContainer { AnchorRight = 1f, AnchorBottom = 1f };

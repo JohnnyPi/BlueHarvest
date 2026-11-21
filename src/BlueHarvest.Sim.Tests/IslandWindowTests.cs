@@ -203,6 +203,52 @@ public class IslandWindowTests
         Assert.Equal(39 * 39, InView());
     }
 
+    /// <summary>
+    /// The renderer's looks read the generator's biome and cover per tile from the window. Every tile
+    /// must give the chunker's own values for its island position: when the window opens, after a
+    /// scroll one chunk east, and after one a chunk back west and two south.
+    /// </summary>
+    [Fact]
+    public void EveryTilesBiomeAndGround_AreTheChunkersOwn_ThroughScrolling()
+    {
+        (double x, double y) = Genetics();
+        IslandChunker chunker = TestIslands.Chunker(Island);
+        IslandWindow w = WindowAt(x, y, chunks: 3);
+        const int chunk = IslandChunker.ChunkSize;
+
+        void AssertMatchesChunker()
+        {
+            int land = 0;
+            var grounds = new HashSet<Cover>();
+            for (int cy = 0; cy < w.ChunksAcross; cy++)
+            {
+                for (int cx = 0; cx < w.ChunksAcross; cx++)
+                {
+                    IslandChunk c = chunker.Build(w.OriginX / chunk + cx, w.OriginY / chunk + cy);
+                    for (int k = 0; k < chunk * chunk; k++)
+                    {
+                        var p = new TilePos(cx * chunk + k % chunk, cy * chunk + k / chunk);
+                        Assert.Equal((Biome)c.Biome[k], w.BiomeAt(p));
+                        Assert.Equal((Cover)c.Cover[k], w.GroundAt(p));
+                        if (w.BiomeAt(p) != Biome.Ocean) land++;
+                        grounds.Add(w.GroundAt(p));
+                    }
+                }
+            }
+            // the genetics complex is inland, with buildings, yards and forest round it: the check would mean little on open sea
+            Assert.True(land > w.Size * w.Size / 2, $"only {land} land tiles");
+            Assert.True(grounds.Count >= 4, $"only {grounds.Count} kinds of ground");
+        }
+
+        AssertMatchesChunker();
+        Assert.NotEqual((0, 0), w.Recenter(w.ToLocal(x + 64, y)));
+        AssertMatchesChunker();
+        Assert.NotEqual((0, 0), w.Recenter(w.ToLocal(x, y + 128)));
+        AssertMatchesChunker();
+        Assert.Equal(Biome.Ocean, w.BiomeAt(new TilePos(-1, 0)));
+        Assert.Equal(Cover.Deep, w.GroundAt(new TilePos(0, w.Size)));
+    }
+
     [Fact]
     public void Recenter_DoesNothingAwayFromTheEdge()
     {

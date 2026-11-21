@@ -103,8 +103,22 @@ public static class MapLook
     private static readonly char[] TrackGlyphs = { '=', '·', '≡', '·', '=' };
     private static readonly char[] FloorGlyphs = { '·', '·', ' ' };
     private static readonly char[] RockGlyphs = { '▲', '^', '∩', '▴' };
-    private static readonly char[] BrokenGlyphs = { '⁄', '\\', '~', '.' };
+    private static readonly char[] BrokenGlyphs = { '∕', '\\', '~', '.' };
     private static readonly char[] RubbleGlyphs = { '∴', ':', '∵' };
+
+    /// <summary>Every glyph the Classic look can draw, for the start-up glyph check (<see cref="GlyphSet"/>).</summary>
+    public static string AllGlyphs
+    {
+        get
+        {
+            var all = new System.Text.StringBuilder();
+            foreach (var look in Cover) all.Append(look.Glyph);
+            foreach (var set in new[] { GrassGlyphs, ScrubGlyphs, SparseGlyphs, DenseGlyphs, TrackGlyphs, FloorGlyphs, RockGlyphs, BrokenGlyphs, RubbleGlyphs, WallPieces })
+                all.Append(set);
+            all.Append("┼│─╌╫▒"); // fence posts and runs, the weak fence, supports, vehicles
+            return all.ToString();
+        }
+    }
 
     /// <summary>Box-drawing wall pieces by which neighbours are walls or doors (N=1, E=2, S=4, W=8).</summary>
     private static readonly char[] WallPieces =

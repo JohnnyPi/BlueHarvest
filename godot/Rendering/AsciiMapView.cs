@@ -7,6 +7,7 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Ai;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Sim.World.Generation;
 using Godot;
 
 namespace BlueHarvest.Game.Rendering;
@@ -23,6 +24,9 @@ public sealed class OverlayState
 
     /// <summary>Glyph variants, colour jitter, joined walls and fence posts.</summary>
     public bool Varied = true;
+
+    /// <summary>Classic or Layered (F3, saved in user://ui.cfg). Layered needs <see cref="Varied"/> on.</summary>
+    public LookMode Look = LookMode.Layered;
 
     /// <summary>Fog of war: only what you see now is live; the rest is memory, the park plan, or black.</summary>
     public bool Fog = true;
@@ -192,6 +196,17 @@ public partial class AsciiMapView : Node2D
     /// <summary><see cref="LookOrigin"/> as it was when this redraw began.</summary>
     private (int X, int Y) _look;
 
+    /// <summary>On a generated island, where the Layered look reads each tile's biome and generator ground; null on the testbed.</summary>
+    private IslandWindow? _island;
+
+    /// <summary>Seeds the Layered look's patches and accents: the island's seed (0 on the testbed).</summary>
+    private int _lookSeed;
+
+    /// <summary>Map tiles (y × width + x) with an item drawn on them this redraw: their ground glyph is left out.</summary>
+    private readonly HashSet<int> _itemTiles = new();
+
+    private static readonly Color GlyphShadow = new(0f, 0f, 0f, 0.3f);
+
     public OverlayState Overlays { get; } = new();
 
     /// <summary>
@@ -254,12 +269,17 @@ public partial class AsciiMapView : Node2D
     /// the same wherever the streamed map lies. Without one (the testbed) the tint spans the map's own
     /// lowest to highest ground, as it always has.
     /// </param>
-    public void Bind(Simulation sim, Font font, int cliffThresholdDm, bool plan = true, ReliefScale? relief = null)
+    /// <param name="island">On a generated island, its streaming window: the Layered look reads each tile's biome and generator ground from it.</param>
+    /// <param name="lookSeed">Seeds the Layered look's patches and accents (the island's seed).</param>
+    public void Bind(Simulation sim, Font font, int cliffThresholdDm, bool plan = true, ReliefScale? relief = null,
+        IslandWindow? island = null, int lookSeed = 0)
     {
         _sim = sim;
         _font = font;
         _cliffThresholdDm = cliffThresholdDm;
         _reliefScale = relief;
+        _island = island;
+        _lookSeed = lookSeed;
         Fog = new FogOfWar(sim, plan);
         MeasureTerrain(sim);
         QueueRedraw();
@@ -453,11 +473,13 @@ public partial class AsciiMapView : Node2D
         }
 
         _itemRows.Clear();
+        _itemTiles.Clear();
         foreach (var (lying, at) in sim.ItemsOnMap())
         {
             if (!_itemRows.TryGetValue(at.Y, out var row))
                 _itemRows[at.Y] = row = new List<(WorldItem, TilePos)>();
             row.Add((lying, at));
+            _itemTiles.Add(at.Y * width + at.X);
         }
 
         // only the tiles in (and a little around) the view are drawn; see SetView
@@ -520,6 +542,9 @@ public partial class AsciiMapView : Node2D
         float t = _relief[p.Y * sim.Map.Width + p.X];
         float shade = o.Raised ? _hillshade[p.Y * sim.Map.Width + p.X] * 0.92f + 0.12f * t : 0.55f + 0.65f * t;
         var background = roofed ? MapLook.Roof : look.Background;
+        GroundPick? layered = !roofed && o.Varied && o.Look == LookMode.Layered ? LayeredLook(p, cover, ax, ay) : null;
+        if (layered is { } chosen)
+            background = chosen.Ground;
         if (o.Varied && !roofed)
         {
             float jitter = MapLook.Jitter(ax, ay);
@@ -534,9 +559,20 @@ public partial class AsciiMapView : Node2D
         DrawRect(cell, Tone(background, shade, light, state, dimmed, red));
         if (!roofed)
         {
-            var (glyph, ink) = GlyphFor(p, cover, look.Glyph, look.Ink, state);
-            if (glyph != ' ')
-                DrawGlyphAt(glyph, p.X * CellSize, top, Tone(ink, Math.Min(1.25f, shade * 1.2f), light, state, dimmed, red));
+            var (glyph, ink) = GlyphFor(p, cover, look.Glyph, look.Ink, state, layered);
+            var inkTone = Tone(ink, Math.Min(1.25f, shade * 1.2f), light, state, dimmed, red);
+            bool live = state == FogState.Visible;
+            // a speck of grit or a seed head: rare, fixed, and only on ground in view
+            if (live && layered is { Mark: true } speck)
+                DrawRect(new Rect2(p.X * CellSize + 3f + speck.MarkX * (CellSize - 8f), top + 3f + speck.MarkY * (CellSize - 8f), 1.5f, 1.5f),
+                    new Color(inkTone.R, inkTone.G, inkTone.B, inkTone.A * 0.6f));
+            // an item lying here is drawn instead of the ground glyph, so the two don't print over each other
+            if (glyph != ' ' && !ItemShownAt(p, state))
+            {
+                if (live && layered is { Shadow: true })
+                    DrawGlyphAt(glyph, p.X * CellSize + 1f, top + 2f, GlyphShadow);
+                DrawGlyphAt(glyph, p.X * CellSize, top, inkTone);
+            }
         }
         else if (o.Varied && (ay & 1) == 0)
         {
@@ -1019,7 +1055,7 @@ public partial class AsciiMapView : Node2D
     /// The glyph and ink for a tile: varied or classic, doors by state ('/' open, '+' closed, red '+'
     /// locked; as remembered when out of view), vehicles reddening as they lose integrity, '%' once breached.
     /// </summary>
-    private (char Glyph, Color Ink) GlyphFor(TilePos p, CoverType cover, char glyph, Color ink, FogState state)
+    private (char Glyph, Color Ink) GlyphFor(TilePos p, CoverType cover, char glyph, Color ink, FogState state, GroundPick? layered)
     {
         var sim = _sim!;
         if (cover == CoverType.Door)
@@ -1041,8 +1077,41 @@ public partial class AsciiMapView : Node2D
             var damaged = ink.Lerp(DamagedInk, 1f - vehicle.Integrity / (float)Vehicle.MaxIntegrity);
             return (vehicle.Breached ? '%' : Overlays.Varied ? '▒' : glyph, damaged);
         }
+        if (layered is { } chosen)
+            return (chosen.Glyph, chosen.Ink);
         return (Overlays.Varied ? MapLook.VariedGlyph(cover, p.X, p.Y, _look, CoverAt) : glyph, ink);
     }
+
+    /// <summary>
+    /// The Layered look for a tile of natural ground (see <see cref="GroundLook"/>), or null for covers
+    /// that keep their Classic look. (<paramref name="ax"/>, <paramref name="ay"/>) is its island position.
+    /// </summary>
+    private GroundPick? LayeredLook(TilePos p, CoverType cover, int ax, int ay)
+    {
+        var sim = _sim!;
+        var map = sim.Map;
+        int here = sim.Terrain[p], slope = 0;
+        void Slope(int dx, int dy)
+        {
+            var q = new TilePos(p.X + dx, p.Y + dy);
+            if (map.InBounds(q))
+                slope = Math.Max(slope, Math.Abs(sim.Terrain[q] - here));
+        }
+        Slope(0, -1);
+        Slope(1, 0);
+        Slope(0, 1);
+        Slope(-1, 0);
+        return GroundLook.Choose(cover, ax, ay, _lookSeed, _island?.BiomeAt(p), _island?.GroundAt(p), slope,
+            CoverAt(p.X, p.Y - 1), CoverAt(p.X + 1, p.Y), CoverAt(p.X, p.Y + 1), CoverAt(p.X - 1, p.Y));
+    }
+
+    /// <summary>Whether an item is drawn on this tile (one in view, or one remembered there), mirroring <see cref="DrawRow"/>.</summary>
+    private bool ItemShownAt(TilePos p, FogState state) => state switch
+    {
+        FogState.Visible => _itemTiles.Contains(p.Y * _sim!.Map.Width + p.X),
+        FogState.Remembered => Overlays.Fog && Fog is { } memory && memory.RememberedItem(p, out _, out _),
+        _ => false,
+    };
 
     private CoverType? CoverAt(int x, int y)
     {
@@ -1137,7 +1206,6 @@ public partial class AsciiMapView : Node2D
         DrawLine(new Vector2(x * CellSize, edgeY), new Vector2((x + 1) * CellSize, edgeY), CliffLine, 2f);
     }
 
-    /// <summary>A glyph centred in the cell whose top-left corner is (<paramref name="left"/>, <paramref name="top"/>).</summary>
     /// <summary>The colour an item is drawn in, by what it is.</summary>
     private static Color ItemInk(ItemDef def) =>
         def.Is(ItemCategory.Fixture) || def.Size == ItemSize.TwoHanded && def.Is(ItemCategory.Container) ? FixtureInk
@@ -1147,8 +1215,14 @@ public partial class AsciiMapView : Node2D
         : def.Is(ItemCategory.Document) ? PaperInk
         : GearInk;
 
+    /// <summary>
+    /// A glyph centred in the cell whose top-left corner is (<paramref name="left"/>, <paramref name="top"/>).
+    /// Box-drawing and block glyphs are drawn as shapes that fill the cell (<see cref="BoxGlyphs"/>), so they join their neighbours.
+    /// </summary>
     private void DrawGlyphAt(char glyph, float left, float top, Color color)
     {
+        if (BoxGlyphs.TryDraw(this, glyph, new Rect2(left, top, CellSize, CellSize), color))
+            return;
         string text = glyph.ToString();
         float width = _font.GetStringSize(text, HorizontalAlignment.Left, -1, FontSize).X;
         DrawString(_font, new Vector2(left + (CellSize - width) / 2f, top + _baseline), text,

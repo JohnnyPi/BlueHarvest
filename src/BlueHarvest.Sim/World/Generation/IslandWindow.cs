@@ -201,6 +201,9 @@ public sealed class IslandWindow
     /// <summary>The window's tiles exactly as the generator made them: what <see cref="Map"/> is compared with to find changes.</summary>
     private readonly WorldMap _pristine;
 
+    /// <summary>Per map tile, row-major: the chunker's <see cref="Biome"/> and its own <see cref="Cover"/>. For looks; see <see cref="BiomeAt"/>.</summary>
+    private readonly byte[] _biome, _ground;
+
     /// <param name="chunksAcross">Window size in 64 m chunks: 5 gives a 320 × 320 m map.</param>
     /// <param name="centerX">Where to centre the window, in island metres.</param>
     /// <param name="changes">What has been done to the island so far (a loaded game); nothing if left out.</param>
@@ -213,6 +216,8 @@ public sealed class IslandWindow
         ChunksAcross = chunksAcross;
         Map = new WorldMap(chunksAcross * Chunk, chunksAcross * Chunk);
         _pristine = new WorldMap(chunksAcross * Chunk, chunksAcross * Chunk);
+        _biome = new byte[Size * Size];
+        _ground = new byte[Size * Size];
         Changes = changes ?? new ChunkChanges();
         (int cx, int cy) = OriginChunkFor(centerX, centerY);
         OriginX = cx * Chunk; OriginY = cy * Chunk;
@@ -240,6 +245,20 @@ public sealed class IslandWindow
 
     public TilePos ToLocal(double worldX, double worldY) => new((int)Math.Floor(worldX) - OriginX, (int)Math.Floor(worldY) - OriginY);
 
+    /// <summary>
+    /// The biome the generator gave a map tile (<see cref="Biome.Ocean"/> off the map). For the renderer's
+    /// looks only: nothing in the simulation reads it, and it says how the ground grew, not what is on it now.
+    /// </summary>
+    public Biome BiomeAt(TilePos p) => Map.InBounds(p) ? (Biome)_biome[p.Y * Size + p.X] : Biome.Ocean;
+
+    /// <summary>
+    /// The generator's own cover for a map tile, finer than its <see cref="CoverType"/> (a reef, cloud
+    /// forest, a ruin's wall, a runway); <see cref="Cover.Deep"/> off the map. As the generator made it:
+    /// a tile that has burnt or broken since keeps its old ground here, so use it only as a hint about a
+    /// tile whose cover still matches (<see cref="IslandTiles.ToGameCover"/>). For looks only.
+    /// </summary>
+    public Cover GroundAt(TilePos p) => Map.InBounds(p) ? (Cover)_ground[p.Y * Size + p.X] : Cover.Deep;
+
     /// <summary>The centre of a tile, in island metres.</summary>
     public (double X, double Y) ToWorld(TilePos p) => (OriginX + p.X + 0.5, OriginY + p.Y + 0.5);
 
@@ -257,6 +276,11 @@ public sealed class IslandWindow
         IslandChunk chunk = _chunker.Build(cx, cy);
         _tiles.Write(chunk, _pristine, left, top);
         _tiles.Write(chunk, Map, left, top);
+        for (int j = 0; j < Chunk; j++)
+        {
+            Array.Copy(chunk.Biome, j * Chunk, _biome, (top + j) * Size + left, Chunk);
+            Array.Copy(chunk.Cover, j * Chunk, _ground, (top + j) * Size + left, Chunk);
+        }
         // then whatever was done here before the chunk last scrolled out
         foreach (TileChange change in Changes.For(cx, cy))
         {
@@ -332,6 +356,8 @@ public sealed class IslandWindow
         }
         Map.Scroll(dx, dy);
         _pristine.Scroll(dx, dy);
+        GridScroll.Scroll(_biome, Size, Size, dx, dy);
+        GridScroll.Scroll(_ground, Size, Size, dx, dy);
         OriginX += dx; OriginY += dy;
         for (int y = 0; y < ChunksAcross; y++)
         {

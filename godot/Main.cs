@@ -105,10 +105,7 @@ public partial class Main : Node2D
     public override void _Ready()
     {
         RenderingServer.SetDefaultClearColor(new Color(0.02f, 0.02f, 0.03f));
-        var font = new SystemFont
-        {
-            FontNames = new[] { "Consolas", "Cascadia Mono", "DejaVu Sans Mono", "Courier New", "monospace" },
-        };
+        var font = GameFont.Load();
 
         _player = new PlayerController();
         LoadSimulation();
@@ -120,7 +117,9 @@ public partial class Main : Node2D
         _map = new AsciiMapView();
         // on the island the height tint goes by island position, so ground keeps its shade as the map streams
         _map.Bind(_sim, font, MovementProfile.Human.MaxStepUpDm, plan: _island is null,
-            relief: _island is null ? null : new ReliefScale(_island.World.Shape));
+            relief: _island is null ? null : new ReliefScale(_island.World.Shape),
+            island: _island, lookSeed: _island is null ? 0 : (int)_island.World.Params.Seed);
+        _map.Overlays.Look = UiSettings.LoadLook();
         _sim.WindowShifted += OnWindowShifted;
         var overlays = _map.Overlays;
         overlays.PlayerId = _playerActor.Id;
@@ -254,6 +253,18 @@ public partial class Main : Node2D
             viewport.SetInputAsHandled();
             _debug.Visible = !_debug.Visible;
             Refresh(snapCamera: false);
+            return;
+        }
+        if (!key.Echo && key.Keycode == Key.F3)
+        {
+            viewport.SetInputAsHandled();
+            var look = _map.Overlays.Look == LookMode.Classic ? LookMode.Layered : LookMode.Classic;
+            _map.Overlays.Look = look;
+            UiSettings.SaveLook(look);
+            Say(look == LookMode.Layered
+                ? "Map look: Layered (patches, accents, biome colours). F3 for Classic."
+                : "Map look: Classic (one glyph family per ground). F3 for Layered.", quiet: true);
+            _map.QueueRedraw();
             return;
         }
         if (!key.Echo && key.Keycode == Key.F1)
