@@ -231,22 +231,24 @@ public sealed class ContentLoader : IContentLoader
                         $"{def.Id} replaces a definition, but no pack loaded before {pack.Id} defines it.");
                     continue;
                 }
-                if (!pack.DependsOn(original.PackId))
+                // Checked before the dependency: once replaced, the table holds the first replacement, not the original.
+                if (replacedBy.TryGetValue(def.Id, out string? other))
                 {
                     diagnostics.Error(DiagnosticCodes.Replace, def.SourcePath, def.SourceLine, 1, at,
-                        $"Pack {pack.Id} replaces {def.Id}, which comes from pack {original.PackId}; that pack must be one of its dependencies.");
+                        $"{def.Id} is already replaced by pack {other}; only one pack can replace a definition.");
+                    continue;
+                }
+                // The pack that owns the namespace must be a dependency.
+                if (!pack.DependsOn(owner))
+                {
+                    diagnostics.Error(DiagnosticCodes.Replace, def.SourcePath, def.SourceLine, 1, at,
+                        $"Pack {pack.Id} replaces {def.Id}, which belongs to pack {owner}; that pack must be one of its dependencies.");
                     continue;
                 }
                 if (original.Kind != def.Kind)
                 {
                     diagnostics.Error(DiagnosticCodes.Replace, def.SourcePath, def.SourceLine, 1, at,
                         $"{def.Id} is {ContentKinds.WithArticle(original.Kind)}, so its replacement can't be {ContentKinds.WithArticle(def.Kind)}.");
-                    continue;
-                }
-                if (replacedBy.TryGetValue(def.Id, out string? other))
-                {
-                    diagnostics.Error(DiagnosticCodes.Replace, def.SourcePath, def.SourceLine, 1, at,
-                        $"{def.Id} is already replaced by pack {other}; only one pack can replace a definition.");
                     continue;
                 }
                 replacedBy.Add(def.Id, pack.Id);
