@@ -1,0 +1,22 @@
+# From island_facility_workers_and_notes.csv (MEN-01-N01: Dr. Sera Okonkwo, field journal, found in the raptor
+# observation blind). The title is new; the CSV has none.
+schema: blueharvest.content/v1
+kind: narrative
+id: MEN-01-N01
+form: document
+presentation: journal
+status: ready
+title: "Field journal: Specimen K-12"
+facility: MEN
+tags: [adaptive evolution, K-12, future response]
+source:
+  kind: world_object
+  ref: MEN-RAPTOR-OBSERVATION-BLIND
+document:
+  author: Dr. Sera Okonkwo
+  subject: Field journal
+  severity: personal
+  body: >-
+    Specimen K-12 developed cervical armor this morning. Nothing inside the enclosure threatened its neck.
+    At 16:22 the north fence collapsed onto it; the new plates prevented a fatal injury. I am increasingly
+    uncomfortable calling this a mutation. Evolution is supposed to answer something that has already happened.

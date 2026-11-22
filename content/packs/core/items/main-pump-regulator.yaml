@@ -1,0 +1,8 @@
+schema: blueharvest.content/v1
+kind: item
+id: ITM-ADM-001
+name: Main Pump Regulator
+description: Allows the primary camp water pump to operate. There is one, and it can't be made.
+category: part
+mass_g: 1600
+stacking: unique

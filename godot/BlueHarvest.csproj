@@ -1,4 +1,4 @@
-<Project Sdk="Godot.NET.Sdk/4.7.2">
+﻿<Project Sdk="Godot.NET.Sdk/4.7.2">
   <ItemGroup>
     <ProjectReference Include="..\src\BlueHarvest.Sim\BlueHarvest.Sim.csproj" />
   </ItemGroup>
@@ -8,4 +8,20 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <RootNamespace>BlueHarvest.Game</RootNamespace>
   </PropertyGroup>
+  <!--
+    The content packs: the repo's content/packs is the source; the build copies it to Content/packs here, where the
+    game reads it through res:// (ContentIntegration/GodotContentSource.cs). The copy is replaced on every build
+    and is git-ignored. An export preset must list *.yaml under "Filters to export non-resource files".
+  -->
+  <PropertyGroup>
+    <ContentPacksSource>$(MSBuildProjectDirectory)/../content/packs</ContentPacksSource>
+    <ContentPacksCopy>$(MSBuildProjectDirectory)/Content/packs</ContentPacksCopy>
+  </PropertyGroup>
+  <Target Name="CopyContentPacks" BeforeTargets="BeforeBuild" Condition="Exists('$(ContentPacksSource)')">
+    <ItemGroup>
+      <ContentPackFile Include="$(ContentPacksSource)/**/*" />
+    </ItemGroup>
+    <RemoveDir Directories="$(ContentPacksCopy)" />
+    <Copy SourceFiles="@(ContentPackFile)" DestinationFiles="@(ContentPackFile->'$(ContentPacksCopy)/%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
 </Project>

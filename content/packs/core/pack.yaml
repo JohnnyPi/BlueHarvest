@@ -1,0 +1,15 @@
+schema: blueharvest.pack/v1
+id: core
+name: Core
+description: The game's own content. Its IDs are the core namespace (contracts §1).
+version: 0.1.0
+requires_game: ">=0.1.0"
+dependencies: []
+priority: 0
+content_roots:
+  - items
+  - recipes
+  - resource-sources
+  - stations
+  - devices
+  - narrative

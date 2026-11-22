@@ -47,8 +47,8 @@ if (-not $SkipTests) {
     & dotnet test 2>&1 | Tee-Object -Variable testLog
     $testExit = $LASTEXITCODE
     # dotnet test prints one of two summary formats, depending on whether its output goes to a pipe:
-    #   new:    Test summary: total: 1186, failed: 0, succeeded: 1186, skipped: 0, duration: 12s
-    #   VSTest: Passed!  - Failed:     0, Passed:  1186, Skipped:     0, Total:  1186, Duration: 12 s
+    #   new:    Test summary: total: 1190, failed: 0, succeeded: 1190, skipped: 0, duration: 12s
+    #   VSTest: Passed!  - Failed:     0, Passed:  1190, Skipped:     0, Total:  1190, Duration: 12 s
     # Each test project prints its own line, so the counts are added up.
     $total = 0; $failed = 0; $found = 0
     foreach ($t in $testLog) {
@@ -61,8 +61,8 @@ if (-not $SkipTests) {
     }
     if ($found -eq 0) { $line = 'no test summary line found in the output' }
     else { $line = "total $total, failed $failed (from $found summary line(s)), exit code $testExit" }
-    $ok = ($testExit -eq 0) -and ($found -gt 0) -and ($total -eq 1186) -and ($failed -eq 0)
-    Add-Result 'C# tests (expect 1186 passed)' $ok $line
+    $ok = ($testExit -eq 0) -and ($found -gt 0) -and ($total -eq 1190) -and ($failed -eq 0)
+    Add-Result 'C# tests (expect 1190 passed)' $ok $line
     $testLog | Out-File -Encoding utf8 (Join-Path $outDir 'dotnet-test.log')
 }
 
@@ -90,6 +90,17 @@ foreach ($g in $goldens) {
     foreach ($m in $miss) { Write-Host "    missing: $m" -ForegroundColor Red }
 }
 Add-Result 'Golden hashes pinned in the C# tests (expect 273)' (($missing -eq 0) -and ($allHashes -eq 273)) "$allHashes hashes, $missing missing"
+
+# ---------- 3b. the content packs (content/packs, as the game loads them) ----------
+Section 'content validate content\packs'
+& dotnet run --project src\BlueHarvest.Runner -- content validate --path content\packs 2>&1 | Tee-Object -Variable contentLog
+$contentExit = $LASTEXITCODE
+$contentLog | Out-File -Encoding utf8 (Join-Path $outDir 'content-validate.log')
+$contentLine = $contentLog | Select-String -Pattern '^Result:.*' | Select-Object -Last 1
+$contentResult = 'no Result line'; if ($contentLine) { $contentResult = $contentLine.Matches[0].Value }
+$contentPrint = $contentLog | Select-String -Pattern '^Fingerprint:\s+(\S+)' | Select-Object -Last 1
+if ($contentPrint) { $contentResult = "$contentResult; $($contentPrint.Matches[0].Groups[1].Value)" }
+Add-Result 'Content packs validate (authoring mode)' (($contentExit -eq 0) -and ($contentResult -match '^Result: OK')) $contentResult
 
 # ---------- 4. island validate: C# and lab, at 75% and 100%, compared column by column ----------
 $timings = @{}

@@ -1,0 +1,21 @@
+schema: blueharvest.content/v1
+kind: recipe
+id: RCP-022
+name: Twist Vine Cordage
+handler: process.transform
+station: STN-HAND
+duration_action_seconds: 140   # about 23 game minutes on the world clock (60 action seconds = 10 game minutes)
+inputs:
+  - item: ITM-CRF-004
+    quantity: 3
+    mode: consume
+tools:
+  - item: multitool   # the catalog's ITM-TOL-001
+    quantity: 1
+    mode: retain
+outputs:
+  - item: ITM-MAT-006
+    quantity: 1
+requirements:
+  heat: none
+  power: none

@@ -1,4 +1,5 @@
 #nullable enable
+using BlueHarvest.Game.ContentIntegration;
 using BlueHarvest.Game.Ui;
 using Godot;
 
@@ -34,6 +35,13 @@ public partial class FrontMenu : Control
         var sub = HudTheme.Text("Blue Harvest build", HudTheme.SmallSize, HudTheme.Muted);
         sub.HorizontalAlignment = HorizontalAlignment.Center;
         column.AddChild(sub);
+        // The content packs load here, once per run (nothing reads them yet); the line says whether they did.
+        var content = HudTheme.Text(GameContent.Summary, HudTheme.SmallSize, GameContent.Healthy ? HudTheme.Muted : HudTheme.Danger);
+        content.HorizontalAlignment = HorizontalAlignment.Center;
+        content.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        content.TooltipText = GameContent.Registry?.Fingerprint ?? "See the Output panel for the content diagnostics.";
+        content.MouseFilter = MouseFilterEnum.Pass;
+        column.AddChild(content);
         column.AddChild(new Control { CustomMinimumSize = new Vector2(0, 8) });
 
         Button first = AddButton(column, "Play the testbed", "The T-Rex fence-breach map", () =>

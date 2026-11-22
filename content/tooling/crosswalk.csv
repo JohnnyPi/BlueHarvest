@@ -1,0 +1,3 @@
+old,new,reason
+ITM-TOL-001,core:multitool,"The catalog's Multi-Tool is the existing ItemKind.Multitool; the existing core: ID wins (contracts §1)"
+ITM-MEL-002,core:knife,"The catalog's Utility Knife is the existing ItemKind.Knife; the existing core: ID wins (contracts §1)"

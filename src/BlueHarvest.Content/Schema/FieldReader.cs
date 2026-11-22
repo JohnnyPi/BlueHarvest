@@ -244,7 +244,7 @@ internal sealed class FieldReader
         if (Node.Get(key) is null)
             return;
         used.Add(key);
-        ctx.Error(DiagnosticCodes.BadValue, Node.KeyNode(key) ?? Node, $"{PathOf(key)} isn't allowed here: {reason}.");
+        ctx.Error(DiagnosticCodes.BadValue, (YamlNode?)Node.KeyNode(key) ?? Node, $"{PathOf(key)} isn't allowed here: {reason}.");
     }
 
     /// <summary>Reports every key that wasn't read.</summary>

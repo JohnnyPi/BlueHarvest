@@ -1,0 +1,10 @@
+schema: blueharvest.content/v1
+kind: item
+id: ITM-CRF-004
+name: Vine Fiber
+description: Cordage stock harvested without clear-cutting root systems.
+category: material
+mass_g: 150
+stack_limit: 20
+stacking: stack
+tags: [natural, fiber, crafting]

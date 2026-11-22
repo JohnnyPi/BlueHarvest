@@ -1,0 +1,20 @@
+# Never place one on a sentient Glass Orchard plant (the catalog's constraint). That's enforced by placement
+# and interaction checks when gathering arrives (P5a), not by a field here.
+schema: blueharvest.content/v1
+kind: resource_source
+id: SRC-005
+name: Vine Thicket
+description: Found at trail edges. Grows back.
+handler: resource.harvest
+required_tool: knife   # the catalog's ITM-MEL-002
+renewal:
+  mode: world_event
+  event: ecology.plant_regrowth
+  max_batches: 3   # a placeholder for balance; the catalog gives no number
+yields:
+  - item: ITM-CRF-004
+    min_quantity: 2
+    max_quantity: 5
+  - item: ITM-CRF-005
+    min_quantity: 0
+    max_quantity: 1
