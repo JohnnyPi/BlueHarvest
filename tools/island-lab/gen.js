@@ -15,7 +15,8 @@ var IslandGen = (function () {
     seed: 7, scale: 75, cell: 128, peak: 1100, saddle: 240, rough: 0.6, warp: 5,
     wind: 60, rain: 1, erosion: 1, iterations: 8, lakeDepth: 40, lakeArea: 0.15, riverQ: 0.1,
     pali: 0.85, cliffs: 1.2, seaTemp: 24, cloudBase: 650, wetlands: 1,
-    paddockSize: 1, tubes: 5, wrecks: 10, ruins: 16, transit: 1
+    paddockSize: 1, tubes: 5, wrecks: 10, ruins: 16, transit: 1,
+    program: 1 // 2 = the Crosswake Island site program (P4a), whose default scale is 100
   };
 
   // ---------- portable maths ----------
@@ -660,8 +661,54 @@ var IslandGen = (function () {
         { name: 'Holding block', w: 34, h: 10, rooms: [['Holding cell 1', 1], ['Holding cell 2', 1], ['Holding cell 3', 1], ['Holding cell 4', 1], ['Squeeze chute', 1]] }
       ],
       yard: [['pen', 'Raptor enclosure', 120, 90], ['tower', 'Feeding gantry']]
+    },
+    // ---- site program 2 (P4a): Crosswake Island's surface sites ----
+    court: { // RUIN-07's surface: ancient stones, the 1916 Meridian Station building, Central Administration's way down
+      buildings: [
+        { name: 'Meridian Station survey building', w: 30, h: 16, rooms: [['Map room', 2, 'furniture'], ['Instrument room', 1, 'console'], ['Quarters', 1, 'bunks'], ['Store', 1, 'rack']] },
+        { name: 'Central Administration entrance', w: 28, h: 18, rooms: [['Security lobby', 2], ['Security office', 1, 'console'], ['Stair hall', 1], ['Guard room', 1, 'bunks']] },
+        { name: 'Survey annexe', w: 24, h: 12, rooms: [['Offices', 2, 'furniture'], ['Radio room', 1, 'console'], ['Washrooms', 1]] }
+      ],
+      yard: [['courts', 'Approach court', 6], ['stones', 'Standing measure'], ['tower', 'Survey mast']]
+    },
+    orchard: {
+      buildings: [
+        { name: 'Greenhouse range A', w: 60, h: 20, rooms: [['Growing house', 4, 'furniture'], ['Potting room', 1, 'rack']] },
+        { name: 'Greenhouse range B', w: 60, h: 20, rooms: [['Growing house', 4, 'furniture'], ['Potting room', 1, 'rack']] },
+        { name: 'Cornucopia laboratory', w: 30, h: 16, rooms: [['Plant genetics lab', 2, 'console'], ['Seed vault', 1, 'rack'], ['Offices', 1, 'furniture'], ['Washrooms', 1]] },
+        { name: 'Packing shed', w: 26, h: 14, rooms: [['Packing floor', 3], ['Cold store', 1, 'rack']] },
+        { name: 'Pump house', w: 12, h: 10, rooms: [['River intake pumps', 1, 'tanks']] },
+        { name: 'Quarters', w: 24, h: 13, rooms: bunkRooms(3).concat([['Kitchen', 1, 'console'], ['Washrooms', 1]]) }
+      ],
+      yard: [['tanks', 3, 'Irrigation tanks'], ['tower', 'Water tower'], ['parking', 20, 12]]
+    },
+    choir: {
+      buildings: [
+        { name: 'Listening hall', w: 36, h: 18, rooms: [['Resonance chamber', 3, 'rack'], ['Recording booths', 2, 'console'], ['Sound archive', 1, 'rack']] },
+        { name: 'Cliff lodge', w: 26, h: 13, rooms: bunkRooms(3).concat([['Kitchen', 1, 'console'], ['Washrooms', 1]]) },
+        { name: 'Generator shed', w: 10, h: 8, rooms: [['Generator', 1, 'tanks']] }
+      ],
+      yard: [['towers', 'Bell frames', 3], ['tower', 'Cliff winch']]
+    },
+    drowned: {
+      buildings: [
+        { name: 'Observatory', w: 32, h: 18, rooms: [['Pressure-lock hall', 2, 'console'], ['Instrument room', 1, 'console'], ['Chart room', 1, 'furniture'], ['Records', 1, 'rack']] },
+        { name: 'Dive store', w: 24, h: 12, rooms: [['Dive lockers', 2, 'rack'], ['Compressor room', 1, 'tanks']] },
+        { name: 'Quarters', w: 24, h: 13, rooms: bunkRooms(3).concat([['Galley', 1, 'console'], ['Washrooms', 1]]) }
+      ],
+      yard: [['dome', 'Observatory dome', 8], ['tower', 'Tide gauge']]
+    },
+    yard: { // ADM's coastal service yard: the P5 slice's maintenance yard
+      buildings: [
+        { name: 'Maintenance workshop', w: 34, h: 18, rooms: [['Workshop floor', 3], ['Electrical bench', 1, 'console'], ['Parts store', 1, 'rack']] },
+        { name: 'Pump house', w: 16, h: 10, rooms: [['Pump room', 1, 'tanks'], ['Controller room', 1, 'console']] },
+        { name: 'Stores', w: 24, h: 14, rooms: [['Store', 3, 'rack'], ['Office', 1, 'furniture']] }
+      ],
+      yard: [['tanks', 3, 'Fuel tanks'], ['parking', 20, 12]]
     }
   };
+  PROGRAMS.outstation = PROGRAMS.lab; // a sector's outstation is today's research lab
+  PROGRAMS.survey = PROGRAMS.ley;     // an ADM survey post is today's ley-line survey hut
 
   // Shelf-pack a programme into a square compound centred on 0,0; the result gives its half-size.
   function yardSize(y) {
@@ -670,6 +717,7 @@ var IslandGen = (function () {
       case 'dish': return [14, 14]; case 'dome': return [y[2] * 2 + 4, y[2] * 2 + 4]; case 'ring': return [y[2] * 2 + 4, y[2] * 2 + 4];
       case 'switchyard': return [40, 28]; case 'antennas': return [72, 56]; case 'towers': return [y[2] * 10, 10]; case 'marker': return [4, 4];
       case 'pen': return [y[2], y[3]];
+      case 'courts': return [y[2] * 26, 26]; case 'stones': return [16, 16];
     }
     return [8, 8];
   }
@@ -774,6 +822,8 @@ var IslandGen = (function () {
       case 'towers': { const label = lab(site + ' · ' + y[1]); for (let k = 0; k < y[2]; k++) prims.push({ t: 'tower', x: x0 + 5 + k * 10, y: cy, label }); break; }
       case 'marker': prims.push({ t: 'circle', x: cx, y: cy, r: 1.6, cover: 'ruin', label: lab(site + ' · ' + y[1]) }); break;
       case 'pen': prims.push({ t: 'pen', x0, y0, x1, y1, label: lab(site + ' · ' + y[1]) }); break;
+      case 'courts': { for (let k = 0; k < y[2]; k++) prims.push({ t: 'circle', x: x0 + 13 + k * 26, y: cy, r: 10, cover: 'ruin', ring: true, fill: 'floor', label: lab(site + ' · ' + y[1] + ' ' + (k + 1)) }); break; }
+      case 'stones': { const label = lab(site + ' · ' + y[1]); for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; prims.push({ t: 'circle', x: cx + D.cos(a) * 6, y: cy + D.sin(a) * 6, r: 1.2, cover: 'ruin', label }); } break; }
     }
   }
 
@@ -874,6 +924,78 @@ var IslandGen = (function () {
   ];
   const DIRS8 = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
 
+  // ---------- site program 2 (P4a): Crosswake Island ----------
+  // The six powers replace the corporations (D-8, F-4); Central Administration is contested. Interests are the bibles' own.
+  const POWERS = {
+    ADM: { name: 'Central Administration', goal: 'contested' },
+    VIT: { name: 'Tesseract', goal: 'monetizable longevity' },
+    CHO: { name: 'Order of the Grotesque', goal: 'the Great Change' },
+    WTH: { name: 'Project Zephyrus', goal: 'storm dissipation and perpetual spring' },
+    DRW: { name: 'KSSO', goal: 'recovery of the 1970s Soviet site' },
+    MEN: { name: 'The Consortium', goal: 'weaponizable altered specimens' },
+    ORC: { name: "Caleb Archer's Project Cornucopia", goal: 'control of the prophetic fruit' }
+  };
+  const SECTORS = ['MEN', 'VIT', 'ORC', 'WTH', 'CHO', 'DRW']; // P11's order
+  // The facility table, in report order (placement order is in placeProgram2). Outstations' count is per seed (2–8).
+  const FAC2 = [
+    { key: 'court', name: 'Court of Unfinished Measures', icon: 'H', count: 1, power: 'ADM', major: true },
+    { key: 'docks', name: 'Docks', icon: 'D', count: 2, power: 'ADM', apart: 12000, major: true },
+    { key: 'airstrip', name: 'Airstrip', icon: 'A', count: 1, power: 'ADM', major: true },
+    { key: 'comms', name: 'Comms relay', icon: 'C', count: 1, power: 'ADM' },
+    { key: 'genetics', name: 'The Menagerie', icon: 'X', count: 1, power: 'MEN', sector: 'MEN', major: true },
+    { key: 'raptors', name: 'Raptor pen', icon: 'V', count: 1, power: 'MEN', sector: 'MEN' },
+    { key: 'orgone', name: 'Vitality Institute', icon: 'O', count: 1, power: 'VIT', sector: 'VIT', major: true },
+    { key: 'orchard', name: 'Glass Orchard', icon: 'E', count: 1, power: 'ORC', sector: 'ORC', major: true },
+    { key: 'weather', name: 'Ninth Weather', icon: 'W', count: 1, power: 'WTH', sector: 'WTH', major: true },
+    { key: 'choir', name: 'Choir Below', icon: 'Q', count: 1, power: 'CHO', sector: 'CHO', major: true },
+    { key: 'drowned', name: 'Drowned Observatory', icon: 'B', count: 1, power: 'DRW', sector: 'DRW', major: true },
+    { key: 'geothermal', name: 'Geothermal plant', icon: 'G', count: 1, power: 'ADM', major: true },
+    { key: 'depot', name: 'Supply depot', icon: 'S', count: 2, power: 'ADM', apart: 6000, major: true },
+    { key: 'watch', name: 'Watch post', icon: 'P', count: 3, power: 'ADM', apart: 10000 },
+    { key: 'yard', name: 'Coastal service yard', icon: 'Y', count: 1, power: 'ADM', major: true },
+    { key: 'survey', name: 'Survey post', icon: 'L', count: 4, power: 'ADM' },
+    { key: 'outstation', name: 'Outstation', icon: 'R', count: 0, power: null }
+  ];
+  const SECTOR_SITE = { MEN: 'genetics', VIT: 'orgone', ORC: 'orchard', WTH: 'weather', CHO: 'choir', DRW: 'drowned' };
+  // Five paddocks (P4.8): the Rex, triceratops and stegosaurus paddocks re-keyed to the CSV's animals, plus the Sun-Sail Hadrosaur's.
+  const PADDOCKS2 = [
+    { key: 'apato', name: 'Apatosaurus paddock', occupant: 'Apatosaurus herd', km2: 9, biomes: { grassland: 1, mesic: 0.9, moist: 0.5, marsh: 0.6, lake: 0.7 }, water: true, fence: 'low', wallow: false },
+    { key: 'tyrant', name: 'Tyrant paddock', occupant: 'Future-Torn Tyrant', km2: 2.2, biomes: { mesic: 1, moist: 0.9, grassland: 0.8, wet: 0.6 }, fence: 'heavy', moat: true },
+    { key: 'ceratopsian', name: 'Ceratopsian paddock', occupant: 'Empty-Paddock Ceratopsian herd', km2: 1.4, biomes: { grassland: 1, dryscrub: 0.8, mesic: 0.7 }, fence: 'standard', wallow: true },
+    { key: 'crownback', name: 'Crownback paddock', occupant: 'K-12 Crownback herd', km2: 1.4, biomes: { mesic: 1, moist: 0.8, grassland: 0.6 }, fence: 'standard', wallow: false },
+    { key: 'hadrosaur', name: 'Hadrosaur paddock', occupant: 'Sun-Sail Hadrosaur herd', km2: 2.5, biomes: { grassland: 0.9, mesic: 1, marsh: 0.8, moist: 0.6, lake: 0.5 }, water: true, fence: 'standard', wallow: true }
+  ];
+  // The seven authored ruins: each on its terrain role, 1.5–6 km from its sector's compound (P4.6). RUIN-07 is the Court itself.
+  const RUINS7 = [
+    { id: 'RUIN-01', name: 'Unhatched Court', sector: 'MEN', role: 'basin' },
+    { id: 'RUIN-02', name: 'House of Borrowed Breath', sector: 'VIT', role: 'ravine' },
+    { id: 'RUIN-03', name: 'Garden of Unchosen Seasons', sector: 'ORC', role: 'lowland' },
+    { id: 'RUIN-04', name: 'Stair of the Second Horizon', sector: 'WTH', role: 'ridge' },
+    { id: 'RUIN-05', name: 'Cathedral of the Missing Note', sector: 'CHO', role: 'cliff' },
+    { id: 'RUIN-06', name: 'Tidemark Archive', sector: 'DRW', role: 'reef' },
+    { id: 'RUIN-07', name: 'Court of Unfinished Measures', sector: null, role: 'high' }
+  ];
+  // Four ley lines crossing at the Court, each bent toward its sites (D-10): sector compounds by kind, ruins by id.
+  const LEY2 = [
+    { key: 'crown', name: 'Crown line', toward: ['weather', 'RUIN-04'] },
+    { key: 'verdant', name: 'Verdant line', toward: ['RUIN-01', 'orchard', 'RUIN-03'] },
+    { key: 'resonant', name: 'Resonant line', toward: ['orgone', 'choir', 'RUIN-05'] },
+    { key: 'sounding', name: 'Sounding line', toward: ['drowned', 'RUIN-06'] }
+  ];
+  const STATES = ['State of the Art', 'Compromised', 'Collapsing', 'Fallen', 'Derelict'];
+  // Lesser ruins: ancient kinds are satellites of the seven; newer kinds fit the visit windows of 1916, the 1970s and now.
+  const RUIN_KINDS2 = [
+    { key: 'terraces', name: 'Stone-walled terraces', era: 'ancient', r: 30 },
+    { key: 'stones', name: 'Ring of standing stones', era: 'ancient', r: 12 },
+    { key: 'platform', name: 'Stone platform', era: 'ancient', r: 16 },
+    { key: 'lighthouse', name: 'Meridian Station light', era: '1916', r: 8 },
+    { key: 'bunker', name: 'Coastal battery', era: '1916', r: 10 },
+    { key: 'radar', name: 'Radar station', era: '1970s', r: 14 },
+    { key: 'camp', name: 'Survey camp', era: '1970s', r: 14 },
+    { key: 'fieldlab', name: 'Burned field lab', era: 'now', r: 12 }
+  ];
+  const ANCHOR_KINDS2 = ['docks', 'airstrip', 'comms', 'court', 'watch'];
+
   function works(C) {
     const { p, A, nx, ny, cell, n, area, H, H0, land, lake, rain, slopeD, biome, region, distLand, coast, coastNX, coastNY, coastEx, sea, Q, isRiver, lava, oldW, crest, say, lap } = C;
     const s = A.s, sq = Math.sqrt(s);
@@ -897,7 +1019,7 @@ var IslandGen = (function () {
     say('Placing facilities');
     const sites = [];
     const tooClose = (x, y, rad, kind, apart) => sites.some(t =>
-      D.hyp(t.x - x, t.y - y) < (kind === 'raptors' || t.kind === 'raptors' ? rad + t.r + 150 : Math.max(2500 * s, rad + t.r + 600)) || (kind === t.kind && apart && D.hyp(t.x - x, t.y - y) < apart * s));
+      D.hyp(t.x - x, t.y - y) < (kind === 'raptors' || t.kind === 'raptors' || (kind === 'yard' && t.kind === 'docks') ? rad + t.r + 150 : Math.max(2500 * s, rad + t.r + 600)) || (kind === t.kind && apart && D.hyp(t.x - x, t.y - y) < apart * s));
     const nearRiver = new Uint8Array(n); // within one cell of a river
     for (let i = 0; i < n; i++) if (isRiver[i]) { const x = i % nx, y = (i - x) / nx; for (let k = 0; k < 8; k++) { const xx = x + DX[k], yy = y + DY[k]; if (xx >= 0 && yy >= 0 && xx < nx && yy < ny) nearRiver[yy * nx + xx] = 1; } }
     const SC = {
@@ -928,7 +1050,7 @@ var IslandGen = (function () {
     function addSite(F, x, y, extra) {
       const i = idx(x, y);
       const t = Object.assign({ id: sites.length, kind: F.key, icon: F.icon, kindName: F.name, x: D.round(x), y: D.round(y), r: layoutProgram(F.key).r,
-        h: Math.max(2, H[i]), region: region[i], owner: CORPS[F.corp].name, ownerGoal: CORPS[F.corp].goal, major: !!F.major }, extra || {});
+        h: Math.max(2, H[i]), region: region[i], owner: (F.power ? POWERS[F.power] : CORPS[F.corp]).name, ownerGoal: (F.power ? POWERS[F.power] : CORPS[F.corp]).goal, major: !!F.major }, extra || {});
       sites.push(t); return t;
     }
     // airstrip: the flattest straight 1.4 km on low ground
@@ -965,7 +1087,265 @@ var IslandGen = (function () {
     const landCells = []; for (let i = 0; i < n; i += 3) if (land[i]) landCells.push(i);
     const big = A.W + A.H;
     const lineThrough = (ax, ay, bx, by) => { const d = D.hyp(bx - ax, by - ay) || 1, dx = (bx - ax) / d, dy = (by - ay) / d; leylines.push({ x1: ax - dx * big, y1: ay - dy * big, x2: ax + dx * big, y2: ay + dy * big }); };
-    for (const F of FAC) {
+    // ---------- site program 2 (P4a): Crosswake Island ----------
+    // Terrain roles are masks on the 128 m grid; a site is placed on its role's best ground, and a sector compound only
+    // where its authored ruin's role is found 1.5–6 km away (P4.6). Whatever fails is recorded with its reason.
+    function roles2() {
+      const R = {}, sg = A.saddle.seg[0], ccx = sg.ax + sg.dx / 2, ccy = sg.ay + sg.dy / 2;
+      P2.centre = [D.round(ccx), D.round(ccy)];
+      const blurBig = new Float64Array(n), blurMid = new Float64Array(n);
+      for (let i = 0; i < n; i++) { const v = land[i] ? Math.max(0, H[i]) : 0; blurBig[i] = v; blurMid[i] = v; }
+      boxBlur(blurBig, nx, ny, Math.max(1, D.round(1500 / cell)), 2);
+      boxBlur(blurMid, nx, ny, Math.max(1, D.round(800 / cell)), 2);
+      const bigRiver = new Uint8Array(n); // within two cells of a river carrying 0.25 m³/s or more (2 marks 1 m³/s or more)
+      for (let i = 0; i < n; i++) if (isRiver[i] && Q[i] >= 0.25) {
+        const x = i % nx, y = (i - x) / nx, v = Q[i] >= 1 ? 2 : 1;
+        for (let yy = Math.max(0, y - 2); yy <= Math.min(ny - 1, y + 2); yy++) for (let xx = Math.max(0, x - 2); xx <= Math.min(nx - 1, x + 2); xx++) if (bigRiver[yy * nx + xx] < v) bigRiver[yy * nx + xx] = v;
+      }
+      const mk = () => new Uint8Array(n);
+      R.high = mk(); R.basin = mk(); R.ravine = mk(); R.lowland = mk(); R.ridge = mk(); R.cliff = mk(); R.reef = mk(); R.reefFlat = mk(); R.plains = mk();
+      const notReef = mk(), notCliff = mk(), lowTide = -(12 + 5 + 1) / 10; // IslandWindow.TidalLowestDm: wade depth + spring + daily tide
+      for (let i = 0; i < n; i++) {
+        notReef[i] = 1; notCliff[i] = 1;
+        if (!land[i]) {
+          if (sea[i] === 3) { R.reef[i] = 1; notReef[i] = 0; }
+          if ((sea[i] === 3 || sea[i] === 4) && H[i] >= lowTide) R.reefFlat[i] = 1;
+          continue;
+        }
+        if (!onMain(i)) continue;
+        const rg = region[i], bi = biome[i], sl = slopeD[i], h = H[i];
+        // the central high ground: the plateau's height range (as the plateau region: below the saddle + 300 m), within 8 km of the template centre
+        if (sl < 6 && h <= p.saddle + 300 && rg !== RG.coast && rg !== RG.wetland && rg !== RG.vent && rg !== RG.ridge && D.hyp(cxOf(i) - ccx, cyOf(i) - ccy) <= 8000 * s) R.high[i] = 1;
+        if (h > 15 && sl < 12 && (rg === RG.crater || blurBig[i] - h >= 50)) R.basin[i] = 1;
+        if (rain[i] > 1800 && blurMid[i] - h >= 50 && sl >= 6 && sl < 35 && h >= 40 && h <= 800 && rg !== RG.coast) R.ravine[i] = 1;
+        if ((bi === B.moist || bi === B.wet) && h < 200 && sl < 8 && bigRiver[i]) R.lowland[i] = bigRiver[i]; // 2: along a river of 1 m³/s or more
+        if (h >= 0.55 * p.peak && crest[i] > 0.3 && sl < 25 && oldW[i] < 0.5) R.ridge[i] = 1;
+        if (coast[i] === 3 && h >= 30) { R.cliff[i] = 1; notCliff[i] = 0; }
+        if ((bi === B.grassland || bi === B.mesic) && sl < 10 && rg !== RG.coast && rg !== RG.vent && rg !== RG.crater) R.plains[i] = 1;
+      }
+      R.distReef = chamfer(notReef, nx, ny, cell); R.distCliff = chamfer(notCliff, nx, ny, cell);
+      R.blurBig = blurBig; R.blurMid = blurMid; R.bigRiver = bigRiver;
+      R.plainsNear = new Float64Array(n); for (let i = 0; i < n; i++) R.plainsNear[i] = R.plains[i];
+      boxBlur(R.plainsNear, nx, ny, Math.max(1, D.round(2000 / cell)), 1);
+      R.list = {};
+      for (const k of ['high', 'basin', 'ravine', 'lowland', 'ridge', 'cliff', 'reef', 'reefFlat', 'plains']) {
+        const L = []; for (let i = 0; i < n; i++) if (R[k][i]) L.push(i);
+        R.list[k] = L;
+        const lab = new Int32Array(n), sizes = components(R[k], nx, ny, lab);
+        P2.roles[k] = { km2: L.length * area / 1e6, largestKm2: sizes.length ? Math.max(...sizes) * area / 1e6 : 0, patches: sizes.length };
+      }
+      { let c = 0; for (const i of R.list.lowland) if (R.lowland[i] === 2) c++; P2.roles.lowland.bigRiverKm2 = c * area / 1e6; }
+      { let c = 0; for (let i = 0; i < n; i++) if (land[i] && region[i] === RG.crater) c++; P2.roles.basin.craterKm2 = c * area / 1e6; }
+      return R;
+    }
+    // cells by score, best first (ties by cell index), with the same 0.6 jitter as placeBest
+    function ranked(key, score) {
+      const js = stream(p.seed, 'sites2.' + key), list = [];
+      for (let i = 0; i < n; i++) { if (!onMain(i)) continue; const v = score(i); if (v < -1e8) continue; list.push([v + 0.6 * hash2(js, i, 7) / 4294967296, i]); }
+      list.sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+      return list;
+    }
+    const BAND = [1500 * s, 6000 * s];
+    function bandCount(L, x, y) { let c = 0; for (const j of L) { const d = D.hyp(cxOf(j) - x, cyOf(j) - y); if (d >= BAND[0] && d <= BAND[1]) c++; } return c; }
+    // the best-ranked cell that is clear of other sites and (with band) has its ruin's role 1.5–6 km away
+    function pick2(F, key, score, band, tries) {
+      const L = ranked(key, score), r = layoutProgram(F.key).r;
+      let clear = 0;
+      for (const [, i] of L) {
+        if (tooClose(cxOf(i), cyOf(i), r, F.key, F.apart)) continue;
+        clear++;
+        if (!band || bandCount(band, cxOf(i), cyOf(i)) >= 3) return { i, candidates: L.length };
+        if (clear >= (tries || 400)) break;
+      }
+      return { i: -1, candidates: L.length, clear };
+    }
+    function placeProgram2() {
+      const R = roles2(), F2 = k => FAC2.find(F => F.key === k);
+      P2.R = R;
+      const fail = (key, reason) => P2.failures.push({ key, reason });
+      // tries: its own ground with its ruin's ground in reach; the fallback ground likewise; then each without the ruin's ground
+      const sector = (code, F, onRole, ruinRole, score, fallback) => {
+        const tries = [[score, true, 'role'], [fallback, true, 'fallback'], [score, false, 'role, no ruin ground in reach'], [fallback, false, 'fallback, no ruin ground in reach']];
+        let got = { i: -1, candidates: 0 }, how = '';
+        for (const [fn, band, name] of tries) { if (!fn) continue; got = pick2(F, F.key + '.' + name, fn, band ? R.list[ruinRole] : null); how = name; if (got.i >= 0) break; }
+        if (got.i < 0) { fail('sector:' + code, `no ground for ${F.name}`); return null; }
+        const t = addSite(F, cxOf(got.i), cyOf(got.i), { sector: code });
+        P2.roles['site:' + code] = { how, onRole: !!onRole(got.i) };
+        return t;
+      };
+      // 1. the Court of Unfinished Measures on the central high ground
+      const cc = P2.centre, hiScore = i => R.high[i] ? H[i] / 100 + (region[i] === RG.plateau ? 1 : 0) - D.hyp(cxOf(i) - cc[0], cyOf(i) - cc[1]) / (2500 * s) - slopeD[i] / 6 : -1e9;
+      let ci = pick2(F2('court'), 'court', hiScore, null).i, courtHow = 'high ground';
+      if (ci < 0) { ci = pick2(F2('court'), 'court.fallback', SC.control, null).i; courtHow = 'fallback (control-centre ground)'; }
+      if (ci < 0) fail('court', 'no ground for the Court');
+      else {
+        const t = addSite(F2('court'), cxOf(ci), cyOf(ci), { ruin: 'RUIN-07' });
+        P2.roles.high.found = courtHow === 'high ground' && H[ci] >= 150; P2.roles.high.h = H[ci]; P2.roles.high.fromCentre = D.hyp(t.x - cc[0], t.y - cc[1]); P2.roles.high.how = courtHow;
+      }
+      // 2. ADM's objective anchors, as today
+      for (let k = 0; k < 2; k++) { const i = placeBest(F2('docks'), k); if (i < 0) { fail('docks', 'no dock ' + (k + 1)); break; } addSite(F2('docks'), cxOf(i), cyOf(i)); }
+      placeAirstrip(F2('airstrip')); if (!sites.some(t => t.kind === 'airstrip')) fail('airstrip', 'no straight 1.4 km');
+      { const i = placeBest(F2('comms'), 0); if (i < 0) fail('comms', 'no ground'); else addSite(F2('comms'), cxOf(i), cyOf(i)); }
+      // 3. the six sectors, the most constrained ground first
+      sector('DRW', F2('drowned'), i => R.distReef[i] <= 600, 'reef',
+        i => distLand[i] < 400 && slopeD[i] < 8 && H[i] < 40 && R.distReef[i] <= 600 ? 2 - slopeD[i] / 8 - R.distReef[i] / 1000 + (coast[i] && coast[i] !== 3 ? 0.3 : 0) : -1e9,
+        i => distLand[i] < 600 && slopeD[i] < 8 && H[i] < 60 ? 1 - slopeD[i] / 8 : -1e9);
+      sector('CHO', F2('choir'), i => R.distCliff[i] <= 600, 'cliff',
+        i => R.distCliff[i] >= 100 && R.distCliff[i] <= 600 && H[i] > 30 && slopeD[i] < 15 ? 2 + Math.min(1, H[i] / 200) - slopeD[i] / 10 - R.distCliff[i] / 1000 : -1e9,
+        i => distLand[i] < 800 && H[i] > 20 && slopeD[i] < 15 ? 1 - slopeD[i] / 15 : -1e9);
+      sector('WTH', F2('weather'), i => R.ridge[i], 'ridge', i => R.ridge[i] ? SC.weather(i) : -1e9, SC.weather);
+      sector('ORC', F2('orchard'), i => R.lowland[i], 'lowland', i => R.lowland[i] ? 2 - slopeD[i] / 8 + 0.3 * R.lowland[i] + (isRiver[i] ? 0 : 0.2) : -1e9,
+        i => (biome[i] === B.moist || biome[i] === B.wet) && nearRiver[i] && H[i] < 300 && slopeD[i] < 8 ? 1 - slopeD[i] / 8 : -1e9);
+      sector('MEN', F2('genetics'), i => R.plainsNear[i] > 0.3, 'basin', i => { const v = SC.genetics(i); return v < -1e8 ? v : v + 0.5 * R.plainsNear[i]; },
+        i => slopeD[i] < 8 && H[i] > 20 && H[i] < 450 && region[i] !== RG.coast ? 1 - slopeD[i] / 8 + 0.5 * R.plainsNear[i] : -1e9);
+      { const i = placeBest(F2('raptors'), 0); if (i < 0) fail('raptors', 'no ground beside the Menagerie'); else addSite(F2('raptors'), cxOf(i), cyOf(i), { sector: 'MEN' }); }
+      sector('VIT', F2('orgone'), i => D.hyp(cxOf(i) - A.caldera.x, cyOf(i) - A.caldera.y) < 1.3 * A.caldera.R, 'ravine', SC.orgone, i => (R.basin[i] || R.ravine[i]) && slopeD[i] < 10 ? 2 - slopeD[i] / 10 : -1e9);
+      // 4. the rest of ADM's infrastructure
+      { const i = placeBest(F2('geothermal'), 0); if (i < 0) fail('geothermal', 'no ground by the vent'); else addSite(F2('geothermal'), cxOf(i), cyOf(i)); }
+      for (let k = 0; k < 2; k++) { const i = placeBest(F2('depot'), k); if (i < 0) { fail('depot', 'no depot ' + (k + 1)); break; } addSite(F2('depot'), cxOf(i), cyOf(i)); }
+      for (let k = 0; k < 3; k++) { const i = placeBest(F2('watch'), k); if (i < 0) { fail('watch', 'no watch post ' + (k + 1)); break; } addSite(F2('watch'), cxOf(i), cyOf(i)); }
+      { // the coastal service yard: low, flat ground by the first dock
+        const dk = sites.find(t => t.kind === 'docks');
+        const got = dk ? pick2(F2('yard'), 'yard', i => { const d = D.hyp(cxOf(i) - dk.x, cyOf(i) - dk.y); return d > dk.r + 150 && d < 1500 * sq && slopeD[i] < 6 && H[i] < 60 ? 3 - d / 1500 - slopeD[i] / 6 : -1e9; }, null) : { i: -1 };
+        if (got.i < 0) fail('yard', 'no flat ground by a dock'); else addSite(F2('yard'), cxOf(got.i), cyOf(got.i), { dock: dk.id });
+      }
+      // 5. outstations: 2–8, each tied to a sector, at most 2 per sector (P4.5)
+      const ro = makeRng(p.seed, 'sites.outstations'), count = 2 + Math.floor(ro() * 7), slots = [];
+      for (const c of SECTORS) slots.push(c, c);
+      for (let k = slots.length - 1; k > 0; k--) { const j = Math.floor(ro() * (k + 1)), tmp = slots[k]; slots[k] = slots[j]; slots[j] = tmp; }
+      P2.outstationCount = count;
+      const near = {
+        MEN: i => R.plains[i], VIT: i => R.ravine[i] || R.basin[i], ORC: i => R.lowland[i] || (biome[i] === B.moist && nearRiver[i]),
+        WTH: i => R.ridge[i], CHO: i => R.distCliff[i] <= 600, DRW: i => R.distReef[i] <= 600 && distLand[i] < 800
+      };
+      for (let k = 0; k < count; k++) {
+        const code = slots[k], home = sites.find(t => t.sector === code && t.kind === SECTOR_SITE[code]);
+        if (!home) { fail('outstation:' + code, 'its sector was not placed'); continue; }
+        const F = { key: 'outstation', name: 'Outstation', icon: 'R', count: 1, power: code };
+        const got = pick2(F, 'outstation.' + k, i => {
+          const d = D.hyp(cxOf(i) - home.x, cyOf(i) - home.y);
+          if (d < 2500 * s || d > 10000 * s || slopeD[i] >= (code === 'WTH' ? 20 : 10)) return -1e9;
+          return (near[code](i) ? 1 : 0) + 1 - d / (10000 * s) - slopeD[i] / 20;
+        }, null);
+        if (got.i < 0) { fail('outstation:' + code, 'no ground 2.5–10 km from ' + home.kindName); continue; }
+        const t = addSite(F, cxOf(got.i), cyOf(got.i), { sector: code, kindName: home.kindName + ' outstation', onRole: !!near[code](got.i) });
+        P2.outstations.push({ site: t.id, sector: code, onRole: t.onRole });
+      }
+      // 6. seeded facility states, data only (P4.11)
+      const rs = makeRng(p.seed, 'sites.state');
+      for (const code of SECTORS) P2.states[code] = { state: STATES[Math.floor(rs() * STATES.length)], historySeed: hash2(stream(p.seed, 'sites.history'), SECTORS.indexOf(code), 0) };
+      // 7. Central Administration's underground footprint beneath the Court, reserved now and built in P10
+      const court = sites.find(t => t.kind === 'court');
+      if (court) {
+        const hw = 120, hh = 80; let minH = 1e9, wetCells = 0, riverCells = 0;
+        for (let y = court.y - hh; y <= court.y + hh; y += cell / 2) for (let x = court.x - hw; x <= court.x + hw; x += cell / 2) { const j = idx(x, y); minH = Math.min(minH, H[j]); if (!dry(j)) wetCells++; else if (isRiver[j]) riverCells++; } // wet: sea or lake over it
+        let adit = null, ad = 1e30; // a service adit: the nearest hillside below the Court within 3 km, driven in at B1 level
+        for (let i = 0; i < n; i++) {
+          if (!onMain(i) || slopeD[i] < 8 || H[i] > court.h - 12) continue;
+          const d = D.hyp(cxOf(i) - court.x, cyOf(i) - court.y); if (d < 200 || d > 3000 * s) continue;
+          if (d < ad) { ad = d; adit = [cxOf(i), cyOf(i), H[i]]; }
+        }
+        const under = sites.filter(t => t !== court && Math.abs(t.x - court.x) < hw + t.r && Math.abs(t.y - court.y) < hh + t.r).map(t => t.kind);
+        P2.adm = { x: court.x, y: court.y, halfW: hw, halfH: hh, b1z: D.round(minH - 15), wetCells, riverCells, under,
+          ports: [{ kind: 'stair', x: court.x, y: court.y }].concat(adit ? [{ kind: 'service adit', x: adit[0], y: adit[1], h: adit[2], fromCourt: ad }] : []) };
+        // no adit is no fault: the plan's entrances are the stair from the Court and the monorail lift
+      }
+    }
+    // the authored ruins, after the paddocks so none falls inside one
+    function placeRuins2() {
+      const R = P2.R, ruinSites = [];
+      for (const RU of RUINS7) {
+        if (RU.id === 'RUIN-07') { const c = sites.find(t => t.kind === 'court'); P2.ruins.push(Object.assign({}, RU, c ? { placed: true, x: c.x, y: c.y, r: c.r, atSite: c.id } : { placed: false, reason: 'no Court' })); continue; }
+        const home = sites.find(t => t.kind === SECTOR_SITE[RU.sector]);
+        if (!home) { P2.ruins.push(Object.assign({}, RU, { placed: false, reason: 'its sector was not placed' })); continue; }
+        const js = stream(p.seed, 'ruins7.' + RU.id), L = R.list[RU.role];
+        const others = sites.filter(t => t.sector !== RU.sector); // a ruin prefers ground nearer its own sector than any other site
+        // RUIN-06's landing: the nearest main-island cell within 700 m (reef round an islet has none)
+        const landing = i => {
+          const x0 = i % nx, y0 = (i - x0) / nx, rr = Math.ceil(700 / cell); let bj = -1, bd = 1e30;
+          for (let yy = Math.max(0, y0 - rr); yy <= Math.min(ny - 1, y0 + rr); yy++) for (let xx = Math.max(0, x0 - rr); xx <= Math.min(nx - 1, x0 + rr); xx++) {
+            const j = yy * nx + xx; if (!onMain(j)) continue;
+            const d = D.hyp(cxOf(j) - cxOf(i), cyOf(j) - cyOf(i)); if (d < bd && d <= 700) { bd = d; bj = j; }
+          }
+          return bj < 0 ? null : [bj, bd];
+        };
+        let best = -1, bs = -1e9, inBand = 0, blockedBy = { paddock: 0, site: 0, ruin: 0, landing: 0 }, bestLand = null;
+        for (const i of L) {
+          const x = cxOf(i), y = cyOf(i), d = D.hyp(x - home.x, y - home.y);
+          if (d < BAND[0] || d > BAND[1]) continue;
+          inBand++;
+          if (padCell[i] >= 0) { blockedBy.paddock++; continue; }
+          if (sites.some(t => D.hyp(t.x - x, t.y - y) < t.r + 300)) { blockedBy.site++; continue; }
+          if (ruinSites.some(q => D.hyp(q[0] - x, q[1] - y) < 1000 * s)) { blockedBy.ruin++; continue; }
+          let v;
+          switch (RU.role) {
+            case 'basin': v = (R.blurBig[i] - H[i]) / 100 + (region[i] === RG.crater ? 0.5 : 0); break;
+            case 'ravine': v = (R.blurMid[i] - H[i]) / 100; break;
+            case 'lowland': v = R.lowland[i] / 2 + (isRiver[i] ? 0 : 0.3); break;
+            case 'ridge': v = H[i] / 1000 + crest[i]; break;
+            case 'cliff': v = H[i] / 200; break;
+            case 'reef': v = 0; break; // scored on its landing below
+            default: v = 0;
+          }
+          let land = null;
+          if (RU.role === 'reef') {
+            land = landing(i); if (!land) { blockedBy.landing++; continue; }
+            v = -land[1] / 1000 - D.hyp(cxOf(land[0]) - home.x, cyOf(land[0]) - home.y) / (6000 * s); // a short causeway landing near the sector
+          }
+          let dOther = 1e30; for (const t of others) dOther = Math.min(dOther, D.hyp(t.x - x, t.y - y));
+          v -= 0.5 * Math.max(0, d / dOther - 1);
+          v += 0.3 * hash2(js, i, 1) / 4294967296;
+          if (v > bs) { bs = v; best = i; bestLand = land; }
+        }
+        if (best < 0) {
+          const why = inBand ? `all ${inBand} ${RU.role} cells 1.5–6 km away are taken (paddocks ${blockedBy.paddock}, sites ${blockedBy.site}, ruins ${blockedBy.ruin}, no landing ${blockedBy.landing})` : `no ${RU.role} ground 1.5–6 km from ${home.kindName}`;
+          P2.ruins.push(Object.assign({}, RU, { placed: false, reason: why, inBand })); P2.failures.push({ key: 'ruin:' + RU.id, reason: why }); continue;
+        }
+        const q = Object.assign({}, RU, { placed: true, x: cxOf(best), y: cyOf(best), r: 80, cell: best, fromSector: D.hyp(cxOf(best) - home.x, cyOf(best) - home.y), sectorSite: home.id, inBand });
+        if (RU.role === 'reef') { // reached across the reef flat at low tide, or else by a causeway from the main island (P4.7)
+          q.lowTide = !!R.reefFlat[best];
+          q.approach = q.lowTide ? 'reef flat at low tide' : 'causeway';
+          q.landing = [cxOf(bestLand[0]), cyOf(bestLand[0])]; q.causewayM = q.lowTide ? 0 : bestLand[1];
+        }
+        ruinSites.push([q.x, q.y]); P2.ruins.push(q);
+      }
+    }
+    // four ley lines through the Court, and an ADM survey post on each
+    function placeLines2() {
+      const court = sites.find(t => t.kind === 'court'); if (!court) return;
+      const at = key => { if (key.startsWith('RUIN-')) { const q = P2.ruins.find(u => u.id === key && u.placed); return q ? [q.x, q.y] : null; } const t = sites.find(u => u.kind === key); return t ? [t.x, t.y] : null; };
+      const big = A.W + A.H, F = FAC2.find(f => f.key === 'survey'), rS = layoutProgram('survey').r;
+      for (const LN of LEY2) {
+        let left = LN.toward.map(at).filter(Boolean); const pts = [[court.x, court.y]];
+        while (left.length) { const c = pts[pts.length - 1]; left.sort((u, v) => D.hyp(u[0] - c[0], u[1] - c[1]) - D.hyp(v[0] - c[0], v[1] - c[1])); pts.push(left.shift()); }
+        if (pts.length < 2) { P2.failures.push({ key: 'ley:' + LN.key, reason: 'none of its sites were placed' }); continue; }
+        const u = (a, b) => { const d = D.hyp(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / d, (b[1] - a[1]) / d]; };
+        const d0 = u(pts[0], pts[1]), dn = u(pts[pts.length - 2], pts[pts.length - 1]);
+        const xs = [court.x - d0[0] * big], ys = [court.y - d0[1] * big];
+        for (const q of pts) { xs.push(q[0]); ys.push(q[1]); }
+        xs.push(pts[pts.length - 1][0] + dn[0] * big); ys.push(pts[pts.length - 1][1] + dn[1] * big);
+        for (let k = 0; k + 1 < xs.length; k++) leylines.push({ x1: xs[k], y1: ys[k], x2: xs[k + 1], y2: ys[k + 1], line: LN.key });
+        const line = { key: LN.key, name: LN.name, xs, ys, through: pts.length - 1 };
+        // the survey post: on the line 3–12 km out from the Court, on flat dry ground outside the paddocks
+        const js = stream(p.seed, 'survey.' + LN.key); let best = null, bs = -1e9;
+        for (let k = 0; k + 1 < xs.length; k++) {
+          const ax = xs[k], ay = ys[k], bx = xs[k + 1], by = ys[k + 1], L = D.hyp(bx - ax, by - ay), steps = Math.min(4000, Math.floor(L / (cell / 2)));
+          for (let m = 0; m <= steps; m++) {
+            const x = ax + (bx - ax) * m / Math.max(1, steps), y = ay + (by - ay) * m / Math.max(1, steps), dc = D.hyp(x - court.x, y - court.y);
+            if (dc < 3000 * s || dc > 12000 * s || x < 0 || y < 0 || x >= A.W || y >= A.H) continue;
+            const i = idx(x, y); if (!onMain(i) || slopeD[i] >= 18 || padCell[i] >= 0) continue;
+            if (pts.some(q => D.hyp(q[0] - x, q[1] - y) < 1500 * s)) continue;
+            const v = -slopeD[i] / 18 + 0.3 * hash2(js, i, k) / 4294967296;
+            if (v > bs && !tooClose(x, y, rS, 'survey')) { bs = v; best = [D.round(x), D.round(y)]; }
+          }
+        }
+        if (best) { const t = addSite(F, best[0], best[1], { line: LN.key }); line.survey = t.id; }
+        else P2.failures.push({ key: 'survey:' + LN.key, reason: 'no flat dry ground on the line 3–12 km from the Court' });
+        P2.lines.push(line);
+      }
+    }
+    const P2 = p.program === 2 ? { failures: [], warnings: [], roles: {}, ruins: [], lines: [], outstations: [], states: {}, adm: null, centre: null } : null;
+    if (P2) placeProgram2(); else for (const F of FAC) {
       if (F.key === 'airstrip') { placeAirstrip(F); continue; }
       if (F.key === 'ley') {
         // pick the three crossings first, on the main island and clear of other sites, then draw the lines
@@ -990,13 +1370,21 @@ var IslandGen = (function () {
       for (let k = 0; k < F.count; k++) { const i = placeBest(F, k); if (i < 0) break; addSite(F, cxOf(i), cyOf(i)); }
     }
     // names: add a compass word where a kind repeats
+    function nameSites() {
     const cnt = {}; sites.forEach(t => cnt[t.kind] = (cnt[t.kind] || 0) + 1);
     sites.forEach(t => {
       t.name = cnt[t.kind] > 1 ? t.kindName + ', ' + compass(t.x, t.y) : t.kindName;
+      if (P2) { // program 2 numbers by the base name, so a third in one direction isn't a second "2"
+        const base = t.name, same = sites.filter(u => u.id < t.id && u.baseName === base).length;
+        t.baseName = base; if (same) t.name += ' ' + (same + 1);
+      } else {
       const same = sites.filter(u => u !== t && u.name === t.name && u.id < t.id).length;
       if (same) t.name += ' ' + (same + 1);
+      }
       if (t.kind === 'docks') { const i = idx(t.x, t.y); t.dir = [coastNX[i], coastNY[i]]; }
     });
+    }
+    if (!P2) nameSites();
 
     // ---------- species paddocks, grown over suitable ground to each species' size ----------
     say('Fencing paddocks');
@@ -1009,7 +1397,7 @@ var IslandGen = (function () {
         for (let yy = Math.max(0, y0 - rr); yy <= Math.min(ny - 1, y0 + rr); yy++) for (let xx = Math.max(0, x0 - rr); xx <= Math.min(nx - 1, x0 + rr); xx++) blocked[yy * nx + xx] = 1;
       }
       const ph = new Heap(n * 4), js = stream(p.seed, 'paddock.seed');
-      for (const S of PADDOCKS) {
+      for (const S of (P2 ? PADDOCKS2 : PADDOCKS)) {
         const target = Math.max(4, S.km2 * p.paddockSize * s * 1e6 / area);
         const suit = new Float64Array(n);
         for (let i = 0; i < n; i++) {
@@ -1059,11 +1447,12 @@ var IslandGen = (function () {
           gate, out, moat: !!S.moat, wallow: S.wallow ? [cxOf(inner), cyOf(inner)] : null, hasLake: Array.from(inP).some((v, i) => v && !isNaN(lake[i])) });
       }
     }
+    if (P2) { placeRuins2(); placeLines2(); nameSites(); }
     lap('facilities and paddocks');
 
     // ---------- roads ----------
     say('Routing roads');
-    const roadCell = new Uint8Array(n), roads = [];
+    const roadCell = new Uint8Array(n), tunnelCell = new Uint8Array(n), roads = []; // tunnelCell: as IslandWorks.TunnelCell (read by checks.js)
     const heap = new Heap(n * 3), g = new Float64Array(n), seen = new Int32Array(n), done = new Int32Array(n), par = new Int32Array(n);
     let stamp = 0;
     function stepCost(a, b, k) {
@@ -1117,6 +1506,7 @@ var IslandGen = (function () {
             for (let m = a; m <= b; m++) { pts[m][2] = pts[a][2] + (pts[b][2] - pts[a][2]) * (m - a) / Math.max(1, b - a); if (m > a && m < b) pts[m][3] |= 2; }
             k = e;
           }
+          for (let m = 0; m < pts.length; m++) if (pts[m][3] & 2) tunnelCell[run[m]] = 1;
           const fl = pts.map(q => q[3]);
           const sm = chaikin(pts.map(q => [q[0], q[1], q[2], 0]), 2);
           const L = sm.length, xs = new Float32Array(L), ys = new Float32Array(L), hs2 = new Float32Array(L), flags = new Uint8Array(L);
@@ -1236,13 +1626,15 @@ var IslandGen = (function () {
     // ---------- caves: lava tubes on the young flanks, sea caves in the cliffs ----------
     say('Tracing lava tubes');
     const caves = [];
+    const fk = P2 ? s * s / 0.5625 : 1; // program 2: about 1.8x today's counts at 100% (land area against the 75% island)
+    const nTubes = P2 ? D.round(p.tubes * fk) : p.tubes, nSea = P2 ? D.round(4 * fk) : 4;
     {
       const rc = makeRng(p.seed, 'worldgen.caves');
       const grad = (x, y) => {
         const gx = x / cell - 0.5, gy = y / cell - 0.5, e = 0.5;
         return [(bilinear(H0, nx, ny, gx + e, gy) - bilinear(H0, nx, ny, gx - e, gy)) / (2 * e * cell), (bilinear(H0, nx, ny, gx, gy + e) - bilinear(H0, nx, ny, gx, gy - e)) / (2 * e * cell)];
       };
-      for (let k = 0, tries = 0; k < p.tubes && tries < 300; tries++) {
+      for (let k = 0, tries = 0; k < nTubes && tries < Math.max(300, nTubes * 60); tries++) {
         const i = landCells[Math.floor(rc() * landCells.length)];
         const vd = D.hyp(cxOf(i) - A.vent.x, cyOf(i) - A.vent.y) / A.vent.R;
         if (!(oldW[i] < 0.45 || vd < 3) || H0[i] < 200 || H0[i] > 950 || slopeD[i] > 25) continue;
@@ -1276,7 +1668,7 @@ var IslandGen = (function () {
         k++;
       }
       const cliffCells = []; for (let i = 0; i < n; i++) if (coast[i] === 3) cliffCells.push(i);
-      for (let k = 0, tries = 0; k < 4 && tries < 200 && cliffCells.length; tries++) {
+      for (let k = 0, tries = 0; k < nSea && tries < Math.max(200, nSea * 50) && cliffCells.length; tries++) {
         const i = cliffCells[Math.floor(rc() * cliffCells.length)], x = cxOf(i) + coastNX[i] * cell * 0.45, y = cyOf(i) + coastNY[i] * cell * 0.45;
         if (caves.some(c => c.kind === 'sea cave' && D.hyp(c.xs[0] - x, c.ys[0] - y) < 3000 * s)) continue;
         caves.push({ id: caves.length, kind: 'sea cave', xs: [x], ys: [y], depth: 0, lengthKm: 0.05 + rc() * 0.2, mouths: [[x, y]], skylights: [], name: 'Sea cave ' + (k + 1) });
@@ -1302,17 +1694,18 @@ var IslandGen = (function () {
         cand.push([i, ex + (onReef ? 0.6 : 0) + (beached ? 0.2 : 0) + 0.8 * hash2(js, i, 1) / 4294967296, onReef, beached]);
       }
       cand.sort((a, b) => b[1] - a[1]);
+      const nWrecks = P2 ? D.round(p.wrecks * fk) : p.wrecks, nAir = p.wrecks > 0 ? (P2 ? D.round(2 * fk) : 2) : 0;
       for (const [i, , onReef, beached] of cand) {
-        if (wrecks.length >= p.wrecks) break;
+        if (wrecks.length >= nWrecks) break;
         const x = cxOf(i), y = cyOf(i);
         if (wrecks.some(w => D.hyp(w.x - x, w.y - y) < 1500 * s)) continue;
         const e = WRECK_ERAS[Math.floor(rw() * WRECK_ERAS.length)];
         wrecks.push({ id: wrecks.length, x, y, kind: e[0], era: e[1], length: e[2], heading: rw() * Math.PI, onReef, beached, name: e[0][0].toUpperCase() + e[0].slice(1) + ', ' + e[1] });
       }
-      for (let k = 0, tries = 0; k < (p.wrecks > 0 ? 2 : 0) && tries < 300; tries++) {
+      for (let k = 0, tries = 0; k < nAir && tries < Math.max(300, nAir * 150); tries++) {
         const i = landCells[Math.floor(rw() * landCells.length)];
         if (!(biome[i] === B.wet || biome[i] === B.moist || biome[i] === B.cloud || biome[i] === B.ridge) || slopeD[i] > 25) continue;
-        const kind = k === 0 ? ['transport aircraft', '1940s', 28] : ['light aircraft', '1990s', 11];
+        const kind = k % 2 === 0 ? ['transport aircraft', '1940s', 28] : ['light aircraft', '1990s', 11];
         wrecks.push({ id: wrecks.length, x: cxOf(i), y: cyOf(i), kind: kind[0], era: kind[1], length: kind[2], heading: rw() * Math.PI, onReef: false, beached: false, inland: true, name: kind[0][0].toUpperCase() + kind[0].slice(1) + ', ' + kind[1] });
         k++;
       }
@@ -1335,8 +1728,10 @@ var IslandGen = (function () {
         fieldlab: i => (biome[i] === B.wet || biome[i] === B.moist) && slopeD[i] < 10 ? 1 : -1
       };
       const singles = { lighthouse: 1, radar: 1 }, used = {};
-      const order = RUIN_KINDS.map((K, k) => [ru(), K]).sort((a, b) => a[0] - b[0]).map(e => e[1]);
-      for (let k = 0, tries = 0; k < p.ruins && tries < p.ruins * 6; tries++) {
+      const order = (P2 ? RUIN_KINDS2 : RUIN_KINDS).map((K, k) => [ru(), K]).sort((a, b) => a[0] - b[0]).map(e => e[1]);
+      const nRuins = P2 ? D.round(p.ruins * fk) : p.ruins;
+      const authored = P2 ? P2.ruins.filter(q => q.placed) : [];
+      for (let k = 0, tries = 0; k < nRuins && tries < nRuins * 6; tries++) {
         const K = order[tries % order.length];
         if (singles[K.key] && used[K.key]) continue;
         let best = -1, bs = 0;
@@ -1345,12 +1740,15 @@ var IslandGen = (function () {
           if (!dry(i)) continue;
           const v = RS[K.key](i); if (v <= bs) continue;
           const x = cxOf(i), y = cyOf(i);
+          if (P2 && (authored.some(q => D.hyp(q.x - x, q.y - y) < 800 * s) || padCell[i] >= 0)) continue;
+          if (P2 && K.era === 'ancient' && !authored.some(q => D.hyp(q.x - x, q.y - y) <= 4000 * s)) continue; // satellites of the seven
           if (ruins.some(q => D.hyp(q.x - x, q.y - y) < 1800 * s) || sites.some(t => D.hyp(t.x - x, t.y - y) < t.r + 300)) continue;
           bs = v; best = i;
         }
         if (best < 0) continue;
         used[K.key] = 1;
         ruins.push({ id: ruins.length, kind: K.key, x: cxOf(best), y: cyOf(best), r: K.r, era: K.era, name: K.name + ' (' + K.era + ')', rot: ru() * Math.PI / 2 });
+        if (P2 && K.era === 'ancient') { let bq = null, bd = 1e30; for (const q of authored) { const d = D.hyp(q.x - cxOf(best), q.y - cyOf(best)); if (d < bd) { bd = d; bq = q; } } ruins[ruins.length - 1].satelliteOf = bq ? bq.id : null; }
         k++;
       }
     }
@@ -1470,9 +1868,9 @@ var IslandGen = (function () {
         if (m && m[1] < 7000 * sq && walk[summit.id][m[0].id] > 60) makeLift(m[0], summit, 'Summit lift');
       }
       // street tram: from the control centre through its nearest major neighbours, on gentle grades, mostly in the road
-      const hub = sites.find(t => t.kind === 'control');
+      const hub = sites.find(t => t.kind === (P2 ? 'court' : 'control'));
       if (hub) {
-        const pool = sites.filter(t => t.kind !== 'watch' && t !== hub && D.hyp(t.x - hub.x, t.y - hub.y) < 11000 * sq).sort((u, v) => D.hyp(u.x - hub.x, u.y - hub.y) - D.hyp(v.x - hub.x, v.y - hub.y)).slice(0, 4);
+        const pool = sites.filter(t => t.kind !== 'watch' && (!P2 || t.major) && t !== hub && D.hyp(t.x - hub.x, t.y - hub.y) < 11000 * sq).sort((u, v) => D.hyp(u.x - hub.x, u.y - hub.y) - D.hyp(v.x - hub.x, v.y - hub.y)).slice(0, 4);
         const order = [hub]; let cur = hub; const left2 = pool.slice();
         while (left2.length) { left2.sort((u, v) => D.hyp(u.x - cur.x, u.y - cur.y) - D.hyp(v.x - cur.x, v.y - cur.y)); cur = left2.shift(); order.push(cur); }
         const tramCost = (a, b, k) => {
@@ -1509,7 +1907,12 @@ var IslandGen = (function () {
         }
       }
       // underground monorail: the corporate core, straight under everything
-      const core = ['genetics', 'control', 'lab', 'orgone', 'nuclear'].map(k => sites.filter(t => t.kind === k).sort((u, v) => (gen ? D.hyp(v.x - gen.x, v.y - gen.y) - D.hyp(u.x - gen.x, u.y - gen.y) : 0))[0]).filter(Boolean).slice(0, 4);
+      let core = ['genetics', 'control', 'lab', 'orgone', 'nuclear'].map(k => sites.filter(t => t.kind === k).sort((u, v) => (gen ? D.hyp(v.x - gen.x, v.y - gen.y) - D.hyp(u.x - gen.x, u.y - gen.y) : 0))[0]).filter(Boolean).slice(0, 4);
+      if (P2) { // the Court is the hub; the three sector compounds nearest it are the other stops
+        const hubC = sites.find(t => t.kind === 'court');
+        const secs = sites.filter(t => t.sector && t.kind === SECTOR_SITE[t.sector]).sort((u, v) => D.hyp(u.x - hubC.x, u.y - hubC.y) - D.hyp(v.x - hubC.x, v.y - hubC.y) || u.id - v.id);
+        core = hubC ? [hubC].concat(secs.slice(0, 3)) : [];
+      }
       if (core.length >= 3) {
         const order = [core[0]]; const left3 = core.slice(1);
         while (left3.length) { const cur = order[order.length - 1]; left3.sort((u, v) => D.hyp(u.x - cur.x, u.y - cur.y) - D.hyp(v.x - cur.x, v.y - cur.y)); order.push(left3.shift()); }
@@ -1531,7 +1934,7 @@ var IslandGen = (function () {
         }
         stations.forEach((st, k) => { st.shaft = order[k].h - st.z; st.power = order[k].name; });
         // the elevators run on the site's power and need a monorail access key: an objective, kept in a security office
-        const keySite = sites.find(t => t.kind === 'genetics') || sites.find(t => t.kind === 'control');
+        const keySite = P2 ? sites.find(t => t.kind === 'court') : sites.find(t => t.kind === 'genetics') || sites.find(t => t.kind === 'control');
         const keyRoom = keySite && labels.findIndex(l => l.startsWith(keySite.name + ' · ') && /Security office|Security|Offices/.test(l));
         if (keySite) {
           const room = prims.find(q => q.t === 'bld' && q.rooms.some(r => r.label === keyRoom));
@@ -1555,6 +1958,7 @@ var IslandGen = (function () {
     const people = new Uint8Array(n).fill(1);
     for (const t of sites) people[idx(t.x, t.y)] = 0;
     for (const q of ruins) people[idx(q.x, q.y)] = 0;
+    if (P2) for (const q of P2.ruins) if (q.placed) people[idx(q.x, q.y)] = 0;
     const dPeople = chamfer(people, nx, ny, cell);
     const caveNear = new Uint8Array(n);
     for (const c of caves) for (const m of c.mouths) { const i0 = idx(m[0], m[1]), x0 = i0 % nx, y0 = (i0 - x0) / nx; for (let yy = Math.max(0, y0 - 6); yy <= Math.min(ny - 1, y0 + 6); yy++) for (let xx = Math.max(0, x0 - 6); xx <= Math.min(nx - 1, x0 + 6); xx++) caveNear[yy * nx + xx] = 1; }
@@ -1583,12 +1987,22 @@ var IslandGen = (function () {
 
     // the walking grid, kept for facilityAreas (step 25b-2)
     const walkGrid = { cnx, cny, cs, ch, pass, spd, wade, onRoad, targets };
-    return { sites, paddocks, roads, power, caves, wrecks, ruins, leylines, walk, walkTransit, transit, objectives, labels, prims, fauna, roadKm, mainKm, bridges, tunnels, powerKm, walkGrid };
+    const out = { sites, paddocks, roads, power, caves, wrecks, ruins, leylines, walk, walkTransit, transit, objectives, labels, prims, fauna, roadKm, mainKm, bridges, tunnels, powerKm, walkGrid, roadCell, tunnelCell };
+    if (P2) {
+      const hubSt = transit.monorail && transit.monorail.stations[0];
+      if (P2.adm && hubSt) P2.adm.ports.push({ kind: 'monorail lift', x: hubSt.x, y: hubSt.y, z: hubSt.z });
+      out.program = 2; out.authoredRuins = P2.ruins; out.leyLines = P2.lines; out.anchorKinds = ANCHOR_KINDS2;
+      out.facilityTable = FAC2.map(F => F.key === 'outstation' ? Object.assign({}, F, { count: P2.outstationCount }) : F);
+      out.paddocksWanted = PADDOCKS2.length;
+      const P2out = Object.assign({}, P2); delete P2out.R; out.program2 = P2out;
+    }
+    return out;
   }
 
   // ---------- the pipeline ----------
   function generate(params, progress) {
     const p = Object.assign({}, DEFAULTS, params);
+    if (p.program === 2 && !(params && params.scale != null)) p.scale = 100;
     const say = progress || function () { };
     const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
     const timing = {}; let t = now();
@@ -2032,7 +2446,9 @@ var IslandGen = (function () {
         ridges: [{ name: A.old.name, xs: A.old.xs, ys: A.old.ys }, { name: A.young.name, xs: A.young.xs, ys: A.young.ys }],
         caldera: A.caldera, vent: A.vent, islets: A.islets
       },
-      noise: { tile: A.nTile, fine: A.nTile2, cover: A.nCover }
+      noise: { tile: A.nTile, fine: A.nTile2, cover: A.nCover },
+      // keepInternals: the double-precision grids the C# measures read (checks.js); never set by the lab page
+      _grid: p.keepInternals ? { H, Q, isRiver, T, slopeD, lake, coast } : undefined
     };
   }
 

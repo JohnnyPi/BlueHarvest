@@ -24,5 +24,24 @@ end of stage 2, stage 3, stage 4a (after the compounds are built) or stage 4b (a
 in each script's CASES and in `TestIslands.cs`; keep the two in step.
 
 If `gen.js` changes on purpose, rerun `golden.js` and update the expected values in the tests.
+
+## Seed checks and the site program (P0a, P4a)
+
+```
+node tools/island-lab/checks.js                       # self-test: the four test islands against IslandStatsTests' and IslandReachTests' pins
+node tools/island-lab/validate.js 1 200 75 --out reports/lab-75   # `island validate 1 200 75`, with the runner's seeds.csv columns
+node tools/island-lab/compare-validate.js <C# seeds.csv> <lab seeds.csv>   # every column but seconds
+node tools/island-lab/sites-report.js 1 200           # program 2 over 200 seeds at 100%: reports/sites-<time>/report.md
+```
+
+`checks.js` ports `IslandStats.Measure`, `IslandWorks.Reachability` and `IslandChecks`; it needs a world made with
+`generate({ ..., keepInternals: true })`, which keeps the double-precision grids the C# measures read (nothing generated changes).
+
+`generate({ program: 2 })` is the Crosswake Island site program (master plan P4a), at 100% unless a scale is given: the Court
+of Unfinished Measures with Central Administration's footprint reserved beneath it, the six sectors, the seven authored ruins,
+five paddocks and the raptor pen, 2–8 outstations, ADM's infrastructure without a nuclear plant, four ley lines through the
+Court with a survey post on each, the six powers as owners, and lesser sites scaled with land area. Program 1 (the default)
+is unchanged and is what every golden script and C# test reads. `works.program2` holds what program 2 measured: terrain
+roles, ruins, lines, outstations, seeded states, the ADM footprint, and every placement failure with its reason.
 The generator only uses + − × ÷, `Math.sqrt` and `Math.floor` for anything that reaches the output
 (see the `D` block near the top), which is what makes the results identical in Node and .NET.
