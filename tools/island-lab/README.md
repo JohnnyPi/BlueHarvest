@@ -34,6 +34,11 @@ node tools/island-lab/compare-validate.js <C# seeds.csv> <lab seeds.csv>   # eve
 node tools/island-lab/sites-report.js 1 200           # program 2 over 200 seeds at 100%: reports/sites-<time>/report.md
 ```
 
+On Windows, `powershell -ExecutionPolicy Bypass -File tools\island-lab\run-checks.ps1` runs all of it in order (the C# tests,
+`checks.js`, the golden hashes against the tests, C# and lab `island validate` at 75% and 100% compared column by column, and the
+site report) and writes `reports\checks-<time>\summary.md`. `-Count 20` makes a quick run; `-SkipTests`, `-SkipValidate` and
+`-SkipSites` leave parts out.
+
 `checks.js` ports `IslandStats.Measure`, `IslandWorks.Reachability` and `IslandChecks`; it needs a world made with
 `generate({ ..., keepInternals: true })`, which keeps the double-precision grids the C# measures read (nothing generated changes).
 
@@ -43,5 +48,11 @@ five paddocks and the raptor pen, 2–8 outstations, ADM's infrastructure withou
 Court with a survey post on each, the six powers as owners, and lesser sites scaled with land area. Program 1 (the default)
 is unchanged and is what every golden script and C# test reads. `works.program2` holds what program 2 measured: terrain
 roles, ruins, lines, outstations, seeded states, the ADM footprint, and every placement failure with its reason.
+
+Program 2 also turns on the two P4b anchors (`anchors2`, on by default with program 2, off for program 1): a **reef flat**
+off the most sheltered low shore, 0.6–1.5 m deep out to 700 m so it can be waded at the lowest tide (shape stage, sea depths),
+and a **floodplain** along the longest lowland reach of a river of 1 m³/s or more, whose ground grows forest whatever the rain
+(climate stage: `classify` takes a riparian floor, `world.riparian`, which the 1 m tiles read too). `world.reefFlat` and
+`world.floodplain` say where they went.
 The generator only uses + − × ÷, `Math.sqrt` and `Math.floor` for anything that reaches the output
 (see the `D` block near the top), which is what makes the results identical in Node and .NET.

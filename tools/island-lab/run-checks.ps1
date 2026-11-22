@@ -45,9 +45,23 @@ foreach ($f in 'gen.js', 'checks.js', 'validate.js', 'compare-validate.js', 'sit
 if (-not $SkipTests) {
     Section 'dotnet test'
     & dotnet test 2>&1 | Tee-Object -Variable testLog
-    $summary = $testLog | Select-String -Pattern 'Test summary:.*' | Select-Object -Last 1
-    $line = 'no "Test summary" line'; if ($summary) { $line = $summary.Matches[0].Value }
-    $ok = ($LASTEXITCODE -eq 0) -and ($line -match 'total: 1007,') -and ($line -match 'failed: 0,')
+    $testExit = $LASTEXITCODE
+    # dotnet test prints one of two summary formats, depending on whether its output goes to a pipe:
+    #   new:    Test summary: total: 1007, failed: 0, succeeded: 1007, skipped: 0, duration: 12s
+    #   VSTest: Passed!  - Failed:     0, Passed:  1007, Skipped:     0, Total:  1007, Duration: 12 s
+    # Each test project prints its own line, so the counts are added up.
+    $total = 0; $failed = 0; $found = 0
+    foreach ($t in $testLog) {
+        $s = [string]$t
+        if ($s -match 'Test summary:\s*total:\s*(\d+),\s*failed:\s*(\d+)') {
+            $total += [int]$Matches[1]; $failed += [int]$Matches[2]; $found++
+        } elseif ($s -match 'Failed:\s*(\d+),\s*Passed:\s*\d+,\s*Skipped:\s*\d+,\s*Total:\s*(\d+)') {
+            $failed += [int]$Matches[1]; $total += [int]$Matches[2]; $found++
+        }
+    }
+    if ($found -eq 0) { $line = 'no test summary line found in the output' }
+    else { $line = "total $total, failed $failed (from $found summary line(s)), exit code $testExit" }
+    $ok = ($testExit -eq 0) -and ($found -gt 0) -and ($total -eq 1007) -and ($failed -eq 0)
     Add-Result 'C# tests (expect 1007 passed)' $ok $line
     $testLog | Out-File -Encoding utf8 (Join-Path $outDir 'dotnet-test.log')
 }

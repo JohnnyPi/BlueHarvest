@@ -117,7 +117,7 @@ function one(G, C, D, seed, scale, t0) {
   return {
     seed, genSec, seconds: Number(process.hrtime.bigint() - t0) / 1e9, landKm2: S.landKm2,
     s24: { landPct: 100 * S.landFraction, lowlandPct: 100 * S.lowlandShare, beachPct: 100 * S.beachShare, walkPct: 100 * S.walkableConnectedShare, islets: S.islets, slowestKeyH: R24.slowestMinutes / 60 },
-    roles: P.roles, ruins: ruinOut, sites: siteOut, courtWalk, pads, pen, outstations: { chosen: P.outstationCount, placed: P.outstations.length, onRole: P.outstations.filter(o => o.onRole).length, perSector },
+    roles: P.roles, anchors: P.anchors || null, ruins: ruinOut, sites: siteOut, courtWalk, pads, pen, outstations: { chosen: P.outstationCount, placed: P.outstations.length, onRole: P.outstations.filter(o => o.onRole).length, perSector },
     beaches: { stretches: stretches.length, clear: stretches.filter(b => b.clear).length, ok: beachesOk },
     lines: P.lines.map(l => ({ key: l.key, through: l.through, survey: l.survey != null })), adm: P.adm ? { b1Depth: court.h - P.adm.b1z, rivers: P.adm.riverCells, adit: P.adm.ports.some(q => q.kind === 'service adit'), lift: P.adm.ports.some(q => q.kind === 'monorail lift') } : null,
     states: P.states, counts: { caves: W.caves.length, tubes: W.caves.filter(c => c.kind === 'lava tube').length, wrecks: W.wrecks.length, ruins: W.ruins.length, ancient: W.ruins.filter(q => q.era === 'ancient').length, sites: sites.length },
@@ -165,25 +165,25 @@ function report(R, secs) {
   const pass = ok.filter(r => r.passed).length;
   const fails = new Map(), warns = new Map();
   ok.forEach(r => r.checks.forEach(c => { const m = c.sev === 'Fail' ? fails : warns; m.set(c.key, (m.get(c.key) || 0) + 1); }));
-  L.push(`# Site program 2 (P4a): ${R.length} seeds from ${first} at ${scale}%`);
+  L.push(`# Site program 2 with the P4b anchors: ${R.length} seeds from ${first} at ${scale}%`);
   L.push('');
   L.push(`Generated ${N} of ${R.length}; **${pass} of ${N} seeds (${pct(pass, N)}) pass every Fail check**. Failing: ${fails.size ? [...fails].map(([k, v]) => `${k} ${v}`).join(', ') : 'none'}. Warnings: ${warns.size ? [...warns].map(([k, v]) => `${k} ${v}`).join(', ') : 'none'}.`);
   L.push(`Generation in Node ${q(ok.map(r => r.genSec), f2)} s (min / median / max); with the report's measuring ${q(ok.map(r => r.seconds), f2)} s. Run took ${secs.toFixed(0)} s.`);
   R.filter(r => r.error).forEach(r => L.push(`Seed ${r.seed} threw: ${r.error.split('\n')[0]}`));
   L.push('');
   // ---- terrain roles ----
-  const role = (name, found, size, serves, fallback) => ({ name, found, size, serves, fallback });
+  const role = (name, found, size, serves, fallback, anchored) => ({ name, found, size, serves, fallback, anchored });
   const ruin = (r, id) => r.ruins.find(o => o.id === id);
   const secRole = (r, c) => r.roles['site:' + c] || {};
   const roles = [
     role('Central high ground', r => !!r.roles.high.found, r => r.roles.high.km2, 'The Court, ADM beneath it, the lines\' crossing, the monorail hub', 'A worn tableland or old cone at the centre'),
     role('Prehistoric basin', r => ruin(r, 'RUIN-01').placed, r => r.roles.basin.km2, 'RUIN-01 Unhatched Court', 'A guaranteed basin of minimum size'),
     role('Inland ravine', r => ruin(r, 'RUIN-02').placed, r => r.roles.ravine.km2, 'RUIN-02 House of Borrowed Breath', 'A narrow valley cut into one shield\'s flank'),
-    role('Wet river lowland', r => secRole(r, 'ORC').onRole && ruin(r, 'RUIN-03').placed, r => r.roles.lowland.km2, 'Glass Orchard, RUIN-03', 'A broad valley with a guaranteed river; deltas and floodplains (P4.10)'),
+    role('Wet river lowland (a river of 1 m³/s or more)', r => secRole(r, 'ORC').onRole && ruin(r, 'RUIN-03').placed, r => r.roles.lowland.km2, 'Glass Orchard, RUIN-03', 'The floodplain anchor (P4b)', true),
     role('High ridge', r => secRole(r, 'WTH').onRole && ruin(r, 'RUIN-04').placed, r => r.roles.ridge.km2, 'Ninth Weather, RUIN-04', 'A summit ridge on the higher shield'),
     role('Sea-cliff coast', r => secRole(r, 'CHO').onRole && ruin(r, 'RUIN-05').placed, r => r.roles.cliff.km2, 'Choir Below, RUIN-05', 'A guaranteed cliff stretch'),
-    role('Reef (the reef band)', r => secRole(r, 'DRW').onRole && ruin(r, 'RUIN-06').placed, r => r.roles.reef.km2, 'Drowned Observatory, RUIN-06 (by causeway)', '–'),
-    role('Reef flat that dries at low tide', r => ruin(r, 'RUIN-06').placed && ruin(r, 'RUIN-06').approach === 'reef flat at low tide', r => r.roles.reefFlat.km2, 'RUIN-06 on foot at low tide', 'A fringing reef with a flat that dries at low tide, or keep the causeway (P4.7 allows either)'),
+    role('Reef (the reef band and the flat)', r => secRole(r, 'DRW').onRole && ruin(r, 'RUIN-06').placed, r => r.roles.reef.km2, 'Drowned Observatory, RUIN-06', '–'),
+    role('Reef flat that dries at low tide', r => ruin(r, 'RUIN-06').placed && ruin(r, 'RUIN-06').approach === 'reef flat at low tide', r => r.roles.reefFlat.km2, 'RUIN-06 on foot at low tide', 'The reef-flat anchor (P4b)', true),
     role('Paddock plains', r => r.pads.length === 5 && r.pads.every(p => p.km2 >= 0.9 * { apato: 9, tyrant: 2.2, ceratopsian: 1.4, crownback: 1.4, hadrosaur: 2.5 }[p.key]), r => r.roles.plains.km2, 'Five paddocks and the raptor pen', 'Guaranteed grassland area')
   ];
   L.push('## Terrain roles: found, how big, and whether a fallback anchor is needed');
@@ -194,15 +194,16 @@ function report(R, secs) {
   L.push('|---|---|---|---|---|');
   for (const ro of roles) {
     const n = ok.filter(ro.found).length, need = n / N < ROLE_FOUND_MIN;
-    L.push(`| ${ro.name} | ${n} of ${N} (${pct(n, N)}) | ${q(ok.map(ro.size), f1)} | ${ro.serves} | ${need ? '**anchor needed:** ' + ro.fallback : 'no anchor'} |`);
+    L.push(`| ${ro.name} | ${n} of ${N} (${pct(n, N)}) | ${q(ok.map(ro.size), f1)} | ${ro.serves} | ${need ? '**anchor needed:** ' + ro.fallback : ro.anchored ? 'found with ' + ro.fallback.replace(/^The /, 'the ') : 'no anchor'} |`);
   }
   L.push('');
   L.push(`- Central high ground: Court height ${q(ok.map(r => r.roles.high.h), f0)} m; distance from the template centre (the saddle's midpoint) ${q(ok.map(r => r.roles.high.fromCentre / 1000), f1)} km.`);
   L.push(`- Prehistoric basin: crater basin ${q(ok.map(r => r.roles.basin.craterKm2), f1)} km² of it; the rest are enclosed valleys (50 m or more below the 1.5 km mean).`);
-  L.push(`- Wet river lowland: along rivers of 1 m³/s or more, only ${q(ok.map(r => r.roles.lowland.bigRiverKm2), f2)} km²; largest single patch ${q(ok.map(r => r.roles.lowland.largestKm2), f2)} km².`);
+  L.push(`- Wet river lowland: largest single patch ${q(ok.map(r => r.roles.lowland.largestKm2), f2)} km².`);
+  L.push(`- Anchors (P4b): the floodplain covers ${q(ok.map(r => r.anchors && r.anchors.floodplain ? r.anchors.floodplain.km2 : NaN), f1)} km² along ${q(ok.map(r => r.anchors && r.anchors.floodplain ? r.anchors.floodplain.riverCells * 0.128 : NaN), f1)} km of river cells; the reef flat ${q(ok.map(r => r.anchors && r.anchors.reefFlat ? r.anchors.reefFlat.km2 : NaN), f1)} km²; missing: floodplain on ${ok.filter(r => !r.anchors || !r.anchors.floodplain).length} seeds, reef flat on ${ok.filter(r => !r.anchors || !r.anchors.reefFlat).length}.`);
   L.push(`- Sea-cliff coast: largest stretch ${q(ok.map(r => r.roles.cliff.largestKm2), f2)} km². Ridge: largest patch ${q(ok.map(r => r.roles.ridge.largestKm2), f1)} km².`);
   const r6 = ok.map(r => ruin(r, 'RUIN-06')).filter(o => o.placed);
-  L.push(`- RUIN-06: ${r6.filter(o => o.approach === 'causeway').length} of ${r6.length} placed perimeters need the causeway; causeway ${q(r6.map(o => o.causewayM), f0)} m.`);
+  L.push(`- RUIN-06: ${r6.filter(o => o.approach === 'reef flat at low tide').length} of ${r6.length} placed perimeters are reached across the reef flat at low tide; ${r6.filter(o => o.approach === 'causeway').length} need a causeway${r6.some(o => o.approach === 'causeway') ? ` (${q(r6.filter(o => o.approach === 'causeway').map(o => o.causewayM), f0)} m)` : ''}.`);
   L.push('');
   L.push('How each sector compound was placed (role = on its own ground with its ruin\'s ground in reach):');
   L.push('');

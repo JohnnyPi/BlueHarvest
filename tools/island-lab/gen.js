@@ -534,7 +534,8 @@ var IslandGen = (function () {
 
   // One rule for the island grid and for every 1 m tile, so the two always agree.
   // j is a jitter in about -1..1 that makes boundaries ragged.
-  function classify(h, rain, temp, fog, wet, slope, lava, dc, beachy, crest, j) {
+  // rip (P4b floodplain, 0–1): ground watered by a big river from below grows forest whatever the rain; 0 everywhere else
+  function classify(h, rain, temp, fog, wet, slope, lava, dc, beachy, crest, j, rip) {
     if (lava > 0.62 + 0.08 * j) return B.lava;
     if (slope > 40 + 6 * j) return B.cliff;
     if (beachy && dc < 150 + 70 * j && h < 7) return B.strand;
@@ -542,7 +543,8 @@ var IslandGen = (function () {
     if (fog > 0.5 + 0.12 * j && rain > 2200) return B.cloud;
     if (crest > 0.55 + 0.15 * j && h > 550) return B.ridge;
     // aridity: rain against what warm air evaporates (less up high, where it is cooler)
-    const ai = rain * (1 + 0.1 * j) / (1300 * (0.4 + 0.6 * temp / 24));
+    let ai = rain * (1 + 0.1 * j) / (1300 * (0.4 + 0.6 * temp / 24));
+    if (rip > 0) ai = Math.max(ai, 2 * rip);
     if (ai > 2.7) return B.wet;
     if (ai > 1.6) return B.moist;
     if (ai > 1.0) return B.mesic;
@@ -1118,12 +1120,23 @@ var IslandGen = (function () {
         if (sl < 6 && h <= p.saddle + 300 && rg !== RG.coast && rg !== RG.wetland && rg !== RG.vent && rg !== RG.ridge && D.hyp(cxOf(i) - ccx, cyOf(i) - ccy) <= 8000 * s) R.high[i] = 1;
         if (h > 15 && sl < 12 && (rg === RG.crater || blurBig[i] - h >= 50)) R.basin[i] = 1;
         if (rain[i] > 1800 && blurMid[i] - h >= 50 && sl >= 6 && sl < 35 && h >= 40 && h <= 800 && rg !== RG.coast) R.ravine[i] = 1;
-        if ((bi === B.moist || bi === B.wet) && h < 200 && sl < 8 && bigRiver[i]) R.lowland[i] = bigRiver[i]; // 2: along a river of 1 m³/s or more
+        if ((bi === B.moist || bi === B.wet) && h < 200 && sl < 8 && bigRiver[i] === 2) R.lowland[i] = 2; // along a river of 1 m³/s or more (P4b)
         if (h >= 0.55 * p.peak && crest[i] > 0.3 && sl < 25 && oldW[i] < 0.5) R.ridge[i] = 1;
         if (coast[i] === 3 && h >= 30) { R.cliff[i] = 1; notCliff[i] = 0; }
         if ((bi === B.grassland || bi === B.mesic) && sl < 10 && rg !== RG.coast && rg !== RG.vent && rg !== RG.crater) R.plains[i] = 1;
       }
       R.distReef = chamfer(notReef, nx, ny, cell); R.distCliff = chamfer(notCliff, nx, ny, cell);
+      { // the reef flat (P4b): its distance map, and which of its cells join the main island (walked at low tide)
+        const notFlat = mk(); for (let i = 0; i < n; i++) notFlat[i] = R.reefFlat[i] ? 0 : 1;
+        R.distFlat = chamfer(notFlat, nx, ny, cell);
+        const fl = new Int32Array(n), fsz = components(R.reefFlat, nx, ny, fl), joined = new Uint8Array(fsz.length);
+        for (let i = 0; i < n; i++) {
+          if (fl[i] < 0 || joined[fl[i]]) continue;
+          const x = i % nx, y = (i - x) / nx;
+          for (let k = 0; k < 8; k++) { const xx = x + DX[k], yy = y + DY[k]; if (xx >= 0 && yy >= 0 && xx < nx && yy < ny && onMain(yy * nx + xx)) { joined[fl[i]] = 1; break; } }
+        }
+        R.flatJoined = i => fl[i] >= 0 && joined[fl[i]] === 1;
+      }
       R.blurBig = blurBig; R.blurMid = blurMid; R.bigRiver = bigRiver;
       R.plainsNear = new Float64Array(n); for (let i = 0; i < n; i++) R.plainsNear[i] = R.plains[i];
       boxBlur(R.plainsNear, nx, ny, Math.max(1, D.round(2000 / cell)), 1);
@@ -1135,6 +1148,7 @@ var IslandGen = (function () {
         P2.roles[k] = { km2: L.length * area / 1e6, largestKm2: sizes.length ? Math.max(...sizes) * area / 1e6 : 0, patches: sizes.length };
       }
       { let c = 0; for (const i of R.list.lowland) if (R.lowland[i] === 2) c++; P2.roles.lowland.bigRiverKm2 = c * area / 1e6; }
+      P2.anchors = { reefFlat: C.reefFlat || null, floodplain: C.floodplain || null };
       { let c = 0; for (let i = 0; i < n; i++) if (land[i] && region[i] === RG.crater) c++; P2.roles.basin.craterKm2 = c * area / 1e6; }
       return R;
     }
@@ -1187,8 +1201,9 @@ var IslandGen = (function () {
       placeAirstrip(F2('airstrip')); if (!sites.some(t => t.kind === 'airstrip')) fail('airstrip', 'no straight 1.4 km');
       { const i = placeBest(F2('comms'), 0); if (i < 0) fail('comms', 'no ground'); else addSite(F2('comms'), cxOf(i), cyOf(i)); }
       // 3. the six sectors, the most constrained ground first
-      sector('DRW', F2('drowned'), i => R.distReef[i] <= 600, 'reef',
-        i => distLand[i] < 400 && slopeD[i] < 8 && H[i] < 40 && R.distReef[i] <= 600 ? 2 - slopeD[i] / 8 - R.distReef[i] / 1000 + (coast[i] && coast[i] !== 3 ? 0.3 : 0) : -1e9,
+      const hasFlat = R.list.reefFlat.length > 0, reefD = hasFlat ? R.distFlat : R.distReef;
+      sector('DRW', F2('drowned'), i => reefD[i] <= 600, hasFlat ? 'reefFlat' : 'reef',
+        i => distLand[i] < 400 && slopeD[i] < 8 && H[i] < 40 && reefD[i] <= 600 ? 2 - slopeD[i] / 8 - reefD[i] / 1000 + (coast[i] && coast[i] !== 3 ? 0.3 : 0) : -1e9,
         i => distLand[i] < 600 && slopeD[i] < 8 && H[i] < 60 ? 1 - slopeD[i] / 8 : -1e9);
       sector('CHO', F2('choir'), i => R.distCliff[i] <= 600, 'cliff',
         i => R.distCliff[i] >= 100 && R.distCliff[i] <= 600 && H[i] > 30 && slopeD[i] < 15 ? 2 + Math.min(1, H[i] / 200) - slopeD[i] / 10 - R.distCliff[i] / 1000 : -1e9,
@@ -1258,7 +1273,8 @@ var IslandGen = (function () {
         if (RU.id === 'RUIN-07') { const c = sites.find(t => t.kind === 'court'); P2.ruins.push(Object.assign({}, RU, c ? { placed: true, x: c.x, y: c.y, r: c.r, atSite: c.id } : { placed: false, reason: 'no Court' })); continue; }
         const home = sites.find(t => t.kind === SECTOR_SITE[RU.sector]);
         if (!home) { P2.ruins.push(Object.assign({}, RU, { placed: false, reason: 'its sector was not placed' })); continue; }
-        const js = stream(p.seed, 'ruins7.' + RU.id), L = R.list[RU.role];
+        const onFlat = RU.role === 'reef' && R.list.reefFlat.length > 0; // P4b: on the reef flat, walked at low tide
+        const js = stream(p.seed, 'ruins7.' + RU.id), L = R.list[onFlat ? 'reefFlat' : RU.role];
         const others = sites.filter(t => t.sector !== RU.sector); // a ruin prefers ground nearer its own sector than any other site
         // RUIN-06's landing: the nearest main-island cell within 700 m (reef round an islet has none)
         const landing = i => {
@@ -1289,8 +1305,10 @@ var IslandGen = (function () {
           }
           let land = null;
           if (RU.role === 'reef') {
+            if (onFlat && !R.flatJoined(i)) { blockedBy.landing++; continue; }
             land = landing(i); if (!land) { blockedBy.landing++; continue; }
-            v = -land[1] / 1000 - D.hyp(cxOf(land[0]) - home.x, cyOf(land[0]) - home.y) / (6000 * s); // a short causeway landing near the sector
+            v = onFlat ? -Math.abs(C.distSea[i] - 450 * s) / 1000 - D.hyp(cxOf(land[0]) - home.x, cyOf(land[0]) - home.y) / (6000 * s) // out on the flat, 300–700 m from shore
+              : -land[1] / 1000 - D.hyp(cxOf(land[0]) - home.x, cyOf(land[0]) - home.y) / (6000 * s); // a short causeway landing near the sector
           }
           let dOther = 1e30; for (const t of others) dOther = Math.min(dOther, D.hyp(t.x - x, t.y - y));
           v -= 0.5 * Math.max(0, d / dOther - 1);
@@ -1303,7 +1321,7 @@ var IslandGen = (function () {
         }
         const q = Object.assign({}, RU, { placed: true, x: cxOf(best), y: cyOf(best), r: 80, cell: best, fromSector: D.hyp(cxOf(best) - home.x, cyOf(best) - home.y), sectorSite: home.id, inBand });
         if (RU.role === 'reef') { // reached across the reef flat at low tide, or else by a causeway from the main island (P4.7)
-          q.lowTide = !!R.reefFlat[best];
+          q.lowTide = !!R.reefFlat[best] && R.flatJoined(best);
           q.approach = q.lowTide ? 'reef flat at low tide' : 'causeway';
           q.landing = [cxOf(bestLand[0]), cyOf(bestLand[0])]; q.causewayM = q.lowTide ? 0 : bestLand[1];
         }
@@ -2091,6 +2109,32 @@ var IslandGen = (function () {
       if (land[i]) { if (H[i] > 0) H[i] += 1; }
       else { const dc = distSea[i]; H[i] = -Math.min(3800, 1 + Math.min(dc, 1500) * 0.012 + Math.max(0, dc - 1500) * 0.12); }
     }
+    // P4b, the reef flat (program 2): off the most sheltered low shore of the main island, a fringing flat 0.6–1.5 m deep
+    // out to 700 m, so it can be waded at the lowest tide (1.8 m: wade depth 1.2 m, spring 0.5 m, daily 0.1 m)
+    const anchors2 = p.anchors2 != null ? !!p.anchors2 : p.program === 2;
+    let reefFlat = null, flatMask = null;
+    if (anchors2) {
+      const lb = new Int32Array(n), sz = components(land, nx, ny, lb); let mk = 0; sz.forEach((v, k) => { if (v > sz[mk]) mk = k; });
+      const js = stream(p.seed, 'worldgen.reefflat'); let best = -1, bs = -1e9;
+      for (let i = 0; i < n; i++) {
+        if (!land[i] || lb[i] !== mk || lava[i] >= 0.45 || H[i] >= 30) continue;
+        const x = i % nx, y = (i - x) / nx; let ox = 0, oy = 0, isC = false;
+        for (let k = 0; k < 8; k++) { const xx = x + DX[k], yy = y + DY[k]; if (xx < 0 || yy < 0 || xx >= nx || yy >= ny) continue; if (!land[yy * nx + xx]) { ox += DX[k]; oy += DY[k]; if (!(k & 1)) isC = true; } }
+        if (!isC) continue;
+        const ol = D.hyp(ox, oy) || 1, v = 1 - exposure(ox / ol, oy / ol) + 0.3 * hash2(js, i, 1) / 4294967296;
+        if (v > bs) { bs = v; best = i; }
+      }
+      if (best >= 0) {
+        const bx = (best % nx + 0.5) * cell, by = (Math.floor(best / nx) + 0.5) * cell, R = 2200 * A.s, Wd = 700 * A.s;
+        flatMask = new Uint8Array(n); let cells = 0;
+        for (let i = 0; i < n; i++) {
+          if (!ocean[i] || distSea[i] > Wd) continue;
+          if (D.hyp((i % nx + 0.5) * cell - bx, (Math.floor(i / nx) + 0.5) * cell - by) > R) continue;
+          H[i] = -(0.5 + 1.0 * distSea[i] / Wd); flatMask[i] = 1; cells++;
+        }
+        reefFlat = { x: bx, y: by, R, width: Wd, cells, km2: cells * area / 1e6 };
+      }
+    }
     const H0 = Float32Array.from(H);
     lap('coast');
 
@@ -2255,6 +2299,7 @@ var IslandGen = (function () {
       else if (lava[i] < 0.45 && dc >= 300 && dc <= 1100 && nr > -0.05) sea[i] = 3;
       else if (lava[i] < 0.45 && dc < 300 && nr > 0.08) sea[i] = 4;
       else sea[i] = 2;
+      if (flatMask && flatMask[i]) sea[i] = 3; // the reef flat reads as reef
     }
     // Cliff mask for the chunk detail: cliff-coast land cells and the sea cells beside them.
     const cliffMask = new Float32Array(n);
@@ -2319,6 +2364,30 @@ var IslandGen = (function () {
       wet[i] = wv;
       crest[i] = clamp((H[i] - blurH[i]) / 60, 0, 1);
     }
+    // P4b, the floodplain (program 2): along the island's longest lowland reach of a river of 1 m³/s or more, the ground
+    // within 384 m and less than 15 m above the river is watered from below (rip), so it grows forest even on the dry side
+    let rip = null, floodplain = null;
+    if (anchors2) {
+      const f0 = new Uint8Array(n);
+      for (let i = 0; i < n; i++) if (land[i] && isNaN(lake[i]) && isRiver[i] && Q[i] >= 1 && H[i] < 120 && slopeD[i] < 8) f0[i] = 1;
+      const lb = new Int32Array(n), sz = components(f0, nx, ny, lb);
+      let pick = -1; for (let k = 0; k < sz.length; k++) if (pick < 0 || sz[k] > sz[pick]) pick = k;
+      if (pick >= 0) {
+        rip = new Float32Array(n);
+        const dist = new Int8Array(n).fill(-1), src = new Float64Array(n), q = new Int32Array(n); let qh = 0, qt = 0;
+        for (let i = 0; i < n; i++) if (lb[i] === pick) { dist[i] = 0; src[i] = H[i]; q[qt++] = i; }
+        while (qh < qt) {
+          const c = q[qh++], x = c % nx, y = (c - x) / nx; if (dist[c] >= 3) continue;
+          for (let k = 0; k < 8; k++) { const xx = x + DX[k], yy = y + DY[k]; if (xx < 0 || yy < 0 || xx >= nx || yy >= ny) continue; const j = yy * nx + xx; if (dist[j] >= 0) continue; dist[j] = dist[c] + 1; src[j] = src[c]; q[qt++] = j; }
+        }
+        let cells = 0, sx = 0, sy = 0;
+        for (let i = 0; i < n; i++) {
+          if (dist[i] < 0 || !land[i] || !isNaN(lake[i]) || slopeD[i] >= 8 || H[i] > src[i] + 15) continue;
+          rip[i] = dist[i] <= 2 ? 1 : 0.6; cells++; sx += (i % nx + 0.5) * cell; sy += (Math.floor(i / nx) + 0.5) * cell;
+        }
+        floodplain = { riverCells: sz[pick], cells, km2: cells * area / 1e6, x: cells ? sx / cells : 0, y: cells ? sy / cells : 0 };
+      }
+    }
     say('Sorting biomes and regions');
     const biome = new Uint8Array(n), region = new Uint8Array(n);
     const biomeKm2 = new Float64Array(BIOMES.length);
@@ -2329,7 +2398,7 @@ var IslandGen = (function () {
       if (!isNaN(lake[i])) biome[i] = B.lake;
       else {
         const jt = clamp(2 * fbm(A.nBiome, x / 2500, y / 2500, 3), -1, 1);
-        biome[i] = classify(Math.max(0, H[i]), rain[i], temp[i], fog[i], wet[i], slopeD[i], lava[i], distLand[i], coast[i] === 1, crest[i], jt);
+        biome[i] = classify(Math.max(0, H[i]), rain[i], temp[i], fog[i], wet[i], slopeD[i], lava[i], distLand[i], coast[i] === 1, crest[i], jt, rip ? rip[i] : 0);
       }
       biomeKm2[biome[i]] += area / 1e6;
       // regions, highest priority first
@@ -2386,7 +2455,7 @@ var IslandGen = (function () {
 
     // ---------- stage 4: the works of people, and caves ----------
     const W4 = works({ p, A, nx, ny, cell, n, area, H, H0, land, lake, rain, slopeD, biome, region, distLand, distSea, coast,
-      coastNX, coastNY, coastEx, sea, Q, isRiver, lava, oldW, crest, wet, say, lap });
+      coastNX, coastNY, coastEx, sea, Q, isRiver, lava, oldW, crest, wet, say, lap, flatMask, rip, reefFlat, floodplain });
     if (W4.stop) return W4.stop;
 
     // ---------- metrics ----------
@@ -2439,7 +2508,7 @@ var IslandGen = (function () {
       params: p, nx, ny, cell, W: A.W, H: A.H, s: A.s,
       height: Float32Array.from(H), height0: H0, rain: Float32Array.from(rain), flow: Float32Array.from(Q),
       lake, sea, coast, lava, erod, distLand, distSea, land, pali, cliff: cliffMask,
-      temp, fog, wet, crest, slope: slopeD, biome, region, regionLabels, works: W4,
+      temp, fog, wet, crest, slope: slopeD, biome, region, regionLabels, works: W4, riparian: rip, reefFlat, floodplain,
       rivers, falls, lakes, metrics, timing,
       anchors: {
         d: A.d, n: A.n,
@@ -2858,7 +2927,7 @@ var IslandGen = (function () {
         const jt = clamp(1.6 * fbm((nz.cover ^ 0x5151) >>> 0, x / 90, y / 90, 3), -1, 1);
         const wetV = bilinear(world.wet, nx, ny, gx, gy) + (riverD[k] < 25 ? 0.15 : 0);
         const bi = classify(Math.max(0, z), rainV, seaT - 6.5 * Math.max(0, z) / 1000, bilinear(world.fog, nx, ny, gx, gy), wetV,
-          bilinear(world.slope, nx, ny, gx, gy), lavaV, dc, beachy, bilinear(world.crest, nx, ny, gx, gy), jt);
+          bilinear(world.slope, nx, ny, gx, gy), lavaV, dc, beachy, bilinear(world.crest, nx, ny, gx, gy), jt, world.riparian ? bilinear(world.riparian, nx, ny, gx, gy) : 0);
         tBiome[o2] = bi;
         const u = 0.5 + 0.5 * D.tanh(2.4 * (nC + 0.35 * nC2));
         if (ledge === 0) c = CV.rock;
