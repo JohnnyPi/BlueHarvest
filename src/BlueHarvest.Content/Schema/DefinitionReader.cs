@@ -89,22 +89,134 @@ internal static class DefinitionReader
         return handler is null ? Array.Empty<string>() : new[] { handler };
     }
 
+    const int MaxMl = 10_000_000;
+
     static ItemDefinition ReadItem(FieldReader f, ParseContext ctx, Common c)
     {
-        string category = f.Pattern("category", true, IdRules.IsToken, "a lower-case word such as material") ?? "";
+        IReadOnlyList<string> categories = f.Strings("categories", true, t => ItemWords.Categories.Contains(t),
+            "an item category (" + string.Join(", ", ItemWords.Categories) + ")", minCount: 1);
+        bool Has(string category) => categories.Contains(category);
+        string? plural = f.String("plural", allowEmpty: false);
+        string? glyph = f.String("glyph", allowEmpty: false);
+        if (glyph is not null && glyph.Length != 1)
+        {
+            ctx.Error(DiagnosticCodes.BadValue, f.At("glyph"), $"glyph is '{glyph}'; it must be a single character.");
+            glyph = null;
+        }
+        string size = f.Token("size", true, ItemWords.Sizes.ToArray()) ?? "hand";
         int mass = f.Int("mass_g", true, 0, 1_000_000) ?? 0;
+        int volume = f.Int("volume_ml", true, 0, MaxMl) ?? 0;
         int stackLimit = f.Int("stack_limit", false, 1, 10_000) ?? 1;
         string stacking = f.Token("stacking", false, "stack", "unique") ?? (stackLimit > 1 ? "stack" : "unique");
         if (stacking == "unique" && stackLimit > 1)
             ctx.Error(DiagnosticCodes.BadValue, f.At("stack_limit"),
                 $"{ctx.Who} is unique (stacking: unique), so stack_limit must be 1, not {stackLimit}.");
-        IReadOnlyList<string> handlers = f.Strings("handlers", false, IdRules.IsHandler, "a handler key such as light.battery");
+
+        ItemFill? fill = null;
+        if (f.Map("fill", false) is { } fr)
+        {
+            int capacity = fr.Int("capacity", true, 1, MaxMl) ?? 1;
+            int start = fr.Int("start", true, 0, MaxMl) ?? 0;
+            string unit = fr.String("unit", required: true, allowEmpty: false) ?? "";
+            int mg = fr.Int("mg_per_unit", false, 0, MaxMl) ?? 0;
+            ContentId? filledBy = fr.Ref("filled_by", false, ContentKinds.Item);
+            fr.Finish();
+            if (start > capacity)
+                ctx.Error(DiagnosticCodes.BadValue, fr.At("start"), $"fill.start is {start}, more than fill.capacity {capacity}.");
+            if (unit.Length > 16)
+                ctx.Error(DiagnosticCodes.BadValue, fr.At("unit"), $"fill.unit is '{unit}'; it must be at most 16 characters.");
+            if (stacking == "stack")
+                ctx.Error(DiagnosticCodes.BadValue, f.At("fill"), $"{ctx.Who} stacks, so it can't have a fill: a stack's amount is its count.");
+            fill = new ItemFill(capacity, start, unit, mg, filledBy);
+        }
+
+        int dose = f.Int("dose", false, 1, 100_000) ?? 1;
+        int useTicks = f.Int("use_ticks", false, 0, 1_000_000) ?? 0;
+        string? wear = f.Token("wear", false, ItemWords.WearSlots.ToArray());
+        if (wear is not null && !Has("wearable"))
+            ctx.Error(DiagnosticCodes.BadValue, f.At("wear"), $"{ctx.Who} is worn ({wear}), so its categories need wearable.");
+
+        ItemContainer? holds = null;
+        if (f.Map("holds", false) is { } hr)
+        {
+            int capacity = hr.Int("capacity_ml", true, 0, MaxMl) ?? 0;
+            int maxItemMl = hr.Int("max_item_ml", false, 0, MaxMl) ?? int.MaxValue;
+            int maxItems = hr.Int("max_items", false, 1, 10_000) ?? int.MaxValue;
+            IReadOnlyList<string> accepts = hr.Strings("accepts", false, t => ItemWords.Categories.Contains(t), "an item category");
+            bool closes = hr.Bool("closes", false) ?? false;
+            int loudness = hr.Int("open_loudness", false, 0, 1000) ?? 0;
+            int openTicks = hr.Int("open_ticks", false, 0, 100_000) ?? 0;
+            IReadOnlyList<ContentId> only = RefList(hr, ctx, "only", ContentKinds.Item);
+            hr.Finish();
+            holds = new ItemContainer(capacity, maxItemMl, maxItems, accepts, closes, loudness, openTicks, only);
+        }
+        if (holds is not null && !Has("container"))
+            ctx.Error(DiagnosticCodes.BadValue, f.At("holds"), $"{ctx.Who} holds things, so its categories need container.");
+        if (holds is null && Has("container"))
+            ctx.Error(DiagnosticCodes.MissingField, f.Node, $"{ctx.Who} is a container, so it needs holds.");
+
+        IReadOnlyList<ItemQuantity> comes = ItemLines(f, ctx, "comes_with", null);
+        if (holds is { Only.Count: > 0 } slot)
+            foreach (ItemQuantity line in comes)
+                if (!slot.Only.Contains(line.Item))
+                    ctx.Error(DiagnosticCodes.BadValue, f.At("comes_with"),
+                        $"{ctx.Who} comes with {line.Item}, but holds.only doesn't take it.");
+
+        ItemFood? food = null;
+        if (f.Map("food", false) is { } fo)
+        {
+            food = new ItemFood(fo.Int("kcal", true, 0, 100_000) ?? 0, fo.Int("water_ml", false, 0, 100_000) ?? 0,
+                fo.Int("alert_minutes", false, 0, 10_000) ?? 0);
+            fo.Finish();
+            if (!Has("edible"))
+                ctx.Error(DiagnosticCodes.BadValue, f.At("food"), $"{ctx.Who} has food values, so its categories need edible.");
+        }
+        ItemDrink? drink = null;
+        if (f.Map("drink", false) is { } dr)
+        {
+            drink = new ItemDrink(dr.Int("per_ml", true, 1, 100_000) ?? 1, dr.Int("kcal", false, 0, 100_000) ?? 0,
+                dr.Int("water_ml", false, 0, 100_000) ?? 0, dr.Int("alert_minutes", false, 0, 10_000) ?? 0);
+            dr.Finish();
+            if (!Has("potable"))
+                ctx.Error(DiagnosticCodes.BadValue, f.At("drink"), $"{ctx.Who} has drink values, so its categories need potable.");
+        }
+        int warmth = f.Int("warmth", false, 0, 1000) ?? 0;
+        if (warmth > 0 && !Has("wearable"))
+            ctx.Error(DiagnosticCodes.BadValue, f.At("warmth"), $"{ctx.Who} gives warmth when worn, so its categories need wearable.");
+
+        IReadOnlyList<string> handlers = f.Strings("handlers", false, IdRules.IsHandler, "a handler key such as light.flashlight");
         return new ItemDefinition
         {
             Id = c.Id, Name = c.Name, Description = c.Description, Tags = c.Tags, SourceIds = c.SourceIds,
             PackId = ctx.Namespace, SourcePath = ctx.File, SourceLine = c.Line, Handlers = handlers,
-            Category = category, MassG = mass, StackLimit = stackLimit, Stacking = stacking,
+            Categories = categories, Plural = plural, Glyph = glyph, Size = size, MassG = mass, VolumeMl = volume,
+            StackLimit = stackLimit, Stacking = stacking, Fill = fill, Dose = dose, UseTicks = useTicks, Wear = wear,
+            Holds = holds, ComesWith = comes, Food = food, Drink = drink, Warmth = warmth,
         };
+    }
+
+    /// <summary>A list of references, each once.</summary>
+    static IReadOnlyList<ContentId> RefList(FieldReader f, ParseContext ctx, string key, string kind)
+    {
+        var result = new List<ContentId>();
+        YamlNode? node = f.Raw(key, false);
+        if (node is null)
+            return result.AsReadOnly();
+        if (node is not YamlSequence list)
+        {
+            ctx.Error(DiagnosticCodes.BadValue, node, $"{f.PathOf(key)} must be a list, not {node.Describe}.");
+            return result.AsReadOnly();
+        }
+        for (int i = 0; i < list.Items.Count; i++)
+        {
+            if (f.RefFrom(list.Items[i], $"{f.PathOf(key)}[{i}]", kind) is not { } id)
+                continue;
+            if (result.Contains(id))
+                ctx.Error(DiagnosticCodes.BadValue, list.Items[i], $"{f.PathOf(key)} lists {id} twice.");
+            else
+                result.Add(id);
+        }
+        return result.AsReadOnly();
     }
 
     static StationDefinition ReadStation(FieldReader f, Common c, ParseContext ctx) => new()

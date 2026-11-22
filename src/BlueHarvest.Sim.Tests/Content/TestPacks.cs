@@ -34,7 +34,7 @@ internal static class TestPacks
 
     /// <summary>A minimal valid item; <paramref name="extra"/> is more YAML lines.</summary>
     public static string Item(string id, string extra = "") =>
-        $"schema: blueharvest.content/v1\nkind: item\nid: {id}\nname: Item {id}\ncategory: material\nmass_g: 100\n{extra}";
+        $"schema: blueharvest.content/v1\nkind: item\nid: {id}\nname: Item {id}\ncategories: [part]\nsize: hand\nmass_g: 100\nvolume_ml: 100\n{extra}";
 
     public const string Hand = """
         schema: blueharvest.content/v1
@@ -61,7 +61,7 @@ internal static class TestPacks
           - item: {output}
             quantity: 1
         {extra}
-        """;
+        """.ReplaceLineEndings("\n");
 
     /// <summary>The vertical-slice graph: two items, a station and a recipe that uses them.</summary>
     public static (string Path, string Yaml)[] Slice() =>

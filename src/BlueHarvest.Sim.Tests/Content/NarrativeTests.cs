@@ -24,7 +24,7 @@ public class NarrativeTests
           severity: personal
           body: "{body}"
         {extra}
-        """;
+        """.ReplaceLineEndings("\n");
 
     /// <summary>A dialogue; <paramref name="nodes"/> is the YAML of the node list, indented four spaces.</summary>
     static string Dialogue(string nodes, string start = "start", string status = "ready") => $"""

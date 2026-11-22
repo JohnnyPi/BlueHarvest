@@ -2,8 +2,10 @@ schema: blueharvest.content/v1
 kind: item
 id: ITM-CRF-004
 name: Vine Fiber
-category: material
+categories: [part]
+size: pocket
 mass_g: 150
+volume_ml: 300   # a first guess; the catalog has no volume
 stack_limit: 20
 stacking: stack
 tags: [natural, fiber, crafting]

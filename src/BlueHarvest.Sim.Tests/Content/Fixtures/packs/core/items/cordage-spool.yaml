@@ -2,8 +2,10 @@ schema: blueharvest.content/v1
 kind: item
 id: ITM-MAT-006
 name: Cordage Spool
-category: material
+categories: [part]
+size: pocket
 mass_g: 400
+volume_ml: 400   # a first guess; the catalog has no volume
 stack_limit: 15
 stacking: stack
 tags: [rope, crafting]

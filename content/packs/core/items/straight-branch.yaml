@@ -3,8 +3,10 @@ kind: item
 id: ITM-CRF-005
 name: Straight Branch
 description: Suitable for simple tools and improvised shafts.
-category: material
+categories: [part]
+size: hand
 mass_g: 500
+volume_ml: 1500   # a first guess; the catalog has no volume
 stack_limit: 20
 stacking: stack
 tags: [natural, wood, crafting]

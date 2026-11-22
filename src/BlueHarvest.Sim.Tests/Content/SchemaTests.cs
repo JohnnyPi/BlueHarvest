@@ -111,7 +111,7 @@ public class SchemaTests
     [Fact]
     public void MissingRequiredFields_AreReported()
     {
-        string item = "schema: blueharvest.content/v1\nkind: item\nid: ITM-CRF-004\nname: Vine Fiber\ncategory: material\n";
+        string item = "schema: blueharvest.content/v1\nkind: item\nid: ITM-CRF-004\nname: Vine Fiber\ncategories: [part]\nsize: hand\nvolume_ml: 100\n";
         ContentDiagnostic d = TestPacks.AssertError(TestPacks.LoadCore(("items/x.yaml", item)), DiagnosticCodes.MissingField);
         Assert.Contains("mass_g", d.Message);
     }
@@ -128,7 +128,7 @@ public class SchemaTests
     public void BadValues_AreRejected(string line)
     {
         string key = line[..line.IndexOf(':')];
-        string item = "schema: blueharvest.content/v1\nkind: item\nid: ITM-CRF-004\nname: Vine Fiber\ncategory: material\n" +
+        string item = "schema: blueharvest.content/v1\nkind: item\nid: ITM-CRF-004\nname: Vine Fiber\ncategories: [part]\nsize: hand\nvolume_ml: 100\n" +
             (key == "mass_g" ? "" : "mass_g: 150\n") + line + "\n";
         TestPacks.AssertError(TestPacks.LoadCore(("items/x.yaml", item)), DiagnosticCodes.BadValue);
     }
@@ -136,7 +136,7 @@ public class SchemaTests
     [Fact]
     public void BadCategory_IsRejected()
     {
-        string item = TestPacks.Item("ITM-CRF-004").Replace("category: material", "category: Raw Material");
+        string item = TestPacks.Item("ITM-CRF-004").Replace("categories: [part]", "categories: [Raw Material]");
         TestPacks.AssertError(TestPacks.LoadCore(("items/x.yaml", item)), DiagnosticCodes.BadValue);
     }
 
@@ -144,7 +144,7 @@ public class SchemaTests
     public void NothingIsTypedImplicitly()
     {
         // YAML 1.1 would make these a date and a boolean; content keeps them as the text written.
-        string item = "schema: blueharvest.content/v1\nkind: item\nid: ITM-CRF-004\nname: 2026-11-22\ndescription: yes\ncategory: material\nmass_g: 150\n";
+        string item = "schema: blueharvest.content/v1\nkind: item\nid: ITM-CRF-004\nname: 2026-11-22\ndescription: yes\ncategories: [part]\nsize: hand\nvolume_ml: 100\nmass_g: 150\n";
         var result = TestPacks.LoadCore(("items/x.yaml", item));
         TestPacks.AssertLoads(result);
         var fiber = result.Registry!.Get<ItemDefinition>("core:ITM-CRF-004");

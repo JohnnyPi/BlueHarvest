@@ -79,17 +79,21 @@ public partial class Simulation
         int clothes = 0;
         foreach (WearSlot slot in new[] { WearSlot.Body, WearSlot.Hands, WearSlot.Feet, WearSlot.Head })
         {
-            clothes += inventory.WornOn(slot)?.Kind switch
-            {
-                ItemKind.Poncho => 10,
-                ItemKind.TacticalVest => 20,
-                ItemKind.WorkGloves => 5,
-                ItemKind.Boots => 5,
-                _ => 0,
-            };
+            if (inventory.WornOn(slot) is { } worn)
+                clothes += WarmthOf(worn.Kind);
         }
         return new Whereabouts(sheltered, wading, fire, poncho, clothes);
     }
+
+    /// <summary>The warmth a kind gives when worn, added up over what's worn (the YAML's <c>warmth</c>, checked in P2a).</summary>
+    public static int WarmthOf(ItemKind kind) => kind switch
+    {
+        ItemKind.Poncho => 10,
+        ItemKind.TacticalVest => 20,
+        ItemKind.WorkGloves => 5,
+        ItemKind.Boots => 5,
+        _ => 0,
+    };
 
     /// <summary>How warm it feels to someone now, in tenths of a degree (the air for those without needs).</summary>
     public int FeelsLike(Actor actor) =>

@@ -1,7 +1,7 @@
 #nullable enable
 using System.Linq;
 using BlueHarvest.Content;
-using BlueHarvest.Sim;
+using BlueHarvest.Sim.ContentIntegration;
 using Godot;
 
 namespace BlueHarvest.Game.ContentIntegration;
@@ -33,10 +33,8 @@ public static class GameContent
     /// </summary>
     public static bool? MatchesSource { get; private set; }
 
-    public static ContentLoadOptions Options => ContentLoadOptions.Authoring with
-    {
-        GameVersion = SemVersion.TryParse(SimInfo.Version, out SemVersion version) ? version : null,
-    };
+    /// <summary>The sim's handlers and the game version (<see cref="SimContent"/>), in authoring mode until P5.</summary>
+    public static ContentLoadOptions Options => SimContent.Options(ContentMode.Authoring);
 
     /// <summary>One line for the front menu.</summary>
     public static string Summary

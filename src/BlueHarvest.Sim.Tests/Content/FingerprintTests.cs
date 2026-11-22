@@ -43,13 +43,15 @@ public class FingerprintTests
             id: core:ITM-CRF-004
             name: "Item ITM-CRF-004"
             mass_g: 100
-            category: material   # a comment
+            categories: [part]   # a comment
+            size: hand
+            volume_ml: 100
             stack_limit: 1
             stacking: unique
             tags: []
             """;
         const string spool = """
-            {schema: blueharvest.content/v1, kind: item, id: ITM-MAT-006, name: Item ITM-MAT-006, category: material, mass_g: 100}
+            {schema: blueharvest.content/v1, kind: item, id: ITM-MAT-006, name: Item ITM-MAT-006, categories: [part], size: hand, mass_g: 100, volume_ml: 100}
             """;
         const string hand = """
             name: By Hand
@@ -76,7 +78,7 @@ public class FingerprintTests
             requirements: {heat: none, power: none}
             """;
         var source = new InMemoryContentSource()
-            .Add("core/defs/z.yaml", recipe.Replace("\n", "\r\n"))
+            .Add("core/defs/z.yaml", recipe.ReplaceLineEndings("\r\n"))
             .Add("core/defs/nested/a.yaml", hand)
             .Add("core/defs/spool.yaml", spool)
             .Add("core/pack.yaml", manifest)

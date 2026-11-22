@@ -4,7 +4,9 @@ schema: blueharvest.content/v1
 kind: item
 id: multitool
 name: Multitool
-category: tool
+categories: [tool]
+size: pocket
 mass_g: 250
+volume_ml: 100
 stacking: unique
 source_ids: [ITM-TOL-001]

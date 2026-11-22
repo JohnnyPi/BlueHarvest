@@ -12,12 +12,12 @@ public class StrictYamlTests
         TestPacks.Load(TestPacks.Core(("items/x.yaml", yaml)), options);
 
     [Theory]
-    [InlineData(Head + "name: A\nname: B\ncategory: material\nmass_g: 1\n", DiagnosticCodes.DuplicateKey)]
-    [InlineData(Head + "name: !!str Vine Fiber\ncategory: material\nmass_g: 1\n", DiagnosticCodes.YamlTag)]
-    [InlineData(Head + "name: !ruby/object:Gem::Installer x\ncategory: material\nmass_g: 1\n", DiagnosticCodes.YamlTag)]
-    [InlineData(Head + "name: ! plain\ncategory: material\nmass_g: 1\n", DiagnosticCodes.YamlTag)]
-    [InlineData(Head + "name: *nothing\ncategory: material\nmass_g: 1\n", DiagnosticCodes.YamlAlias)]
-    [InlineData(Head + "name: A\ncategory: material\nmass_g: 1\n---\nname: B\n", DiagnosticCodes.DocumentCount)]
+    [InlineData(Head + "name: A\nname: B\ncategories: [part]\nsize: hand\nvolume_ml: 100\nmass_g: 1\n", DiagnosticCodes.DuplicateKey)]
+    [InlineData(Head + "name: !!str Vine Fiber\ncategories: [part]\nsize: hand\nvolume_ml: 100\nmass_g: 1\n", DiagnosticCodes.YamlTag)]
+    [InlineData(Head + "name: !ruby/object:Gem::Installer x\ncategories: [part]\nsize: hand\nvolume_ml: 100\nmass_g: 1\n", DiagnosticCodes.YamlTag)]
+    [InlineData(Head + "name: ! plain\ncategories: [part]\nsize: hand\nvolume_ml: 100\nmass_g: 1\n", DiagnosticCodes.YamlTag)]
+    [InlineData(Head + "name: *nothing\ncategories: [part]\nsize: hand\nvolume_ml: 100\nmass_g: 1\n", DiagnosticCodes.YamlAlias)]
+    [InlineData(Head + "name: A\ncategories: [part]\nsize: hand\nvolume_ml: 100\nmass_g: 1\n---\nname: B\n", DiagnosticCodes.DocumentCount)]
     [InlineData(Head + "? [a, b]\n: x\n", DiagnosticCodes.ComplexKey)]
     [InlineData(Head + "name: [unclosed\n", DiagnosticCodes.YamlSyntax)]
     [InlineData("", DiagnosticCodes.DocumentCount)]
@@ -30,7 +30,7 @@ public class StrictYamlTests
     public void AliasExpansion_StopsAtTheNodeLimit()
     {
         // "Billion laughs": each level is ten aliases of the one before, so the fifth is over 100,000 nodes.
-        var yaml = new StringBuilder(Head + "name: A\ncategory: material\nmass_g: 1\nlaughs:\n  a: &a [x, x, x, x, x, x, x, x, x, x]\n");
+        var yaml = new StringBuilder(Head + "name: A\ncategories: [part]\nsize: hand\nvolume_ml: 100\nmass_g: 1\nlaughs:\n  a: &a [x, x, x, x, x, x, x, x, x, x]\n");
         foreach (var (name, previous) in new[] { ("b", "a"), ("c", "b"), ("d", "c"), ("e", "d"), ("f", "e") })
             yaml.Append($"  {name}: &{name} [{string.Join(", ", Enumerable.Repeat("*" + previous, 10))}]\n");
         ContentDiagnostic d = TestPacks.AssertError(LoadItem(yaml.ToString()), DiagnosticCodes.YamlAlias);
@@ -40,7 +40,7 @@ public class StrictYamlTests
     [Fact]
     public void AliasesWithinTheLimit_Load()
     {
-        var result = LoadItem(Head + "name: &n Vine Fiber\ndescription: *n\ncategory: material\nmass_g: 150\n");
+        var result = LoadItem(Head + "name: &n Vine Fiber\ndescription: *n\ncategories: [part]\nsize: hand\nvolume_ml: 100\nmass_g: 150\n");
         TestPacks.AssertLoads(result);
         var item = result.Registry!.Get<ItemDefinition>("core:ITM-CRF-004");
         Assert.Equal("Vine Fiber", item.Description);
@@ -49,7 +49,7 @@ public class StrictYamlTests
     [Fact]
     public void DeepNesting_IsRejected()
     {
-        string yaml = Head + "name: A\ncategory: material\nmass_g: 1\ndeep: " + new string('[', 40) + new string(']', 40) + "\n";
+        string yaml = Head + "name: A\ncategories: [part]\nsize: hand\nvolume_ml: 100\nmass_g: 1\ndeep: " + new string('[', 40) + new string(']', 40) + "\n";
         TestPacks.AssertError(LoadItem(yaml), DiagnosticCodes.YamlTooDeep);
     }
 
@@ -74,7 +74,7 @@ public class StrictYamlTests
     [Fact]
     public void Diagnostics_GiveTheLineAndColumn()
     {
-        ContentDiagnostic d = TestPacks.AssertError(LoadItem(Head + "name: A\ncategory: material\nname: B\nmass_g: 1\n"), DiagnosticCodes.DuplicateKey);
+        ContentDiagnostic d = TestPacks.AssertError(LoadItem(Head + "name: A\nmass_g: 1\nname: B\n"), DiagnosticCodes.DuplicateKey);
         Assert.Equal("core/items/x.yaml", d.File);
         Assert.Equal(6, d.Line);
         Assert.Equal(1, d.Column);

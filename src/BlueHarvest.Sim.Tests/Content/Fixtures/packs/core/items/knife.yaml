@@ -3,7 +3,9 @@ schema: blueharvest.content/v1
 kind: item
 id: knife
 name: Knife
-category: tool
+categories: [tool]
+size: pocket
 mass_g: 300
+volume_ml: 150
 stacking: unique
 source_ids: [ITM-MEL-002]

@@ -3,6 +3,8 @@ kind: item
 id: ITM-ADM-001
 name: Main Pump Regulator
 description: The one regulator the main pump's controller takes. Not craftable.
-category: part
+categories: [part]
+size: hand
 mass_g: 1600
+volume_ml: 1500   # a first guess; the catalog has no volume
 stacking: unique

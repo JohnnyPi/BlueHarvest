@@ -308,8 +308,8 @@ static int RunContent(string[] args)
         return 2;
     }
 
-    BhContent.SemVersion? game = BhContent.SemVersion.TryParse(SimInfo.Version, out var parsedGame) ? parsedGame : null;
-    var options = (runtime ? BhContent.ContentLoadOptions.Runtime : BhContent.ContentLoadOptions.Authoring) with { GameVersion = game };
+    // The sim's handlers (the item mechanics it has, and the P5 contracts) and the game version, as the game loads it.
+    var options = BlueHarvest.Sim.ContentIntegration.SimContent.Options(runtime ? BhContent.ContentMode.Runtime : BhContent.ContentMode.Authoring);
     var source = new BhContent.FileSystemContentSource(path);
     Console.WriteLine($"Blue Harvest content validate | {source.Description} | {(runtime ? "runtime" : "authoring")} mode | game {SimInfo.Version}");
     Console.WriteLine();

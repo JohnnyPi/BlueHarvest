@@ -1,35 +1,24 @@
 using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests.ContentLibrary;
 
 /// <summary>
 /// The game's own packs in the repo's content/packs: they always load, the only thing between them and a runtime
-/// load is the handlers P5 adds, the crosswalk agrees with them, and Godot's copy (when a build has made one) is
+/// load is the handlers P5 adds (the item handlers already exist), the crosswalk agrees with them, and Godot's copy (when a build has made one) is
 /// the same bytes.
 /// </summary>
 public class RepoPackTests
 {
-    static readonly string Root = FindRoot();
-    static readonly string Packs = Path.Combine(Root, "content", "packs");
+    static readonly string Root = RepoContent.Root;
+    static readonly string Packs = RepoContent.Packs;
 
-    static string FindRoot()
-    {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-            if (File.Exists(Path.Combine(dir.FullName, "BlueHarvest.sln")))
-                return dir.FullName;
-        throw new InvalidOperationException("Can't find BlueHarvest.sln above the test folder.");
-    }
-
-    static ContentLoadOptions Options(ContentLoadOptions mode) =>
-        mode with { GameVersion = SemVersion.TryParse(SimInfo.Version, out SemVersion v) ? v : null };
-
-    static ContentLoadResult LoadRepo(ContentLoadOptions mode) =>
-        TestPacks.Load(new FileSystemContentSource(Packs), Options(mode));
+    static ContentLoadResult LoadRepo(ContentMode mode) => RepoContent.Load(mode);
 
     [Fact]
     public void TheRepoPacks_LoadWithNothingButNotes()
     {
-        var result = LoadRepo(ContentLoadOptions.Authoring);
+        var result = LoadRepo(ContentMode.Authoring);
         TestPacks.AssertLoads(result);
         Assert.DoesNotContain(result.Diagnostics, d => d.Severity != ContentSeverity.Note);
         ContentRegistry registry = result.Registry!;
@@ -45,8 +34,8 @@ public class RepoPackTests
     public void TheRepoPacks_LoadAtRunTime_OnceTheirHandlersExist()
     {
         var implemented = HandlerRegistry.Default.Contracts.Select(c => c.Key).ToArray();
-        var options = ContentLoadOptions.Runtime with { Handlers = HandlerRegistry.Default.WithImplemented(implemented) };
-        var result = LoadRepo(options);
+        var options = SimContent.Options(ContentMode.Runtime) with { Handlers = SimContent.Handlers.WithImplemented(implemented) };
+        var result = RepoContent.Load(options);
         TestPacks.AssertLoads(result);
         Assert.Empty(result.Diagnostics);
     }
@@ -56,7 +45,7 @@ public class RepoPackTests
     {
         // content/tooling/crosswalk.csv: old,new,reason. Every row's new ID exists and lists the old one in source_ids;
         // every source_id in the packs is either the definition's own ID or a row of the crosswalk.
-        ContentRegistry registry = LoadRepo(ContentLoadOptions.Authoring).Registry!;
+        ContentRegistry registry = RepoContent.Registry;
         var rows = File.ReadAllLines(Path.Combine(Root, "content", "tooling", "crosswalk.csv"))
             .Skip(1).Where(line => line.Trim().Length > 0)
             .Select(line => line.Split(',', 3))
@@ -91,7 +80,7 @@ public class RepoPackTests
         foreach (string file in source)
             Assert.True(File.ReadAllBytes(Path.Combine(Packs, file)).SequenceEqual(File.ReadAllBytes(Path.Combine(copy, file))),
                 $"godot/Content/packs/{file} differs from content/packs/{file}: build the Godot project to recopy.");
-        Assert.Equal(LoadRepo(ContentLoadOptions.Authoring).Registry!.Fingerprint,
-            TestPacks.Load(new FileSystemContentSource(copy), Options(ContentLoadOptions.Authoring)).Registry!.Fingerprint);
+        Assert.Equal(RepoContent.Registry.Fingerprint,
+            ContentLoader.LoadFrom(new FileSystemContentSource(copy), SimContent.Options(ContentMode.Authoring)).Registry!.Fingerprint);
     }
 }

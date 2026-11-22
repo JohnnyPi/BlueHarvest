@@ -57,6 +57,15 @@ internal sealed class CanonicalWriter : IDisposable
         hash.AppendData(buffer);
     }
 
+    /// <summary>Text that may be absent: absent and empty hash differently.</summary>
+    public void OptionalText(string? value)
+    {
+        if (value is null)
+            Nothing();
+        else
+            Text(value);
+    }
+
     public void Field(string name, string value)
     {
         Text(name);
