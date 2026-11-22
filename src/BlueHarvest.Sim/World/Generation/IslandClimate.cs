@@ -65,14 +65,20 @@ public sealed class IslandClimate
     public double[] BiomeKm2 { get; } = new double[Legend.Biomes.Length];
     public double[] RegionKm2 { get; } = new double[Legend.Regions.Length];
     public List<RegionLabel> RegionLabels { get; } = [];
+    /// <summary>P4b: the floodplain's riparian floor (1 within 256 m of its river, 0.6 out to 384 m, else 0); null if no river qualified.</summary>
+    public float[]? Riparian { get; private set; }
+    /// <summary>P4b: where the floodplain went, null if none.</summary>
+    public FloodplainAnchor? Floodplain { get; private set; }
     public double TempMin { get; private set; }
     public double TempMax { get; private set; }
 
     /// <summary>
     /// One rule for the island grid and for every 1 m tile, so the two always agree.
-    /// j is a jitter in about −1..1 that makes boundaries ragged.
+    /// j is a jitter in about −1..1 that makes boundaries ragged. rip (P4b floodplain, 0–1): ground watered by a big
+    /// river from below grows forest whatever the rain; 0 everywhere else.
     /// </summary>
-    public static Biome Classify(double h, double rain, double temp, double fog, double wet, double slope, double lava, double dc, bool beachy, double crest, double j)
+    public static Biome Classify(double h, double rain, double temp, double fog, double wet, double slope, double lava, double dc, bool beachy, double crest, double j,
+        double rip = 0)
     {
         if (lava > 0.62 + 0.08 * j) return Biome.Lava;
         if (slope > 40 + 6 * j) return Biome.Cliff;
@@ -82,6 +88,7 @@ public sealed class IslandClimate
         if (crest > 0.55 + 0.15 * j && h > 550) return Biome.Ridge;
         // aridity: rain against what warm air evaporates (less up high, where it is cooler)
         double ai = rain * (1 + 0.1 * j) / (1300 * (0.4 + 0.6 * temp / 24));
+        if (rip > 0) ai = Math.Max(ai, 2 * rip);
         if (ai > 2.7) return Biome.Wet;
         if (ai > 1.6) return Biome.Moist;
         if (ai > 1.0) return Biome.Mesic;
@@ -143,6 +150,8 @@ public sealed class IslandClimate
             c.Crest[i] = (float)GenMath.Clamp((h[i] - blurH[i]) / 60, 0, 1);
         }
         c.TempMin = tMin; c.TempMax = tMax;
+        c.PlaceFloodplain(w);
+        float[]? rip = c.Riparian;
 
         LineSegment sg = a.Saddle.Segment;
         for (int i = 0; i < n; i++)
@@ -154,7 +163,7 @@ public sealed class IslandClimate
             {
                 double jt = GenMath.Clamp(2 * GenNoise.Fbm(a.NBiome, x / 2500, y / 2500, 3), -1, 1);
                 c.Biomes[i] = (byte)Classify(Math.Max(0, h[i]), rain[i], c.Temperature[i], c.Fog[i], c.Wetness[i], c.SlopeDeg[i],
-                    w.Lava[i], w.DistLand[i], w.Coast[i] == CoastClass.Beach, c.Crest[i], jt);
+                    w.Lava[i], w.DistLand[i], w.Coast[i] == CoastClass.Beach, c.Crest[i], jt, rip is null ? 0 : rip[i]);
             }
             c.BiomeKm2[c.Biomes[i]] += area / 1e6;
             // regions, highest priority first
@@ -232,4 +241,59 @@ public sealed class IslandClimate
         }
         return c;
     }
+
+    /// <summary>
+    /// P4b, the floodplain: along the island's longest lowland reach of a river of 1 m³/s or more, the ground within
+    /// 384 m and less than 15 m above the river is watered from below (<see cref="Riparian"/>), so it grows forest even on
+    /// the dry side.
+    /// </summary>
+    private void PlaceFloodplain(IslandShape w)
+    {
+        int nx = w.Nx, ny = w.Ny, n = w.N;
+        double cell = w.Cell, area = cell * cell;
+        double[] h = w.Height, q = w.Flow;
+        byte[] land = w.Land, isRiver = w.IsRiver;
+        float[] lake = w.LakeLevel, slopeD = SlopeDeg;
+        var f0 = new byte[n];
+        for (int i = 0; i < n; i++)
+            if (land[i] != 0 && float.IsNaN(lake[i]) && isRiver[i] != 0 && q[i] >= 1 && h[i] < 120 && slopeD[i] < 8) f0[i] = 1;
+        var lb = new int[n];
+        List<int> sz = GenGrid.Components(f0, nx, ny, lb);
+        int pick = -1;
+        for (int k = 0; k < sz.Count; k++) if (pick < 0 || sz[k] > sz[pick]) pick = k;
+        if (pick < 0) return;
+        var rip = new float[n];
+        var dist = new sbyte[n];
+        Array.Fill(dist, (sbyte)-1);
+        var src = new double[n];
+        var queue = new int[n];
+        int qh = 0, qt = 0;
+        for (int i = 0; i < n; i++) if (lb[i] == pick) { dist[i] = 0; src[i] = h[i]; queue[qt++] = i; }
+        while (qh < qt)
+        {
+            int c = queue[qh++], x = c % nx, y = c / nx;
+            if (dist[c] >= 3) continue;
+            for (int k = 0; k < 8; k++)
+            {
+                int xx = x + GenGrid.DX[k], yy = y + GenGrid.DY[k];
+                if (xx < 0 || yy < 0 || xx >= nx || yy >= ny) continue;
+                int j = yy * nx + xx;
+                if (dist[j] >= 0) continue;
+                dist[j] = (sbyte)(dist[c] + 1); src[j] = src[c]; queue[qt++] = j;
+            }
+        }
+        int cells = 0;
+        double sx = 0, sy = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (dist[i] < 0 || land[i] == 0 || !float.IsNaN(lake[i]) || slopeD[i] >= 8 || h[i] > src[i] + 15) continue;
+            rip[i] = dist[i] <= 2 ? 1f : 0.6f;
+            cells++; sx += (i % nx + 0.5) * cell; sy += (i / nx + 0.5) * cell;
+        }
+        Riparian = rip;
+        Floodplain = new FloodplainAnchor(sz[pick], cells, cells * area / 1e6, cells > 0 ? sx / cells : 0, cells > 0 ? sy / cells : 0);
+    }
 }
+
+/// <summary>P4b's floodplain: how many river cells it follows, its cells and area, and its centre in metres.</summary>
+public sealed record FloodplainAnchor(int RiverCells, int Cells, double Km2, double X, double Y);

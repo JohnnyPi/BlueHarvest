@@ -33,8 +33,8 @@ public sealed record AnchorRoute(int FromSite, int ToSite, string From, string T
 /// </summary>
 public sealed record IslandReach(IReadOnlyList<int> AnchorSites, IReadOnlyList<string> Anchors, IReadOnlyList<AnchorRoute> Routes)
 {
-    /// <summary>The objective anchors (decision 2): docks, airstrip, comms relay, control centre and watch posts.</summary>
-    public static IReadOnlyList<string> AnchorKinds { get; } = ["docks", "airstrip", "comms", "control", "watch"];
+    /// <summary>The objective anchors (decision 2): docks, airstrip, comms relay, the Court (in place of the control centre) and watch posts.</summary>
+    public static IReadOnlyList<string> AnchorKinds { get; } = IslandWorks.AnchorKinds;
 
     public int Gaps => Routes.Count(r => r.Status != RouteStatus.Ok);
     public int TunnelGaps => Routes.Count(r => r.Status is RouteStatus.NeedsTunnel or RouteStatus.NeedsBoth);

@@ -10,7 +10,7 @@ using Gen = BlueHarvest.Sim.World.Generation;
 // Usage: BlueHarvest.Runner [seed] [seconds] [map file] [weather]
 //    or: BlueHarvest.Runner batch [runs per option] [minutes] [weather] [options] [map file]
 //    or: BlueHarvest.Runner island validate [first seed] [count] [scale]
-// Island mode generates islands from count seeds starting at first seed (defaults 1, 200, 75% scale),
+// Island mode generates islands from count seeds starting at first seed (defaults 1, 200, 100% scale),
 // measures each one, walks the routes between its key sites, runs the seed checks (IslandChecks), and
 // writes reports/island-<time>/report.md and seeds.csv under the repo.
 // Batch mode plays the testbed with a scripted player per escape option (with and without NPCs) and
@@ -218,7 +218,7 @@ static void RunIsland(string[] args)
     var invariant = System.Globalization.CultureInfo.InvariantCulture;
     uint first = uint.TryParse(Arg(1), out uint f) ? f : 1;
     int count = int.TryParse(Arg(2), out int c) && c > 0 ? c : 200;
-    double scale = double.TryParse(Arg(3), System.Globalization.NumberStyles.Float, invariant, out double s) && s > 0 ? s : 75;
+    double scale = double.TryParse(Arg(3), System.Globalization.NumberStyles.Float, invariant, out double s) && s > 0 ? s : 100;
 
     Console.WriteLine($"Island validation: {count} seeds from {first} at {scale.ToString("0.#", invariant)}% scale, "
         + $"{Environment.ProcessorCount} at a time");

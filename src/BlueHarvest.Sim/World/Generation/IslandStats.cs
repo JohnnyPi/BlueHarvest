@@ -201,7 +201,8 @@ public sealed record IslandStats
         {
             int placed = 0;
             foreach (Site t in w.Sites) if (t.Kind == f.Key) placed++;
-            facilities.Add(new FacilityCount(f.Key, f.Name, f.Major, f.Count, placed));
+            int wanted = f.Key == "outstation" ? w.Program.OutstationCount : f.Count; // 2–8 by seed (P4.5)
+            facilities.Add(new FacilityCount(f.Key, f.Name, f.Major, wanted, placed));
         }
 
         return new IslandStats

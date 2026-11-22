@@ -24,10 +24,10 @@ public class FacilityAreasTests
     // node tools/island-lab/golden-areas.js
     private static readonly Dictionary<string, Expected> Golden = new()
     {
-        ["Default"] = new(57835, 0x7059E17911153E8AUL, 0xB3D5C050312106C1UL, "6910,3029,4308,586,4196,2559,205,4274,3292,1042,1184,5056,4024,5240,7503,436,916,1476,1018,275,306", "8,9,9,3,5,4,5,7,8,2,7,5,5,1,3,4,2,7,6,0,7", "8135024976 9315264780 9716438520 3204679158 5394687021 4761802539 5741630298 7904853162 8516493720 2973061458 7904356218 5682734901 5380124697 1342879056 3429786105 4251073689 2715094863 7492538160 6183279054 0537641982 7230946815"),
-        ["Seed12"] = new(52175, 0xA85E10593157EABCUL, 0xE6E615B32213F585UL, "1410,5781,7123,1623,3028,6120,368,935,3017,1121,3929,1340,3764,4505,2218,1797,917,1169,435,1186,389", "9,6,8,2,2,0,1,2,8,6,3,2,9,6,9,3,5,5,0,0,0", "9612870354 6918053742 8316495270 2630574891 2307584169 0347856291 1853927604 2085791643 8326014759 6834209715 3419870265 2387410596 9814527036 6187345902 9627345180 3490582716 5362480179 5620374819 0136284957 0531796428 0175243869"),
-        ["SmallNoCliffs"] = new(25206, 0xB246C7FCDF31CB74UL, 0x1131FE9747E5A62FUL, "2457,1526,1348,379,3796,968,117,2255,1946,929,1102,1284,1092,1724,1276,404,829,904,388,258,224", "8,8,2,7,8,1,6,9,7,6,4,5,5,0,8,5,4,1,9,5,3", "8236457190 8049156327 2143689075 7243851960 8549061372 1034986527 6549708321 9748310562 7294136805 6057429183 4158967203 5763190248 5924138670 0327691548 8635490271 5760841932 4176083592 1429057836 9148506327 5723160498 3701269485"),
-        ["CoolWet"] = new(38847, 0xE440642D6B25017EUL, 0xDC436C696A527E3FUL, "3347,654,4191,427,4724,3597,341,3083,2470,855,2752,499,1113,1473,1203,952,480,3295,1248,500,1643", "8,8,9,6,4,3,2,3,9,3,2,5,3,7,8,2,1,3,8,2,1", "8607415329 8194620537 9813570426 6045127839 4106278593 3589064271 2697105834 3962148507 9523018674 3256709814 2039451768 5893061724 3047195682 7918230456 8573206491 2793485160 1428965703 3854276019 8359201674 2368054791 1837024965"),
+        ["Default"] = new(102537, 0xEEB55BFA1E39C576UL, 0xC38DE77EBCF718BBUL, "5932,530,1429,5656,1724,3988,9082,5710,5500,10695,567,14550,6966,3888,11617,460,430,803,3348,437,393,584,1072,4276,2900", "8,4,5,0,5,8,0,1,5,0,2,5,7,8,5,3,0,5,9,7,5,4,8,9,5", "8135024976 4315267980 5716493820 0246791358 5394687021 8761402539 0741632598 1904785362 5816493720 0972361458 2904375618 5682734901 7380124569 8314279056 5429783610 3245107689 0715948632 5492381760 9183270564 7053641982 5230794681 4062318579 8053674219 9468273501 5806712943"),
+        ["Seed12"] = new(52175, 0x06E579A10DC165ACUL, 0x5E994B0DBB1C9371UL, "2871,254,4811,3897,667,1608,4149,5347,2487,2616,299,8430,2795,4534,2830,519,382,400,674,339,218,322,342,251,257,204,288,384", "3,9,8,9,2,9,0,5,1,3,6,4,8,6,9,0,0,1,9,1,7,6,3,2,2,4,0,3", "3961287054 9168053742 8316495270 9632057481 2307584169 9347856201 0853927164 5087916432 1832604759 3842069715 6419870235 4238710596 8145297036 6187345902 9627345180 0493582716 0362548179 1620374859 9136284057 1053796428 7152438069 6529780314 3057941268 2568914730 2796108345 4379801265 0349218765 3529408671"),
+        ["SmallNoCliffs"] = new(25206, 0x8B5A7DD72253E89CUL, 0x782AFEEDFC16722AUL, "1316,1370,819,1612,120,679,1772,3858,1758,636,192,2972,1564,1834,1264,474,257,224,632,122,107,86,140,18,128,448,400,404", "6,6,7,3,6,1,0,7,6,3,4,3,7,1,8,9,5,3,9,3,3,4,2,8,3,9,3,4", "6283457190 6084915327 7143628905 3248519607 6548901372 1034986527 0564978321 7483910562 6294137805 3057429618 4158967203 3576190248 7924513860 1327695408 8635490271 9760584132 5176408392 3429057816 9148506327 3721650498 3701269485 4632980157 2639571048 8194025763 3429806751 9430728156 3598621407 4021897536"),
+        ["CoolWet"] = new(38847, 0x11286CF67746710EUL, 0x1125FBDCDAF531B3UL, "3448,741,672,1156,252,2490,738,1822,3729,4770,313,7789,2833,802,768,189,508,225,2133,470,776,457,264,986,208,308", "2,9,5,9,2,9,0,3,4,2,3,5,9,5,4,0,2,7,9,4,5,4,1,9,2,8", "2608741539 9146205837 5981370426 9045126783 2106478593 9580642371 0697152834 3962148507 4523901867 2567093814 3094517682 5893061724 9304715682 5971823046 4573208691 0793485162 2489657103 7385426019 9352016874 4326805791 5831702496 4032617859 1974826350 9183076524 2064831759 8940156723"),
     };
 
     public static IEnumerable<object[]> CaseNames => Golden.Keys.Select(k => new object[] { k });
@@ -164,7 +164,7 @@ public class FacilityAreasTests
         "Control room", "Array control", "Observation room", "Office", "Map room", "Radio room", "Keeper's office",
         "Lab offices", "Director's office", "Briefing room", "Customs", "Loading office", "Check-in", "Departure lounge",
         "Main control room", "Workshop", "Radar room", "Laboratory", "Wet lab", "Dispatch", "Instrument room", "Bunk room", "Lookout",
-        "Elevator lobby", "Cabin hall",
+        "Elevator lobby", "Cabin hall", "Recording booths", "Chart room", "Potting room", "Controller room",
     };
 
     /// <summary>Every item the plan made, with where its outermost container lies.</summary>
@@ -186,7 +186,7 @@ public class FacilityAreasTests
             IndexedRoom? room = rooms.At(x, y);
             Assert.True(room is not null, $"a park map lies outside every room, at ({x}, {y})");
             Assert.Contains(room!.Name, MapRooms);
-            Assert.True(ParkMaps.TryParse(map.Tag, out int area, out int sheet), $"park map {map.Id} has tag {map.Tag ?? "none"}");
+            Assert.True(ParkMaps.TryParse(map.Tag, world.Works, out int area, out int sheet), $"park map {map.Id} has tag {map.Tag ?? "none"}");
             int expected = room.SiteIndex >= 0 ? room.SiteIndex : areas.AreaAt((room.X0 + room.X1) / 2.0, (room.Y0 + room.Y1) / 2.0);
             Assert.Equal(expected, area);
             int k = nth.GetValueOrDefault(area);
@@ -229,12 +229,21 @@ public class FacilityAreasTests
     }
 
     [Fact]
-    public void ParkMapTags_RoundTrip()
+    public void ParkMapTags_RoundTrip_ByTheSitesStableKey()
     {
-        Assert.True(ParkMaps.TryParse(ParkMaps.Tag(12, 3), out int area, out int sheet));
-        Assert.Equal((12, 3), (area, sheet));
-        Assert.False(ParkMaps.TryParse(null, out _, out _));
-        Assert.False(ParkMaps.TryParse("Genetics complex", out _, out _));
+        Assert.Equal("area=site.watch:2;sheet=3", ParkMaps.Tag("site.watch:2", 3));
+        Assert.True(ParkMaps.TryParse(ParkMaps.Tag("site.watch:2", 3), out string key, out int sheet));
+        Assert.Equal(("site.watch:2", 3), (key, sheet));
+        Assert.False(ParkMaps.TryParse(null, out string _, out _));
+        Assert.False(ParkMaps.TryParse("Genetics complex", out string _, out _));
+        Assert.False(ParkMaps.TryParse("area=12", out string _, out _));
+        Assert.False(ParkMaps.TryParse("area=;sheet=1", out string _, out _));
+        // on an island the key finds its site (A3: not the site's place in the list), and a key the island lacks doesn't
+        IslandWorks works = TestIslands.Works("SmallNoCliffs");
+        Site last = works.Sites[^1];
+        Assert.True(ParkMaps.TryParse(ParkMaps.Tag(last, 4), works, out int area, out int s2));
+        Assert.Equal((last.Id, 4), (area, s2));
+        Assert.False(ParkMaps.TryParse(ParkMaps.Tag("site.nuclear:0", 1), works, out _, out _));
         Assert.Equal(new[] { 10, 25, 45, 70 }, Enumerable.Range(0, 4).Select(ParkMaps.FindPercent));
         Assert.Equal(10, ParkMaps.FindPercent(-1));
         Assert.Equal(70, ParkMaps.FindPercent(9));
@@ -264,7 +273,7 @@ public class FacilityAreasTests
 
     private static Item GiveMap(Simulation sim, PlayerController drive, int area, int sheet)
     {
-        Item map = sim.CreateItem(ItemKind.ParkMap, tag: ParkMaps.Tag(area, sheet));
+        Item map = sim.CreateItem(ItemKind.ParkMap, tag: ParkMaps.Tag(TestIslands.Works(Island).Sites[area], sheet));
         sim.PlaceItem(map, new TilePos(6, 5));
         Do(sim, drive, new PickUpAction(map.Id));
         return map;

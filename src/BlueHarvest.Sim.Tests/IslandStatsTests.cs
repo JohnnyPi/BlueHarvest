@@ -24,16 +24,17 @@ public class IslandStatsTests
     private static IslandStats Stats(string name) => Measured[name].Value;
 
     // the step 24a establishing run (16 Nov 2026), pinned in step 24b, plus the two pit columns from the
-    // step 24b run, pinned in step 24c; compared column by column, so columns added later don't disturb it
+    // step 24b run, pinned in step 24c; re-pinned from the island lab for the Crosswake program (P4c:
+    // node tools/island-lab/checks.js --print); compared column by column, so columns added later don't disturb it
     private const string PinnedColumns =
-        "land_pct,land_km2,main_km2,islets,largest_islet_km2,rivers,rivers_to_sea_pct,largest_river_q,deep_river_cells,lakes,lake_km2,pit_cells,highest_m,lowland_pct,steep_pct,walkable_pct,walkable_connected_pct,beach_pct,beach_all_pct,facilities_short,paddocks_placed,road_km,bridges,tunnels,slope_bin0_cells,slope_bin1_cells,slope_bin2_cells,slope_bin3_cells,slope_bin4_cells,slope_bin5_cells,placed_docks,placed_airstrip,placed_comms,placed_control,placed_genetics,placed_raptors,placed_nuclear,placed_geothermal,placed_weather,placed_orgone,placed_lab,placed_depot,placed_ley,placed_watch,coastal_pit_cells,inland_pit_cells";
+        "land_pct,land_km2,main_km2,islets,largest_islet_km2,rivers,rivers_to_sea_pct,largest_river_q,deep_river_cells,lakes,lake_km2,pit_cells,highest_m,lowland_pct,steep_pct,walkable_pct,walkable_connected_pct,beach_pct,beach_all_pct,facilities_short,paddocks_placed,road_km,bridges,tunnels,slope_bin0_cells,slope_bin1_cells,slope_bin2_cells,slope_bin3_cells,slope_bin4_cells,slope_bin5_cells,placed_court,placed_docks,placed_airstrip,placed_comms,placed_genetics,placed_raptors,placed_orgone,placed_orchard,placed_weather,placed_choir,placed_drowned,placed_geothermal,placed_depot,placed_watch,placed_yard,placed_survey,placed_outstation,coastal_pit_cells,inland_pit_cells";
 
     private static readonly Dictionary<string, string> Pinned = new()
     {
-        ["Default"] = "31.612117,947.56864,942.702592,4,2.736128,101,100,4.294307,0,1,0.131072,0,1154.896455,42.660003,3.505283,97.729434,97.252149,26.184926,25.62995,0,4,151.00703,7,2,24948,16698,12491,1663,707,1320,2,1,1,1,1,1,1,1,1,1,2,2,3,3,0,0",
-        ["Seed12"] = "28.518409,854.8352,852.819968,2,1.622016,102,100,2.017199,0,1,0.57344,0,1191.598906,37.491369,3.716916,97.520138,97.309168,24.569241,25.077208,0,4,151.572986,2,3,17099,20318,11461,1324,683,1255,2,1,1,1,1,1,1,1,1,1,2,2,3,3,0,0",
-        ["SmallNoCliffs"] = "30.999115,412.975104,409.321472,3,1.916928,44,100,1.882016,0,2,0.57344,1,1153.002823,36.800286,1.557348,99.551071,98.716777,17.216643,15.714286,0,4,84.524385,3,0,5672,6695,10028,2384,341,51,2,1,1,1,1,1,1,1,1,1,2,2,3,3,1,0",
-        ["CoolWet"] = "33.125272,636.469248,630.767616,9,1.343488,105,100,2.955048,0,1,0.589824,0,1178.215784,39.792842,4.243642,97.217284,96.498415,22.502031,21.901408,0,4,130.647884,6,3,12430,12668,10511,1555,602,1045,2,1,1,1,1,1,1,1,1,1,2,2,3,3,0,0",
+        ["Default"] = "31.52579,1679.966208,1671.839744,3,5.111808,150,100,6.06677,0,1,0.294912,0,1162.126102,42.403847,2.467835,98.387616,97.924287,34.134078,33.907147,0,5,189.765291,2,1,56315,29163,13298,1213,913,1617,1,2,1,1,1,1,1,1,1,1,1,1,2,3,1,4,2,0,0",
+        ["Seed12"] = "28.518409,854.8352,852.819968,2,1.622016,102,100,2.017199,0,1,0.57344,0,1191.598906,37.491369,3.716916,97.543153,97.332183,24.569241,25.077208,0,5,156.990193,5,5,17099,20318,11461,1324,683,1255,1,2,1,1,1,1,1,1,1,1,1,1,2,3,1,4,5,0,0",
+        ["SmallNoCliffs"] = "30.999115,412.975104,409.321472,3,1.916928,44,100,1.882016,0,2,0.57344,1,1153.002823,36.800286,1.557348,99.555044,98.72075,17.216643,15.714286,0,5,99.936575,6,2,5672,6695,10028,2384,341,51,1,2,1,1,1,1,1,1,1,1,1,1,2,3,1,4,5,1,0",
+        ["CoolWet"] = "33.125272,636.469248,630.767616,9,1.343488,105,100,2.955048,0,1,0.589824,0,1178.215784,39.792842,4.243642,97.191518,96.47265,22.502031,21.901408,0,5,123.011504,8,2,12430,12668,10511,1555,602,1045,1,2,1,1,1,1,1,1,1,1,1,1,2,3,1,4,3,0,0",
     };
 
     [Theory]

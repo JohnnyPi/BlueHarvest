@@ -1,5 +1,5 @@
 'use strict';
-// Golden hashes for stage 4a of the C# port (IslandWorks: facilities, paddocks, power, compounds).
+// Golden hashes for stage 4a of the C# port (IslandWorks: facilities, paddocks, power, compounds, and the site program).
 // Prints the C# table used by IslandWorksTests.
 const G = require('./gen.js');
 const PRIME = 1099511628211n, MASK = (1n << 64n) - 1n;
@@ -17,7 +17,7 @@ function hasher() { // BlueHarvest.Sim.Core.StateHasher
   };
   return api;
 }
-const FACK = G.FAC.map(f => f.key), PADK = G.PADDOCKS.map(q => q.key), BIOK = G.BIOMES.map(b => b.key), COVK = G.COVER.map(c => c.key);
+const FACK = G.FAC2.map(f => f.key), PADK = G.PADDOCKS2.map(q => q.key), BIOK = G.BIOMES.map(b => b.key), COVK = G.COVER.map(c => c.key);
 const PK = { bld: 0, fur: 1, circle: 2, rect: 3, tower: 4, line: 5, pen: 6 };
 function prim(h, q) {
   h.int(PK[q.t]);
@@ -38,20 +38,23 @@ function prim(h, q) {
 }
 const CASES = [
   ['Default', {}],
-  ['Seed12', { seed: 12 }],
+  ['Seed12', { seed: 12, scale: 75 }],
   ['SmallNoCliffs', { seed: 44, scale: 50, wind: 100, cliffs: 0, iterations: 5, pali: 0.5 }],
   ['CoolWet', { seed: 9, scale: 60, seaTemp: 21, cloudBase: 500, wetlands: 1.5, rain: 1.3 }]
 ];
 for (const [name, params] of CASES) {
   const w = G.generate(Object.assign({ stopAfter: 'sites' }, params));
   const hs = hasher().dbl(w.mx).dbl(w.my).int(w.sites.length);
+  const slot = {};
   for (const t of w.sites) {
-    hs.int(t.id).int(FACK.indexOf(t.kind)).dbl(t.x).dbl(t.y).dbl(t.r).dbl(t.h).int(t.region).str(t.name).str(t.owner).int(t.major ? 1 : 0);
+    const key = 'site.' + t.kind + ':' + (slot[t.kind] = (slot[t.kind] || 0) + 1, slot[t.kind] - 1); // Site.Key
+    hs.int(t.id).int(FACK.indexOf(t.kind)).dbl(t.x).dbl(t.y).dbl(t.r).dbl(t.h).int(t.region).str(t.name).str(t.owner).int(t.major ? 1 : 0)
+      .str(t.sector || '').str(key);
     if (t.dir) hs.int(1).dbl(t.dir[0]).dbl(t.dir[1]); else hs.int(0);
     if (t.runway) hs.int(1).dbl(t.runway.x1).dbl(t.runway.y1).dbl(t.runway.x2).dbl(t.runway.y2).dbl(t.runway.h); else hs.int(0);
   }
   const hl = hasher().int(w.leylines.length);
-  for (const l of w.leylines) hl.dbl(l.x1).dbl(l.y1).dbl(l.x2).dbl(l.y2);
+  for (const l of w.leylines) hl.dbl(l.x1).dbl(l.y1).dbl(l.x2).dbl(l.y2).str(l.line || '');
   const hp = hasher().int(w.paddocks.length);
   for (const q of w.paddocks) {
     hp.int(q.id).int(PADK.indexOf(q.key)).dbl(q.x).dbl(q.y).dbls(q.poly).dbl(q.km2).int(BIOK.indexOf(q.biome))
@@ -67,6 +70,27 @@ for (const [name, params] of CASES) {
   for (const s of w.labels) hc.str(s);
   hc.int(w.prims.length);
   for (const q of w.prims) prim(hc, q);
+  // the site program (P4c): authored ruins, ley routes, outstations, states, ADM's footprint, failures and the P4b anchors
+  const P = w.program2, hg = hasher().dbl(P.centre[0]).dbl(P.centre[1]).int(P.ruins.length);
+  for (const q of P.ruins) {
+    hg.str(q.id).int(q.placed ? 1 : 0);
+    if (q.placed) hg.dbl(q.x).dbl(q.y).int(q.r).int(q.lowTide ? 1 : 0).dbl(q.causewayM || 0);
+  }
+  hg.int(P.lines.length);
+  for (const l of P.lines) hg.str(l.key).dbls(l.xs).dbls(l.ys).int(l.through).int(l.survey != null ? l.survey : -1);
+  hg.int(P.outstationCount).int(P.outstations.length);
+  for (const o of P.outstations) hg.int(o.site).str(o.sector).int(o.onRole ? 1 : 0);
+  for (const c of G.SECTORS) hg.str(c).str(P.states[c].state).int(P.states[c].historySeed);
+  if (P.adm) {
+    const ports = P.adm.ports.filter(q => q.kind !== 'monorail lift'); // the lift is added after transit
+    hg.int(1).dbl(P.adm.x).dbl(P.adm.y).dbl(P.adm.b1z).int(P.adm.wetCells).int(P.adm.riverCells).int(ports.length);
+    for (const q of ports) hg.str(q.kind).dbl(q.x).dbl(q.y);
+  } else hg.int(0);
+  hg.int(P.failures.length); for (const f of P.failures) hg.str(f.key);
+  const A = P.anchors || {};
+  if (A.reefFlat) hg.int(1).int(A.reefFlat.cells); else hg.int(0);
+  if (A.floodplain) hg.int(1).int(A.floodplain.riverCells).int(A.floodplain.cells); else hg.int(0);
   console.log(`        ["${name}"] = new(${w.sites.length}, ${w.paddocks.length}, ${w.power.length}, ${w.labels.length}, ${w.prims.length},`);
-  console.log(`            ${hs.hex()}, ${hl.hex()}, ${hp.hex()}, ${hw.hex()}, ${hc.hex()}),`);
+  console.log(`            ${hs.hex()}, ${hl.hex()}, ${hp.hex()}, ${hw.hex()}, ${hc.hex()},`);
+  console.log(`            ${hg.hex()}, ${P.ruins.filter(q => q.placed).length}, ${P.lines.length}, ${P.outstations.length}, ${P.failures.length}),`);
 }

@@ -17,7 +17,7 @@ public class IslandWorldTests
         IslandWorld w = Small.Value;
         Assert.Equal(336, w.Shape.Nx);
         Assert.Equal(w.Shape.N, w.Climate.Biomes.Length);
-        Assert.Equal(21, w.Works.Sites.Count);
+        Assert.Equal(28, w.Works.Sites.Count); // from the island lab
         Assert.Equal(336 * 128.0, w.WidthM);
         lock (Stages) Assert.Equal(3, Stages.Count);
     }

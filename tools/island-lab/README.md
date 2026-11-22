@@ -9,7 +9,7 @@ The golden scripts print the expected values used by the port's tests:
 node tools/island-lab/golden.js         # stage 1: GenerationCoreTests
 node tools/island-lab/golden-shape.js   # stage 2: IslandShapeTests (paste the printed table into Golden)
 node tools/island-lab/golden-climate.js # stage 3: IslandClimateTests
-node tools/island-lab/golden-sites.js   # stage 4a: IslandWorksTests
+node tools/island-lab/golden-sites.js   # stage 4a: IslandWorksTests (with the site program: ruins, ley routes, outstations, states, ADM)
 node tools/island-lab/golden-roads.js   # stage 4b: IslandRoadsTests
 node tools/island-lab/golden-transit.js # stage 4c: IslandTransitTests
 node tools/island-lab/golden-wild.js    # stage 4d: IslandWildTests
@@ -29,6 +29,7 @@ If `gen.js` changes on purpose, rerun `golden.js` and update the expected values
 
 ```
 node tools/island-lab/checks.js                       # self-test: the four test islands against IslandStatsTests' and IslandReachTests' pins
+node tools/island-lab/checks.js --print               # the rows to pin there (and in checks.js) after a deliberate change
 node tools/island-lab/validate.js 1 200 75 --out reports/lab-75   # `island validate 1 200 75`, with the runner's seeds.csv columns
 node tools/island-lab/compare-validate.js <C# seeds.csv> <lab seeds.csv>   # every column but seconds
 node tools/island-lab/sites-report.js 1 200           # program 2 over 200 seeds at 100%: reports/sites-<time>/report.md
@@ -42,12 +43,16 @@ site report) and writes `reports\checks-<time>\summary.md`. `-Count 20` makes a 
 `checks.js` ports `IslandStats.Measure`, `IslandWorks.Reachability` and `IslandChecks`; it needs a world made with
 `generate({ ..., keepInternals: true })`, which keeps the double-precision grids the C# measures read (nothing generated changes).
 
-`generate({ program: 2 })` is the Crosswake Island site program (master plan P4a), at 100% unless a scale is given: the Court
+**Program 2 is the default and what the C# generator is (P4c, `IslandGen.Version` 2).** `generate()` is the Crosswake Island
+site program (master plan P4a), at 100% unless a scale is given: the Court
 of Unfinished Measures with Central Administration's footprint reserved beneath it, the six sectors, the seven authored ruins,
 five paddocks and the raptor pen, 2–8 outstations, ADM's infrastructure without a nuclear plant, four ley lines through the
-Court with a survey post on each, the six powers as owners, and lesser sites scaled with land area. Program 1 (the default)
-is unchanged and is what every golden script and C# test reads. `works.program2` holds what program 2 measured: terrain
-roles, ruins, lines, outstations, seeded states, the ADM footprint, and every placement failure with its reason.
+Court with a survey post on each, the six powers as owners, and lesser sites scaled with land area. Every golden script and
+C# test reads it. `works.program2` holds what program 2 measured: terrain roles, ruins, lines, outstations, seeded states, the
+ADM footprint, and every placement failure with its reason (`stopAfter: 'sites'` returns it as `program2`).
+
+`generate({ program: 1 })` is the old program (14 facility kinds and the corporations, at 75% unless a scale is given),
+kept bit for bit so the golden values from before P4c can still be reproduced; nothing in C# matches it any more.
 
 Program 2 also turns on the two P4b anchors (`anchors2`, on by default with program 2, off for program 1): a **reef flat**
 off the most sheltered low shore, 0.6–1.5 m deep out to 700 m so it can be waded at the lowest tide (shape stage, sea depths),

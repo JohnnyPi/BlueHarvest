@@ -586,7 +586,8 @@ public sealed class IslandChunker
                     double jt = GenMath.Clamp(1.6 * GenNoise.Fbm(_nCover ^ 0x5151u, x / 90, y / 90, 3), -1, 1);
                     double wetV = GenGrid.Bilinear(cl.Wetness, nx, ny, gx, gy) + (riverD[k] < 25 ? 0.15 : 0);
                     Biome bi = IslandClimate.Classify(Math.Max(0, z), rainV, seaT - 6.5 * Math.Max(0, z) / 1000, GenGrid.Bilinear(cl.Fog, nx, ny, gx, gy), wetV,
-                        GenGrid.Bilinear(cl.SlopeDeg, nx, ny, gx, gy), lavaV, dc, beachy, GenGrid.Bilinear(cl.Crest, nx, ny, gx, gy), jt);
+                        GenGrid.Bilinear(cl.SlopeDeg, nx, ny, gx, gy), lavaV, dc, beachy, GenGrid.Bilinear(cl.Crest, nx, ny, gx, gy), jt,
+                        cl.Riparian is null ? 0 : GenGrid.Bilinear(cl.Riparian, nx, ny, gx, gy));
                     tBiome[o2] = (byte)bi;
                     double u = 0.5 + 0.5 * GenMath.Tanh(2.4 * (nC + 0.35 * nC2));
                     if (ledge == 0) c = Cover.Rock;

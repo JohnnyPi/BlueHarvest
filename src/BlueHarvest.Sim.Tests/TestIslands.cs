@@ -11,8 +11,8 @@ internal static class TestIslands
 {
     public static readonly Dictionary<string, IslandParams> Cases = new()
     {
-        ["Default"] = new IslandParams(),
-        ["Seed12"] = new IslandParams { Seed = 12 },
+        ["Default"] = new IslandParams(), // Crosswake Island at 100% (D-12, since P4c)
+        ["Seed12"] = new IslandParams { Seed = 12, Scale = 75 }, // the old base scale, kept so it stays quick
         ["SmallNoCliffs"] = new IslandParams { Seed = 44, Scale = 50, Wind = 100, Cliffs = 0, Iterations = 5, Pali = 0.5 },
         ["CoolWet"] = new IslandParams { Seed = 9, Scale = 60, SeaTemp = 21, CloudBase = 500, Wetlands = 1.5, Rain = 1.3 },
     };

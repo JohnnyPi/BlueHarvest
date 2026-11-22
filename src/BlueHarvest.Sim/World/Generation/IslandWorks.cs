@@ -1,9 +1,10 @@
 namespace BlueHarvest.Sim.World.Generation;
 
-public sealed record Corporation(string Name, string Goal);
-
-/// <summary>A kind of facility. Placed in table order: the objective anchors (docks, airstrip, comms, control) first.</summary>
-public sealed record FacilityType(string Key, string Name, string Icon, int Count, int Corp, double Apart = 0, bool Major = false);
+/// <summary>
+/// A kind of facility. Power is the owner's code (<see cref="IslandWorks.Powers"/>); Sector marks a sector's own sites.
+/// Placement order is the site program's (<see cref="IslandWorks"/>, IslandWorks.Program.cs); the table is in report order.
+/// </summary>
+public sealed record FacilityType(string Key, string Name, string Icon, int Count, string Power, string? Sector = null, double Apart = 0, bool Major = false);
 
 public sealed record NearestSite(int Id, string Name, double Minutes);
 
@@ -25,6 +26,23 @@ public sealed class Site
     public required string Owner { get; init; }
     public required string OwnerGoal { get; init; }
     public required bool Major { get; init; }
+    /// <summary>The sector a site belongs to (its compound, the raptor pen, its outstations); null for ADM's sites.</summary>
+    public string? Sector { get; init; }
+    /// <summary>The Court: the authored ruin it stands on (RUIN-07).</summary>
+    public string? Ruin { get; init; }
+    /// <summary>The coastal service yard: the dock it serves.</summary>
+    public int Dock { get; init; } = -1;
+    /// <summary>A survey post: the ley line it stands on.</summary>
+    public string? Line { get; init; }
+    /// <summary>An outstation: whether it stands on its sector's terrain role.</summary>
+    public bool OnRole { get; init; }
+    /// <summary>
+    /// Its archetype and slot, stable for the seed: "site." + kind + ":" + how many sites of its kind were placed before it
+    /// ("site.watch:2"). The tail of its <c>WorldInstanceId</c> (<see cref="IslandGen.InstanceId"/>); never a list index.
+    /// </summary>
+    public string Key { get; init; } = "";
+    /// <summary>The name before any repeat number ("Docks, north"); repeats are numbered by it.</summary>
+    public string BaseName { get; set; } = "";
     public string Name { get; set; } = "";
     /// <summary>Docks: the outward coast normal.</summary>
     public (double X, double Y)? Dir { get; set; }
@@ -65,7 +83,8 @@ public sealed class Paddock
 
 public sealed record PowerLine(double X1, double Y1, double X2, double Y2, string From, string To);
 
-public sealed record LeyLine(double X1, double Y1, double X2, double Y2);
+/// <summary>A straight piece of a ley line; Line is its route's key (<see cref="LeyLineRoute"/>).</summary>
+public sealed record LeyLine(double X1, double Y1, double X2, double Y2, string Line = "");
 
 public enum RoadClass : byte { Track, Main }
 
@@ -84,50 +103,47 @@ public sealed class Road
 }
 
 /// <summary>
-/// Stage 4 of island generation: the works of people. Stage 4a: facilities, species paddocks,
-/// power lines and the compounds' buildings. Stage 4b: roads. Stage 4c: walking times and transit.
+/// Stage 4 of island generation: the works of people, on the Crosswake Island site program (P4c: IslandWorks.Program.cs).
+/// Stage 4a: facilities, species paddocks, the authored ruins and ley lines, power lines and the compounds' buildings. Stage 4b: roads. Stage 4c: walking times and transit.
 /// Stage 4d: caves, wrecks, ruins and wildlife.
 /// </summary>
 public sealed partial class IslandWorks
 {
-    public static readonly Corporation[] Corps =
-    [
-        new("Joint Operations Authority", "shared"),
-        new("Halcyon Genomics", "experimental"),
-        new("Ostrander Power & Light", "extractive"),
-        new("Vantage Survey Group", "expansionist"),
-        new("Kestrel Maritime", "isolationist"),
-        new("Meridian Atmospherics", "preservationist"),
-    ];
-
+    /// <summary>The facility table, in report order. Outstations' count is per seed (2–8): see <see cref="SiteProgram.OutstationCount"/>.</summary>
     public static readonly FacilityType[] Facilities =
     [
-        new("docks", "Docks", "D", 2, 4, Apart: 12000, Major: true),
-        new("airstrip", "Airstrip", "A", 1, 3, Major: true),
-        new("comms", "Comms relay", "C", 1, 3),
-        new("control", "Control centre", "H", 1, 0, Major: true),
-        new("genetics", "Genetics complex", "X", 1, 1, Major: true),
-        new("raptors", "Velociraptor pen", "V", 1, 1),
-        new("nuclear", "Nuclear plant", "N", 1, 2, Major: true),
-        new("geothermal", "Geothermal plant", "G", 1, 2, Major: true),
-        new("weather", "Weather control array", "W", 1, 5),
-        new("orgone", "Orgone research station", "O", 1, 5),
-        new("lab", "Research lab", "R", 2, 1, Apart: 6000, Major: true),
-        new("depot", "Supply depot", "S", 2, 4, Apart: 6000, Major: true),
-        new("ley", "Ley-line survey station", "L", 3, 3),
-        new("watch", "Cordon watch post", "P", 3, 4, Apart: 10000),
+        new("court", "Court of Unfinished Measures", "H", 1, "ADM", Major: true),
+        new("docks", "Docks", "D", 2, "ADM", Apart: 12000, Major: true),
+        new("airstrip", "Airstrip", "A", 1, "ADM", Major: true),
+        new("comms", "Comms relay", "C", 1, "ADM"),
+        new("genetics", "The Menagerie", "X", 1, "MEN", "MEN", Major: true),
+        new("raptors", "Raptor pen", "V", 1, "MEN", "MEN"),
+        new("orgone", "Vitality Institute", "O", 1, "VIT", "VIT", Major: true),
+        new("orchard", "Glass Orchard", "E", 1, "ORC", "ORC", Major: true),
+        new("weather", "Ninth Weather", "W", 1, "WTH", "WTH", Major: true),
+        new("choir", "Choir Below", "Q", 1, "CHO", "CHO", Major: true),
+        new("drowned", "Drowned Observatory", "B", 1, "DRW", "DRW", Major: true),
+        new("geothermal", "Geothermal plant", "G", 1, "ADM", Major: true),
+        new("depot", "Supply depot", "S", 2, "ADM", Apart: 6000, Major: true),
+        new("watch", "Watch post", "P", 3, "ADM", Apart: 10000),
+        new("yard", "Coastal service yard", "Y", 1, "ADM", Major: true),
+        new("survey", "Survey post", "L", 4, "ADM"),
+        new("outstation", "Outstation", "R", 0, ""),
     ];
 
+    /// <summary>Five paddocks (P4.8): the Rex, triceratops and stegosaurus paddocks re-keyed to the creature list, plus the Sun-Sail Hadrosaur's.</summary>
     public static readonly PaddockSpecies[] PaddockSpeciesList =
     [
         new("apato", "Apatosaurus paddock", "Apatosaurus herd", 9,
             new Dictionary<Biome, double> { [Biome.Grassland] = 1, [Biome.Mesic] = 0.9, [Biome.Moist] = 0.5, [Biome.Marsh] = 0.6 }, 0.7, true, FenceKind.Low, false, false),
-        new("rex", "Tyrannosaur paddock", "Tyrannosaurus rex", 2.2,
+        new("tyrant", "Tyrant paddock", "Future-Torn Tyrant", 2.2,
             new Dictionary<Biome, double> { [Biome.Mesic] = 1, [Biome.Moist] = 0.9, [Biome.Grassland] = 0.8, [Biome.Wet] = 0.6 }, 0, false, FenceKind.Heavy, true, false),
-        new("trike", "Triceratops paddock", "Triceratops herd", 1.4,
+        new("ceratopsian", "Ceratopsian paddock", "Empty-Paddock Ceratopsian herd", 1.4,
             new Dictionary<Biome, double> { [Biome.Grassland] = 1, [Biome.DryScrub] = 0.8, [Biome.Mesic] = 0.7 }, 0, false, FenceKind.Standard, false, true),
-        new("stego", "Stegosaurus paddock", "Stegosaurus herd", 1.4,
+        new("crownback", "Crownback paddock", "K-12 Crownback herd", 1.4,
             new Dictionary<Biome, double> { [Biome.Mesic] = 1, [Biome.Moist] = 0.8, [Biome.Grassland] = 0.6 }, 0, false, FenceKind.Standard, false, false),
+        new("hadrosaur", "Hadrosaur paddock", "Sun-Sail Hadrosaur herd", 2.5,
+            new Dictionary<Biome, double> { [Biome.Grassland] = 0.9, [Biome.Mesic] = 1, [Biome.Marsh] = 0.8, [Biome.Moist] = 0.6 }, 0.5, true, FenceKind.Standard, false, true),
     ];
 
     private static readonly string[] Dirs8 = ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"];
@@ -142,6 +158,9 @@ public sealed partial class IslandWorks
     private readonly int _mainL;
 
     public List<Site> Sites { get; } = [];
+
+    /// <summary>The site with this <see cref="Site.Key"/>, or −1.</summary>
+    public int SiteIndex(string key) => Sites.FindIndex(t => t.Key == key);
     public List<LeyLine> LeyLines { get; } = [];
     public List<Paddock> Paddocks { get; } = [];
     /// <summary>Paddock id of each cell, −1 outside.</summary>
@@ -192,6 +211,9 @@ public sealed partial class IslandWorks
         var works = new IslandWorks(w, c);
         works.PlaceFacilities();
         works.FencePaddocks();
+        works.PlaceAuthoredRuins();
+        works.PlaceLeyLines();
+        works.NameSites();
         works.RouteRoads();
         works.StringPower();
         works.BuildCompounds();
@@ -201,6 +223,9 @@ public sealed partial class IslandWorks
         works.ScatterWrecks();
         works.PlaceRuins();
         works.MapWildlife();
+        // Central Administration's third way in: the lift from the Court's monorail station
+        if (works.Program.Adm is { } adm && works.Monorail is { Stations.Count: > 0 } mono)
+            adm.Ports.Add(new AdmPort("monorail lift", mono.Stations[0].X, mono.Stations[0].Y, mono.Stations[0].Z));
         return works;
     }
 
@@ -226,21 +251,22 @@ public sealed partial class IslandWorks
         foreach (Site t in Sites)
         {
             double d = GenMath.Hyp(t.X - x, t.Y - y);
-            double lim = kind == "raptors" || t.Kind == "raptors" ? rad + t.R + 150 : Math.Max(2500 * _s, rad + t.R + 600);
+            double lim = kind == "raptors" || t.Kind == "raptors" || (kind == "yard" && t.Kind == "docks") ? rad + t.R + 150 : Math.Max(2500 * _s, rad + t.R + 600);
             if (d < lim || (kind == t.Kind && apart != 0 && d < apart * _s)) return true;
         }
         return false;
     }
 
-    private Site AddSite(FacilityType f, double x, double y)
+    private Site AddSite(FacilityType f, double x, double y, string? sector = null, string? ruin = null, int dock = -1,
+        string? kindName = null, bool onRole = false, string? line = null)
     {
         int i = Idx(x, y);
-        Corporation corp = Corps[f.Corp];
+        IslandPower owner = Powers[f.Power];
         var t = new Site
         {
-            Id = Sites.Count, Kind = f.Key, Icon = f.Icon, KindName = f.Name, X = GenMath.Round(x), Y = GenMath.Round(y),
+            Id = Sites.Count, Kind = f.Key, Key = "site." + f.Key + ":" + Sites.Count(u => u.Kind == f.Key), Icon = f.Icon, KindName = kindName ?? f.Name, X = GenMath.Round(x), Y = GenMath.Round(y),
             R = FacilityPrograms.Layout(f.Key).R, H = Math.Max(2, _w.Height[i]), Region = (Region)_c.Regions[i],
-            Owner = corp.Name, OwnerGoal = corp.Goal, Major = f.Major,
+            Owner = owner.Name, OwnerGoal = owner.Goal, Major = f.Major, Sector = sector, Ruin = ruin, Dock = dock, OnRole = onRole, Line = line,
         };
         Sites.Add(t);
         return t;
@@ -290,15 +316,13 @@ public sealed partial class IslandWorks
                 ? 2 - coastEx[i] * 1.5 + (nearRiver[i] != 0 ? 0.4 : 0) + (region[i] == rgLeeward ? 0.3 : 0) : No,
             "comms" => i => slopeD[i] < 30 && biome[i] != (byte)Biome.Cliff ? h[i] / 300 + crest[i] : No,
             "control" => i => slopeD[i] < 5 && region[i] != rgCoast
-                ? 3 - GenMath.Hyp(CxOf(i) - mx, CyOf(i) - my) / (6000 * s) - slopeD[i] / 6 + (region[i] == rgPlateau ? 1 : 0) : No,
+                ? 3 - GenMath.Hyp(CxOf(i) - mx, CyOf(i) - my) / (6000 * s) - slopeD[i] / 6.0 + (region[i] == rgPlateau ? 1 : 0) : No,
             "genetics" => i => slopeD[i] < 8 && h[i] > 30 && h[i] < 450 && rain[i] > 1400 && region[i] != rgCoast
-                ? 2 + Math.Min(1, rain[i] / 4000) - slopeD[i] / 10 + (region[i] == rgWindward ? 0.6 : 0) : No,
-            "nuclear" => i => distLand[i] < 700 && slopeD[i] < 4 && h[i] < 40 && GenMath.Hyp(CxOf(i) - a.Vent.X, CyOf(i) - a.Vent.Y) > 6000 * s
-                ? 2 - coastEx[i] - slopeD[i] / 4 + (region[i] == rgLeeward ? 0.5 : 0) : No,
+                ? 2 + Math.Min(1, rain[i] / 4000) - slopeD[i] / 10.0 + (region[i] == rgWindward ? 0.6 : 0) : No,
             "geothermal" => i =>
             {
                 double d = GenMath.Hyp(CxOf(i) - a.Vent.X, CyOf(i) - a.Vent.Y) / a.Vent.R;
-                return d > 1.1 && d < 3 && slopeD[i] < 10 ? 3 - Math.Abs(d - 1.6) - slopeD[i] / 10 : No;
+                return d > 1.1 && d < 3 && slopeD[i] < 10 ? 3 - Math.Abs(d - 1.6) - slopeD[i] / 10.0 : No;
             },
             "weather" => i => slopeD[i] < 20 && h[i] > 0.55 * p.Peak && region[i] == rgRidge ? h[i] / 400 + crest[i] : No,
             "orgone" => i =>
@@ -306,14 +330,13 @@ public sealed partial class IslandWorks
                 double d = GenMath.Hyp(CxOf(i) - a.Caldera.X, CyOf(i) - a.Caldera.Y) / a.Caldera.R;
                 return d < 1.3 && slopeD[i] < 14 ? 3 - Math.Abs(d - 0.7) : No;
             },
-            "lab" => i => slopeD[i] < 8 && h[i] < 300 && region[i] != rgCoast ? 2 - slopeD[i] / 8 + (region[i] == rgLeeward ? 0.7 : 0) : No,
-            "depot" => i => slopeD[i] < 6 && h[i] < 120 && distLand[i] < 3000 ? 2 - slopeD[i] / 6 + (region[i] == rgLeeward ? 0.4 : 0) : No,
+            "depot" => i => slopeD[i] < 6 && h[i] < 120 && distLand[i] < 3000 ? 2 - slopeD[i] / 6.0 + (region[i] == rgLeeward ? 0.4 : 0) : No,
             "raptors" => i =>
             {
                 Site? g0 = Sites.Find(t => t.Kind == "genetics");
                 if (g0 == null) return No;
                 double d = GenMath.Hyp(CxOf(i) - g0.X, CyOf(i) - g0.Y);
-                return d > g0.R + 250 && d < 1600 && slopeD[i] < 10 ? 3 - d / 1600 - slopeD[i] / 10 : No;
+                return d > g0.R + 250 && d < 1600 && slopeD[i] < 10 ? 3 - d / 1600 - slopeD[i] / 10.0 : No;
             },
             "watch" => i => land[i] != 0 && distLand[i] < 500 && h[i] > 20 && slopeD[i] < 25 ? seaFrac[i] * 3 + Math.Min(1, h[i] / 150) : No,
             _ => throw new ArgumentOutOfRangeException(nameof(key), key, "no placement score"),
@@ -375,74 +398,28 @@ public sealed partial class IslandWorks
             t0.H = rw.H;
         }
 
-        // ley lines: straight lines that the herds follow; survey stations sit where they cross
-        List<int> landCells = _landCells;
-        for (int i = 0; i < n; i += 3) if (land[i] != 0) landCells.Add(i);
-        double big = a.W + a.H;
-        void LineThrough(double ax, double ay, double bx, double by)
-        {
-            double d = GenMath.Hyp(bx - ax, by - ay);
-            if (d == 0) d = 1;
-            double dx = (bx - ax) / d, dy = (by - ay) / d;
-            LeyLines.Add(new LeyLine(ax - dx * big, ay - dy * big, ax + dx * big, ay + dy * big));
-        }
+        // every third land cell: the pool the caves, wrecks and ruins draw from
+        for (int i = 0; i < n; i += 3) if (land[i] != 0) _landCells.Add(i);
 
-        foreach (FacilityType f in Facilities)
-        {
-            if (f.Key == "airstrip") { PlaceAirstrip(f); continue; }
-            if (f.Key == "ley")
-            {
-                // pick the three crossings first, on the main island and clear of other sites, then draw the lines
-                // through them as a triangle (so every crossing is on land), plus a fourth line for the herds
-                var rl = new GenRng(p.Seed, "worldgen.ley");
-                var pts = new List<(double X, double Y)>();
-                int leyR = FacilityPrograms.Layout("ley").R;
-                for (int tries = 0; tries < 4000 && pts.Count < f.Count; tries++)
-                {
-                    int i = landCells[(int)Math.Floor(rl.Next() * landCells.Count)];
-                    if (!OnMain(i) || slopeD[i] >= 18) continue;
-                    double x = CxOf(i), y = CyOf(i);
-                    if (TooClose(x, y, leyR, f.Key, 0) || pts.Exists(q => GenMath.Hyp(q.X - x, q.Y - y) < 6000 * s)) continue;
-                    if (pts.Count == 2)
-                    {
-                        // not too flat a triangle
-                        (double X, double Y) pa = pts[0], pb = pts[1];
-                        double ab = GenMath.Hyp(pb.X - pa.X, pb.Y - pa.Y), area2 = Math.Abs((pb.X - pa.X) * (y - pa.Y) - (pb.Y - pa.Y) * (x - pa.X));
-                        if (area2 / (ab * ab) < 0.25) continue;
-                    }
-                    pts.Add((x, y));
-                }
-                for (int k = 0; k < pts.Count; k++)
-                {
-                    (double X, double Y) pa = pts[k], pb = pts[(k + 1) % pts.Count];
-                    if (pts.Count > 1 && (pts.Count > 2 || k == 0)) LineThrough(pa.X, pa.Y, pb.X, pb.Y);
-                }
-                int i4 = landCells[(int)Math.Floor(rl.Next() * landCells.Count)];
-                double ang = rl.Next() * GenMath.Pi;
-                LineThrough(CxOf(i4), CyOf(i4), CxOf(i4) + GenMath.Cos(ang), CyOf(i4) + GenMath.Sin(ang));
-                foreach ((double x, double y) in pts) AddSite(f, x, y);
-                continue;
-            }
-            for (int k = 0; k < f.Count; k++)
-            {
-                int i = PlaceBest(f, k);
-                if (i < 0) break;
-                AddSite(f, CxOf(i), CyOf(i));
-            }
-        }
+        PlaceProgram(Score, PlaceBest, PlaceAirstrip);
+    }
 
-        // names: add a compass word where a kind repeats
+    // names: add a compass word where a kind repeats, then number repeats of the same name
+    private void NameSites()
+    {
         var cnt = new Dictionary<string, int>();
         foreach (Site t in Sites) cnt[t.Kind] = cnt.GetValueOrDefault(t.Kind) + 1;
         foreach (Site t in Sites)
         {
-            t.Name = cnt[t.Kind] > 1 ? t.KindName + ", " + Compass(t.X, t.Y) : t.KindName;
-            int same = Sites.Count(u => u != t && u.Name == t.Name && u.Id < t.Id);
-            if (same > 0) t.Name += " " + (same + 1);
+            string name = cnt[t.Kind] > 1 ? t.KindName + ", " + Compass(t.X, t.Y) : t.KindName;
+            // by the base name, so a third in one direction isn't a second "2"
+            int same = Sites.Count(u => u.Id < t.Id && u.BaseName == name);
+            t.BaseName = name;
+            t.Name = same > 0 ? name + " " + (same + 1) : name;
             if (t.Kind == "docks")
             {
                 int i = Idx(t.X, t.Y);
-                t.Dir = (w.CoastNx[i], w.CoastNy[i]);
+                t.Dir = (_w.CoastNx[i], _w.CoastNy[i]);
             }
         }
     }
@@ -878,7 +855,7 @@ public sealed partial class IslandWorks
     // ---------- power: a tree of straight lines from the generators to every site ----------
     private void StringPower()
     {
-        var roots = Sites.Where(t => t.Kind == "nuclear" || t.Kind == "geothermal").ToList();
+        var roots = Sites.Where(t => t.Kind == "geothermal").ToList(); // no nuclear plant (D-9): geothermal is the grid's source
         var on = new HashSet<int>(roots.Select(t => t.Id));
         if (roots.Count == 0 && Sites.Count > 0) on.Add(Sites[0].Id);
         while (on.Count < Sites.Count)

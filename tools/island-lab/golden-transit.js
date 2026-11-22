@@ -17,7 +17,7 @@ function hasher() { // BlueHarvest.Sim.Core.StateHasher
   };
   return api;
 }
-const FACK = G.FAC.map(f => f.key), PADK = G.PADDOCKS.map(q => q.key), BIOK = G.BIOMES.map(b => b.key), COVK = G.COVER.map(c => c.key);
+const FACK = G.FAC2.map(f => f.key), PADK = G.PADDOCKS2.map(q => q.key), BIOK = G.BIOMES.map(b => b.key), COVK = G.COVER.map(c => c.key);
 const PK = { bld: 0, fur: 1, circle: 2, rect: 3, tower: 4, line: 5, pen: 6 };
 function prim(h, q) {
   h.int(PK[q.t]);
@@ -38,7 +38,7 @@ function prim(h, q) {
 }
 const CASES = [
   ['Default', {}],
-  ['Seed12', { seed: 12 }],
+  ['Seed12', { seed: 12, scale: 75 }],
   ['SmallNoCliffs', { seed: 44, scale: 50, wind: 100, cliffs: 0, iterations: 5, pali: 0.5 }],
   ['CoolWet', { seed: 9, scale: 60, seaTemp: 21, cloudBase: 500, wetlands: 1.5, rain: 1.3 }]
 ];

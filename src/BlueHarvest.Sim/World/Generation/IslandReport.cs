@@ -140,7 +140,8 @@ public static class IslandReport
             FacilityType f = IslandWorks.Facilities[k];
             var shortSeeds = ok.Where(r => r.Stats!.Facilities[k].Short > 0).Select(r => r.Seed).ToList();
             int fewest = ok.Min(r => r.Stats!.Facilities[k].Placed);
-            sb.AppendLine($"| {f.Name}{(f.Major ? " (major)" : "")} | {f.Count} | {shortSeeds.Count} | {fewest} | {SeedList(shortSeeds)} |");
+            string wanted = f.Key == "outstation" ? "2–8" : f.Count.ToString(CultureInfo.InvariantCulture); // outstations: by seed (P4.5)
+            sb.AppendLine($"| {f.Name}{(f.Major ? " (major)" : "")} | {wanted} | {shortSeeds.Count} | {fewest} | {SeedList(shortSeeds)} |");
         }
         sb.AppendLine();
 

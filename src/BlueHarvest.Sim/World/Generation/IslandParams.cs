@@ -1,14 +1,14 @@
 namespace BlueHarvest.Sim.World.Generation;
 
 /// <summary>
-/// Island generation settings. Defaults match the island lab (gen.js DEFAULTS); later stages add theirs.
+/// Island generation settings. Defaults match the island lab (gen.js DEFAULTS, program 2); later stages add theirs.
 /// Lengths are metres unless noted.
 /// </summary>
 public sealed record IslandParams
 {
     public uint Seed { get; init; } = 7;
-    /// <summary>Island size as a percentage of Oahu's frame (86 × 62 km).</summary>
-    public double Scale { get; init; } = 75;
+    /// <summary>Island size as a percentage of Oahu's frame (86 × 62 km). Crosswake Island is 100% (D-12); 75% was the base before P4c.</summary>
+    public double Scale { get; init; } = 100;
     /// <summary>Coarse grid cell size.</summary>
     public double Cell { get; init; } = 128;
     /// <summary>Height of the younger shield's crest.</summary>

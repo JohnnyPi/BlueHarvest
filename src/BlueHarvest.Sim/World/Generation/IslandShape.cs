@@ -36,6 +36,9 @@ public sealed class Lake
     public double Cy { get; set; }
 }
 
+/// <summary>P4b's reef flat: centred off shore cell (X, Y), radius R and width out from the shore, in metres.</summary>
+public sealed record ReefFlatAnchor(double X, double Y, double R, double Width, int Cells, double Km2);
+
 public static class CoastClass
 {
     public const byte None = 0, Beach = 1, Rocky = 2, Cliff = 3;
@@ -119,6 +122,10 @@ public sealed class IslandShape
     public byte[] Sea { get; }
     /// <summary>1 on cliff-coast land cells and the sea cells beside them.</summary>
     public float[] CliffMask { get; }
+    /// <summary>P4b: 1 on the sea cells of the reef flat, null if no shore could take one.</summary>
+    public byte[]? ReefFlatMask { get; private set; }
+    /// <summary>P4b: where the reef flat went, null if none.</summary>
+    public ReefFlatAnchor? ReefFlat { get; private set; }
 
     public double CutKm2 { get; private set; }
     public double StreamLength { get; private set; }
@@ -284,6 +291,7 @@ public sealed class IslandShape
                 h[i] = -Math.Min(3800, 1 + Math.Min(dc, 1500) * 0.012 + Math.Max(0, dc - 1500) * 0.12);
             }
         }
+        PlaceReefFlat(wfx, wfy, sfx, sfy);
         Height0 = new float[n];
         for (int i = 0; i < n; i++) Height0[i] = (float)h[i];
 
@@ -292,6 +300,55 @@ public sealed class IslandShape
         TraceRivers();
         FindFalls();
         ClassifyCoast(wfx, wfy, sfx, sfy);
+    }
+
+    /// <summary>
+    /// P4b, the reef flat: off the most sheltered low shore of the main island, a fringing flat 0.6–1.5 m deep out to
+    /// 700 m, so it can be waded at the lowest tide (1.8 m: wade depth 1.2 m, spring 0.5 m, daily 0.1 m). It reads as reef.
+    /// </summary>
+    private void PlaceReefFlat(double wfx, double wfy, double sfx, double sfy)
+    {
+        int nx = Nx, ny = Ny, n = N;
+        double cell = Cell, area = cell * cell;
+        double[] h = Height;
+        var lb = new int[n];
+        List<int> sz = GenGrid.Components(Land, nx, ny, lb);
+        int mk = 0;
+        for (int k = 0; k < sz.Count; k++) if (sz[k] > sz[mk]) mk = k;
+        uint js = GenHash.Stream(Params.Seed, "worldgen.reefflat");
+        int best = -1;
+        double bs = -1e9;
+        for (int i = 0; i < n; i++)
+        {
+            if (Land[i] == 0 || lb[i] != mk || Lava[i] >= 0.45 || h[i] >= 30) continue;
+            int x = i % nx, y = i / nx, ox = 0, oy = 0;
+            bool isC = false;
+            for (int k = 0; k < 8; k++)
+            {
+                int xx = x + GenGrid.DX[k], yy = y + GenGrid.DY[k];
+                if (xx < 0 || yy < 0 || xx >= nx || yy >= ny) continue;
+                if (Land[yy * nx + xx] == 0) { ox += GenGrid.DX[k]; oy += GenGrid.DY[k]; if ((k & 1) == 0) isC = true; }
+            }
+            if (!isC) continue;
+            double ol = GenMath.Hyp(ox, oy);
+            if (ol == 0) ol = 1;
+            double v = 1 - Exposure(ox / ol, oy / ol, wfx, wfy, sfx, sfy) + 0.3 * GenHash.Hash2(js, i, 1) / 4294967296.0;
+            if (v > bs) { bs = v; best = i; }
+        }
+        if (best < 0) return;
+        double bx = (best % nx + 0.5) * cell, by = (best / nx + 0.5) * cell, r = 2200 * Anchors.S, wd = 700 * Anchors.S;
+        var mask = new byte[n];
+        int cells = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (Ocean[i] == 0 || DistSea[i] > wd) continue;
+            if (GenMath.Hyp((i % nx + 0.5) * cell - bx, (i / nx + 0.5) * cell - by) > r) continue;
+            h[i] = -(0.5 + 1.0 * DistSea[i] / wd);
+            mask[i] = 1;
+            cells++;
+        }
+        ReefFlatMask = mask;
+        ReefFlat = new ReefFlatAnchor(bx, by, r, wd, cells, cells * area / 1e6);
     }
 
     // ---------- hydrology and erosion ----------
@@ -608,6 +665,7 @@ public sealed class IslandShape
             else if (Lava[i] < 0.45 && dc >= 300 && dc <= 1100 && nr > -0.05) Sea[i] = SeaBand.Reef;
             else if (Lava[i] < 0.45 && dc < 300 && nr > 0.08) Sea[i] = SeaBand.Lagoon;
             else Sea[i] = SeaBand.Shelf;
+            if (ReefFlatMask is { } fm && fm[i] != 0) Sea[i] = SeaBand.Reef; // the reef flat reads as reef
         }
         // Cliff mask for the chunk detail: cliff-coast land cells and the sea cells beside them.
         double seaCliffTop = 0;

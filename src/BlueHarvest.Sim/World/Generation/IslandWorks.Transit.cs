@@ -482,11 +482,11 @@ public sealed partial class IslandWorks
                 MakeLift(bestSite.X, bestSite.Y, bestSite.R, bestSite.Name, bestEnd.X, bestEnd.Y, 0, "skyway station, " + Compass(bestEnd.X, bestEnd.Y), "Pali skyway");
         }
 
-        // street tram: from the control centre through its nearest neighbours, on gentle grades, mostly in the road
+        // street tram: from the Court through its nearest major neighbours, on gentle grades, mostly in the road
         void LayTram()
         {
-            if (sites.Find(t => t.Kind == "control") is not { } hub) return;
-            List<Site> pool = sites.Where(t => t.Kind != "watch" && t != hub && GenMath.Hyp(t.X - hub.X, t.Y - hub.Y) < 11000 * sq)
+            if (sites.Find(t => t.Kind == "court") is not { } hub) return;
+            List<Site> pool = sites.Where(t => t.Kind != "watch" && t.Major && t != hub && GenMath.Hyp(t.X - hub.X, t.Y - hub.Y) < 11000 * sq)
                 .OrderBy(t => GenMath.Hyp(t.X - hub.X, t.Y - hub.Y)).Take(4).ToList();
             var order = new List<Site> { hub };
             Site cur = hub;
@@ -548,21 +548,13 @@ public sealed partial class IslandWorks
             Tram = new Tram { Name = "Park tram", Xs = xs.Select(v => (float)v).ToArray(), Ys = ys.Select(v => (float)v).ToArray(), Stops = stops, Km = km };
         }
 
-        // underground monorail: the corporate core, straight under everything
+        // underground monorail: the Court is the hub; the three sector compounds nearest it are the other stops
         void LayMonorail()
         {
-            Site? gen = sites.Find(t => t.Kind == "genetics");
-            var core = new List<Site>();
-            foreach (string kind in new[] { "genetics", "control", "lab", "orgone", "nuclear" })
-            {
-                // of several, the one farthest from the genetics complex (stable)
-                IEnumerable<Site> ofKind = sites.Where(t => t.Kind == kind);
-                Site? pick;
-                if (gen is { } g) pick = ofKind.OrderByDescending(t => GenMath.Hyp(t.X - g.X, t.Y - g.Y)).FirstOrDefault();
-                else pick = ofKind.FirstOrDefault();
-                if (pick != null) core.Add(pick);
-            }
-            if (core.Count > 4) core.RemoveRange(4, core.Count - 4);
+            if (sites.Find(t => t.Kind == "court") is not { } hubC) return;
+            var core = new List<Site> { hubC };
+            core.AddRange(sites.Where(t => t.Sector != null && t.Kind == SectorSite[t.Sector])
+                .OrderBy(t => GenMath.Hyp(t.X - hubC.X, t.Y - hubC.Y)).ThenBy(t => t.Id).Take(3));
             if (core.Count < 3) return;
             var order = new List<Site> { core[0] };
             List<Site> left = core.Skip(1).ToList();
@@ -621,7 +613,7 @@ public sealed partial class IslandWorks
             }
             for (int k = 0; k < stations.Count; k++) { stations[k].Shaft = order[k].H - stations[k].Z; stations[k].Power = order[k].Name; }
             // the elevators run on the site's power and need a monorail access key: an objective, kept in a security office
-            Site? keySite = gen ?? sites.Find(t => t.Kind == "control");
+            Site? keySite = hubC;
             if (keySite != null)
             {
                 string prefix = keySite.Name + " · ";

@@ -14,10 +14,10 @@ public class IslandRoadsTests
     // node tools/island-lab/golden-roads.js
     private static readonly Dictionary<string, Expected> Golden = new()
     {
-        ["Default"] = new(24, 7, 2, "seswswsnwwewesnsesses", 0x65D658EE4B93A1F7UL, 0x3CD3578BF6163F09UL),
-        ["Seed12"] = new(24, 2, 3, "nnswnwwnsnsneswewnsss", 0xFD645CD4F4398C95UL, 0xBBEB75EE5C88741DUL),
-        ["SmallNoCliffs"] = new(24, 3, 0, "ewnsnnwsnnwwwnwessnsw", 0xFCDCA234EB8068A0UL, 0x91BF9ACCAE3B73B3UL),
-        ["CoolWet"] = new(25, 6, 3, "eesesenewenessswsnnss", 0xB60075D3102DC205UL, 0x588FDD2A56F6D314UL),
+        ["Default"] = new(29, 2, 1, "swnsweswseeessnseewsnesee", 0xAA555E49FF51036FUL, 0xEC07543A2C978381UL),
+        ["Seed12"] = new(33, 5, 5, "snnsweenwnnnsswsssnweewsnwnn", 0xD748484D7A0061F4UL, 0xB3A97B406A5EB6B9UL),
+        ["SmallNoCliffs"] = new(35, 6, 2, "nwwnsnsnssesnnwnswnswwnwnwne", 0x6CA117A4425F7468UL, 0xF08C362E98173360UL),
+        ["CoolWet"] = new(33, 8, 2, "weesnessnnnewsswsnsnswnwns", 0x23984779D6B07F89UL, 0x6018816B42B43399UL),
     };
 
     public static IEnumerable<object[]> CaseNames => Golden.Keys.Select(k => new object[] { k });

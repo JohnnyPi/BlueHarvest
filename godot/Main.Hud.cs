@@ -171,7 +171,7 @@ public partial class Main
             return;
         }
         int sheet = areas.SheetOf(cell);
-        Item map = _sim.CreateItem(ItemKind.ParkMap, tag: BlueHarvest.Sim.World.Generation.ParkMaps.Tag(area, sheet));
+        Item map = _sim.CreateItem(ItemKind.ParkMap, tag: BlueHarvest.Sim.World.Generation.ParkMaps.Tag(world.Works.Sites[area], sheet));
         _sim.PlaceItem(map, _playerActor.Position, _playerActor.OnDeck);
         Say($"Debug: a park map of sheet {sheet + 1} of {BlueHarvest.Sim.World.Generation.FacilityAreas.SheetCount} round {world.Works.Sites[area].Name}.", quiet: true);
         Submit(new PickUpAction(map.Id));

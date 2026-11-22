@@ -52,7 +52,8 @@ public partial class IslandExplorer : Node2D
     private RichTextLabel _facts = null!;
     private RichTextLabel _hover = null!;
 
-    private static readonly (string Name, double Scale)[] Sizes = { ("Small (50%)", 50), ("Standard (75%)", 75), ("Large (100%)", 100) };
+    // Crosswake Island is generated at 100% (D-12); the smaller sizes stay for quick looks
+    private static readonly (string Name, double Scale)[] Sizes = { ("Small (50%)", 50), ("Medium (75%)", 75), ("Crosswake Island (100%)", 100) };
     private static readonly (string Name, MapLayer Layer)[] Layers =
     {
         ("Biomes", MapLayer.Biomes), ("Height", MapLayer.Height), ("Rainfall", MapLayer.Rain), ("Regions", MapLayer.Regions),
@@ -161,7 +162,7 @@ public partial class IslandExplorer : Node2D
         column.AddChild(HudTheme.Heading("Size"));
         _size = new OptionButton { FocusMode = Control.FocusModeEnum.None };
         foreach ((string name, double _) in Sizes) _size.AddItem(name);
-        _size.Selected = 1;
+        _size.Selected = 2;
         column.AddChild(_size);
 
         _generate = HudTheme.PlainButton("Generate  (G)");

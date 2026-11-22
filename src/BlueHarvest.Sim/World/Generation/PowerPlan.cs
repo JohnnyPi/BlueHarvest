@@ -8,8 +8,9 @@ namespace BlueHarvest.Sim.World.Generation;
 /// changing a single tile: the power lines between facilities become feeders, the rooms each
 /// programme names ("Backup generators", "Switch room", "UPS and batteries", "Battery room", control
 /// rooms) get their equipment, the yard fuel tanks feed the generators, some roofs carry solar
-/// panels, and every room and compound corner gets a lamp. A buried tie cable, normally open, joins
-/// the nuclear plant's network to the geothermal plant's.
+/// panels, and every room and compound corner gets a lamp. There is no nuclear plant (D-9): the geothermal
+/// plant is the grid's one source, and each facility's generators, batteries and solar panels are its backups.
+/// (A buried tie cable joins two plants' networks; with one plant there is none.)
 ///
 /// Ten years on, the run's seed decides what state it was all left in: breakers open or tripped,
 /// lines down, generators ready, broken or seized, tanks part full, batteries flat. Then two rules
@@ -21,16 +22,17 @@ public static class PowerPlan
     /// <summary>What each kind of facility draws with everything on, kW.</summary>
     private static readonly Dictionary<string, int> LoadKw = new()
     {
-        ["genetics"] = 120, ["control"] = 60, ["nuclear"] = 80, ["geothermal"] = 40, ["lab"] = 25, ["depot"] = 15,
+        ["genetics"] = 120, ["court"] = 60, ["geothermal"] = 40, ["outstation"] = 25, ["depot"] = 15,
         ["docks"] = 20, ["airstrip"] = 20, ["comms"] = 8, ["weather"] = 30, ["orgone"] = 15, ["raptors"] = 30,
-        ["ley"] = 3, ["watch"] = 3,
+        ["survey"] = 3, ["watch"] = 3, ["orchard"] = 40, ["choir"] = 15, ["drowned"] = 25, ["yard"] = 25,
     };
 
     /// <summary>Percent chance a kind of facility has solar panels on a roof: likelier the more remote.</summary>
     private static readonly Dictionary<string, int> SolarChance = new()
     {
-        ["ley"] = 95, ["watch"] = 95, ["comms"] = 85, ["weather"] = 70, ["orgone"] = 70, ["raptors"] = 60, ["lab"] = 55,
-        ["control"] = 45, ["airstrip"] = 40, ["docks"] = 40, ["depot"] = 40, ["genetics"] = 35,
+        ["survey"] = 95, ["watch"] = 95, ["comms"] = 85, ["weather"] = 70, ["orgone"] = 70, ["choir"] = 70, ["raptors"] = 60,
+        ["outstation"] = 55, ["drowned"] = 50, ["orchard"] = 50, ["court"] = 45, ["airstrip"] = 40, ["docks"] = 40, ["depot"] = 40,
+        ["yard"] = 40, ["genetics"] = 35,
     };
 
     /// <summary>Rooms where a generator stands, by name.</summary>
@@ -39,7 +41,8 @@ public static class PowerPlan
     /// <summary>Where facilities without a generator room keep a standby or emergency diesel.</summary>
     private static readonly Dictionary<string, string> StandbyRoom = new()
     {
-        ["docks"] = "Workshop", ["airstrip"] = "Workshop", ["depot"] = "Office", ["nuclear"] = "Cooling-water pumps", ["geothermal"] = "Workshop",
+        ["docks"] = "Workshop", ["airstrip"] = "Workshop", ["depot"] = "Office", ["geothermal"] = "Workshop",
+        ["court"] = "Store", ["orchard"] = "River intake pumps", ["drowned"] = "Compressor room", ["yard"] = "Workshop floor",
     };
 
     /// <summary>Where the switch panel goes, best first; failing these, the compound's first room.</summary>
@@ -50,7 +53,7 @@ public static class PowerPlan
     // Which rooms have security or motorised doors, and at what keycard level, is in RoomRules.
 
     /// <summary>Kinds whose generator matters most: they get two ways back to power of their own.</summary>
-    private static readonly HashSet<string> Majors = ["genetics", "control", "nuclear", "geothermal", "lab", "depot", "docks", "airstrip"];
+    private static readonly HashSet<string> Majors = ["genetics", "court", "geothermal", "outstation", "depot", "docks", "airstrip", "orchard", "choir", "drowned", "yard"];
 
     private sealed record RoomInfo(string Building, string Name, int X0, int Y0, int X1, int Y1)
     {
@@ -121,17 +124,16 @@ public static class PowerPlan
             RoomInfo? panelRoom = Named(PanelRooms) ?? (mine.Count > 0 ? mine[0] : null);
             grid.AddDevice(new Panel(grid.NextDeviceId, site.Id, "the switch panel", panelRoom?.Footprint ?? centre));
 
-            if (site.Kind is "nuclear" or "geothermal")
+            if (site.Kind == "geothermal")
             {
-                RoomInfo? control = Named(site.Kind == "nuclear" ? "Main control room" : "Control room") ?? panelRoom;
-                grid.AddDevice(new Plant(grid.NextDeviceId, site.Id, site.Kind == "nuclear" ? "the reactor controls" : "the turbine controls",
-                    control?.Footprint ?? centre, nuclear: site.Kind == "nuclear"));
+                RoomInfo? control = Named("Control room") ?? panelRoom;
+                grid.AddDevice(new Plant(grid.NextDeviceId, site.Id, "the turbine controls", control?.Footprint ?? centre, nuclear: false));
             }
 
             RoomInfo? genRoom = Named(GeneratorRooms) ?? (StandbyRoom.TryGetValue(site.Kind, out string? standby) ? Named(standby) : null);
             if (genRoom is not null)
             {
-                int tankLitres = site.Kind switch { "genetics" => 400, "nuclear" => 600, "geothermal" => 300, "control" => 250, _ => 120 };
+                int tankLitres = site.Kind switch { "genetics" => 400, "geothermal" => 300, "court" => 250, _ => 120 };
                 grid.AddDevice(new Generator(grid.NextDeviceId, site.Id, "the backup generator", genRoom.Footprint,
                     kw: Math.Max(5, site.LoadKw * 12 / 10), tankCentilitres: tankLitres * 100));
                 if (fuelYards.TryGetValue(site.Id, out var yard))
@@ -345,7 +347,7 @@ public static class PowerPlan
     /// </summary>
     private static void AddTie(PowerGrid grid)
     {
-        var plants = grid.Sites.Where(s => s.Kind is "nuclear" or "geothermal").ToList();
+        var plants = grid.Sites.Where(s => s.Kind == "geothermal").ToList();
         if (plants.Count < 2)
             return;
         int[] network = new int[grid.Sites.Count];

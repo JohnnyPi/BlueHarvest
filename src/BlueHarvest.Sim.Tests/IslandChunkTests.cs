@@ -7,7 +7,8 @@ namespace BlueHarvest.Sim.Tests;
 /// Stage 5 of the world-generator port: 1 m chunk detail, checked tile for tile against the island lab
 /// (tools/island-lab/golden-chunks.js). The chunks were picked to cover every kind of feature: compounds,
 /// docks, the runway, paddock gates and moats, rivers, lakes, caves, wrecks, ruins, transit, cliffs, the
-/// pali, reefs and open sea. If earlier generator tests fail too, fix those first.
+/// pali, reefs and open sea, and the P4b anchors (the reef flat's shore, the floodplain). If earlier generator
+/// tests fail too, fix those first.
 /// </summary>
 public class IslandChunkTests
 {
@@ -16,104 +17,118 @@ public class IslandChunkTests
     // node tools/island-lab/golden-chunks.js
     private static readonly Dictionary<string, Expected> Golden = new()
     {
-        ["Default"] = new(451, 113, 0x49033EFB4E39C13EUL,
+        ["Default"] = new(597, 153, 0x7D3B905B98442DDCUL,
         [
-            (0, 0, 0x2716470B97C233F5UL),
-            (503, 363, 0xF0AF376A92598D34UL),
-            (451, 113, 0x8F537A814FDBFC13UL),
-            (447, 107, 0x623F3E50CE226B96UL),
-            (481, 551, 0x2CECCD2BD7B484A9UL),
-            (643, 313, 0xCFB1E7422A246713UL),
-            (561, 279, 0x69B582C38BB74AF5UL),
-            (315, 458, 0x002E2C825EB18145UL),
-            (315, 457, 0xC223BCA782090B22UL),
-            (533, 401, 0xFCC4157A7A73D4A8UL),
-            (458, 107, 0xEA5D3FEDFD186FB3UL),
-            (448, 160, 0xCE55D31A1A342F82UL),
-            (449, 167, 0xD3B144194B280EA7UL),
-            (585, 431, 0x00F6FE28A64D6D99UL),
-            (621, 572, 0x61F3BE97313F3BC9UL),
-            (413, 442, 0x481A4161ABF8627FUL),
-            (418, 132, 0x036399692D8EF766UL),
-            (408, 140, 0x733BBF1974E56D65UL),
-            (575, 307, 0xEF5D710242D82C5FUL),
-            (574, 360, 0xB748A020D254ED8CUL),
-            (202, 194, 0xEF2C8309C9478E26UL),
-            (747, 333, 0x79BD3107E075DBE6UL),
-            (571, 551, 0x9037B2D106113F60UL),
-            (679, 327, 0xA42A102A8F7DF6D5UL),
-            (871, 519, 0x9487187656DA9829UL),
-            (103, 213, 0x6ADDC51A57F43EA8UL),
-            (493, 569, 0x1EE95B6EF7B10E7BUL),
-            (527, 271, 0xDA53F7EDDE418CF1UL),
-            (559, 279, 0x6265BFD52C5D4658UL),
-            (451, 114, 0x5C6038A281B2F84EUL),
-            (562, 269, 0x9373D0F76CDC805BUL),
-            (776, 485, 0xEAFA2B6F6BFE222DUL),
-            (391, 221, 0x4459ECEB7594347BUL),
-            (393, 75, 0x14731293458363D1UL),
-            (393, 59, 0x033DEE7346082A22UL),
-            (631, 133, 0xDB9C3F24A0A598B0UL),
-            (309, 115, 0xD4BFE2BB81256DDBUL),
-            (435, 121, 0x5E4FF86F81A1918DUL),
-        ]), // 38 chunks, 40 of 42 covers seen
-        ["Seed12"] = new(357, 87, 0x8BF5FDA3CBB115B2UL,
+            (0, 0, 0x13700D52B6611D5FUL),
+            (671, 484, 0x06775F7FFC761AE0UL),
+            (597, 153, 0x5F42CFACF7568D12UL),
+            (603, 151, 0x3586622C7EFE493CUL),
+            (683, 471, 0xE2959CDBFFB7B2C9UL),
+            (851, 417, 0x5E625175136DFBD8UL),
+            (761, 375, 0xC51E1CBD33D857DBUL),
+            (845, 653, 0xFCC42EC76E90E86CUL),
+            (643, 769, 0x32C80B49F7EDE363UL),
+            (1081, 666, 0xB397056E2E5AD30AUL),
+            (1081, 665, 0x256EA4B0B3A5D5FDUL),
+            (709, 525, 0x851D95FD1EA999FCUL),
+            (596, 140, 0xA1A615CA54FC6BFBUL),
+            (573, 176, 0x30C30CE3C74C2B6CUL),
+            (567, 181, 0x3443626F6494B63BUL),
+            (782, 569, 0xB2D1E1D9F9C0500BUL),
+            (831, 763, 0x66C1C3582CE2FFF1UL),
+            (551, 590, 0x409570F6275BBF0FUL),
+            (651, 779, 0xF62E8EC8C7708D8BUL),
+            (819, 644, 0x3B655DE16E05BC4BUL),
+            (565, 167, 0x260BA1A1B10D6E0BUL),
+            (553, 182, 0x7F733797F7D2E8F4UL),
+            (1105, 555, 0xE7CF80E858D12EF0UL),
+            (1116, 538, 0x4D747B7057233CFCUL),
+            (412, 138, 0x73607A6D2BCD8403UL),
+            (695, 133, 0x7016378E07C8C39FUL),
+            (733, 611, 0xE5D3E7B54D427F06UL),
+            (529, 549, 0x29DD31CA35543A3AUL),
+            (583, 143, 0xAC3F0C9D8399AED4UL),
+            (145, 285, 0x0F679492E32DD933UL),
+            (676, 483, 0xF45E47C75E293A78UL),
+            (709, 523, 0x58929275FDD1D441UL),
+            (682, 469, 0xB19ACD2936700948UL),
+            (1202, 641, 0xE9645A0D78D82375UL),
+            (540, 486, 0x6727ED1947C7651CUL),
+            (533, 103, 0xFC22387778DD8AA3UL),
+            (533, 87, 0x057F88AC1B322372UL),
+            (407, 175, 0x22FB9512E6C2C25AUL),
+            (687, 135, 0xF4DEC4EFB10DF1FBUL),
+            (575, 157, 0xC50E07CC345CEAD5UL),
+        ]), // 40 chunks, 38 of 42 covers seen
+        ["Seed12"] = new(739, 361, 0x163B853CEF15D170UL,
         [
             (0, 0, 0xC596B420B947D8F8UL),
             (503, 363, 0xA2E1E49401E344C0UL),
-            (357, 87, 0xEAABB179E855EBB3UL),
-            (363, 89, 0x26623EC9114015BEUL),
-            (559, 441, 0xA84CE249BFEC206EUL),
-            (545, 225, 0xEED58B8CA6A94DBEUL),
-            (571, 249, 0xD4C735081D2CA2A0UL),
+            (739, 361, 0xEC1F1DCBE408D0C9UL),
+            (737, 355, 0x49934BFD62CF197CUL),
+            (469, 359, 0xD9E072ABF3A20C3BUL),
+            (541, 215, 0xAAE20EC56E51266FUL),
+            (571, 249, 0x296FA003B95CF6B0UL),
+            (515, 419, 0xF6D3EA770E97E2FAUL),
+            (475, 649, 0x5A890B01F7B1601BUL),
             (791, 540, 0x50EF39DFF14D40CAUL),
-            (791, 539, 0xFF518D445B411F35UL),
+            (791, 539, 0xEC015DC66905D97FUL),
             (469, 323, 0xA9E9B74B1D0B37A4UL),
-            (372, 90, 0xEEE30AFD0460EEDCUL),
-            (331, 162, 0xF6250C626831641FUL),
-            (327, 169, 0xBAC089CCD7D72C00UL),
+            (748, 360, 0xA4B2137BC4527EA2UL),
+            (659, 358, 0xE7A41635DCBD03C3UL),
+            (649, 355, 0x742546622F62E68FUL),
             (474, 305, 0x5C06C29478BFFEBAUL),
             (415, 280, 0x4DA5B516157A795CUL),
             (363, 468, 0x10088A1A7B93CE4BUL),
-        ]), // 16 chunks, 32 of 42 covers seen
-        ["SmallNoCliffs"] = new(419, 333, 0x6E30405E4F9D0397UL,
+            (489, 651, 0x74C82F2C41D6D4B5UL),
+            (503, 427, 0xCCDE03251334972EUL),
+        ]), // 20 chunks, 34 of 42 covers seen
+        ["SmallNoCliffs"] = new(425, 303, 0xAD588993CE0A9BBEUL,
         [
             (0, 0, 0xA8F42DA9AE204A69UL),
             (335, 242, 0xD209A392F64F2051UL),
-            (419, 333, 0x47F483110EE5642EUL),
-            (429, 335, 0x8E3D38B210CA152BUL),
-            (181, 175, 0xAA242ACDE0AA20E8UL),
-            (367, 205, 0x33970A2602917379UL),
-            (357, 183, 0x253C6A9ADFCE53D9UL),
+            (425, 303, 0x3D3B9957A443E11FUL),
+            (419, 299, 0xB763171CC7301B17UL),
+            (339, 253, 0x6A4B748C7C121947UL),
+            (375, 209, 0xBA1BD505E76C93C1UL),
+            (357, 183, 0x06A6816093FE90A9UL),
+            (215, 183, 0x0F6104F76B2259B6UL),
+            (449, 323, 0x2938E8116631BA6BUL),
             (250, 382, 0x4E89C7EB0FC8BC12UL),
-            (251, 381, 0x9A736B4163784BF3UL),
-            (349, 289, 0x0A483E12575267EAUL),
-            (416, 319, 0x0D94CFAB2CF4DEC1UL),
-            (376, 277, 0xA75874DFE49CD023UL),
-            (371, 271, 0xDD14DEE75551FF86UL),
-            (255, 201, 0xF179A018DA2C49F5UL),
+            (251, 381, 0x6DBC5BB7C30A51B9UL),
+            (349, 289, 0xB81EA100B9A5F2CAUL),
+            (436, 300, 0xE8AAEA0A9C248277UL),
+            (385, 285, 0x3657976C61462B57UL),
+            (379, 281, 0x354EEE7C52B6175CUL),
+            (255, 201, 0x1233C745F2B5C2EAUL),
             (163, 177, 0x7F085D88D2A5E30CUL),
             (239, 272, 0x92BD925DA3A7F5EDUL),
-        ]), // 16 chunks, 31 of 42 covers seen
-        ["CoolWet"] = new(421, 133, 0xA72EA2AE98749C64UL,
+            (457, 325, 0x80729F3B698073F1UL),
+            (226, 191, 0xE5BCA34D936CA4A8UL),
+        ]), // 20 chunks, 32 of 42 covers seen
+        ["CoolWet"] = new(421, 133, 0xD31A84C7C9043100UL,
         [
             (0, 0, 0x93F85708B6401F2CUL),
             (403, 290, 0x9CF32C2BDB7BED4AUL),
-            (421, 133, 0x54F5DC147355722FUL),
-            (425, 139, 0xE071559F387DFBB3UL),
-            (315, 235, 0xA0CBB0BDDA8F5B9CUL),
-            (537, 271, 0xA368835EAB401F1AUL),
-            (511, 239, 0x404A8DC974995C5EUL),
+            (421, 133, 0xB1C5083F815DCF6BUL),
+            (425, 139, 0x592DB26861319873UL),
+            (441, 301, 0xD244099DCA05DD64UL),
+            (487, 229, 0xB543A8CAABC49C6AUL),
+            (511, 239, 0xE7D8B275D294879DUL),
+            (351, 237, 0x3517446770C11CAEUL),
+            (429, 521, 0xCC31E0E9C2227CB5UL),
             (573, 438, 0xD9F510FC6652767BUL),
-            (573, 437, 0xF63527B032043220UL),
+            (573, 437, 0xEA5651FC48269C7BUL),
             (407, 307, 0xF53A025091E4EECCUL),
-            (432, 132, 0x7287300BC0FCDE1FUL),
-            (403, 236, 0xC7BFA7DC96C5E58AUL),
-            (403, 243, 0x9800AF44D963BBB4UL),
+            (432, 134, 0xF288534538B6E1E6UL),
+            (401, 238, 0xB32490C59A9FEC54UL),
+            (401, 245, 0x8F20FBCB7123A837UL),
             (458, 348, 0x57BDE0CAC147025BUL),
             (510, 395, 0xB3631E3B7CA0D2CBUL),
             (348, 381, 0x017234E5BD3696EBUL),
-        ]), // 16 chunks, 33 of 42 covers seen
+            (441, 523, 0x41E7D5D6394A6815UL),
+            (348, 232, 0xB0ACCB1315954443UL),
+        ]), // 20 chunks, 35 of 42 covers seen
     };
 
     public static IEnumerable<object[]> CaseNames => Golden.Keys.Select(k => new object[] { k });
@@ -176,7 +191,7 @@ public class IslandChunkTests
     }
 
     [Fact]
-    public void GeneticsComplex_HasWallsDoorsAndNamedRooms()
+    public void TheMenagerie_HasWallsDoorsAndNamedRooms()
     {
         IslandWorks works = TestIslands.Works("Default");
         Site gen = works.Sites.First(t => t.Kind == "genetics");
@@ -184,7 +199,7 @@ public class IslandChunkTests
         Assert.Contains((byte)Cover.Wall, c.Cover);
         Assert.Contains((byte)Cover.Floor, c.Cover);
         Assert.Contains((byte)Cover.Door, c.Cover);
-        Assert.Contains(c.Label, l => l >= 0 && works.Labels[l].StartsWith("Genetics complex · ", StringComparison.Ordinal));
+        Assert.Contains(c.Label, l => l >= 0 && works.Labels[l].StartsWith(gen.Name + " · ", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -232,13 +247,15 @@ public class IslandChunkTests
             }
         }
         Assert.True(missing.Count == 0, $"{missing.Count} of {doors} doors aren't drawn: {string.Join("; ", missing)}");
-        Assert.Equal(name == "SmallNoCliffs" ? 323 : 315, doors); // from the island lab
+        int expected = name switch { "Default" => 365, "Seed12" => 413, "SmallNoCliffs" => 413, _ => 381 }; // from the island lab
+        Assert.Equal(expected, doors);
     }
 
     /// <summary>
     /// Every building stands on level ground (step 25a-4): each one's tiles, walls and doors included, are
-    /// all at one height, inside compounds and out. Buildings that overlap another are left out: on
-    /// SmallNoCliffs the monorail and summit lift stations at the Control centre share ground (polish item P1).
+    /// all at one height, inside compounds and out. Buildings that overlap another are left out: since the
+    /// Crosswake program (P4c) none do on these islands (polish item P1, the stations sharing ground at the old
+    /// Control centre, is gone).
     /// </summary>
     [Theory]
     [MemberData(nameof(CaseNames))]
@@ -274,13 +291,13 @@ public class IslandChunkTests
                 uneven.Add($"{works.Labels[b.Label]}: {hi - lo:0.00} m");
         }
         Assert.True(uneven.Count == 0, $"{uneven.Count} buildings aren't level: {string.Join("; ", uneven)}");
-        Assert.Equal(name == "SmallNoCliffs" ? 2 : 0, skipped);
+        Assert.Equal(0, skipped);
     }
     /// <summary>
     /// Step 25b-3b: every outside door of a building opens level onto dry ground, within the half metre a
     /// person steps up or down, so a building can always be walked into and out of. Buildings that overlap
-    /// another are left out (polish item P1). On SmallNoCliffs the monorail station at the Orgone research
-    /// station still opens into the lake from both doors (polish item P2).
+    /// another are left out (polish item P1). On SmallNoCliffs the monorail station at the Vitality Institute
+    /// (the old Orgone research station) still opens into the lake from both doors (polish item P2).
     /// </summary>
     [Theory]
     [MemberData(nameof(CaseNames))]

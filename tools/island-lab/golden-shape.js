@@ -62,7 +62,7 @@ function groups(w) {
 }
 const CASES = [
   ['Default', {}],
-  ['Seed12', { seed: 12 }],
+  ['Seed12', { seed: 12, scale: 75 }],
   ['SmallNoCliffs', { seed: 44, scale: 50, wind: 100, cliffs: 0, iterations: 5, pali: 0.5 }]
 ];
 const out = [];

@@ -16,14 +16,14 @@ public class IslandTransitTests
     // node tools/island-lab/golden-transit.js
     private static readonly Dictionary<string, Expected> Golden = new()
     {
-        ["Default"] = new(1, 5, 4, 323, 863,
-            0x4631DD3A335FF450UL, 0x6DE6CAB94222A487UL, 0xE88681A3D9B3BF99UL, 0xEE105248EB246947UL, 0xCC719AE45B823DCAUL, 0x869F8F69286A0604UL),
-        ["Seed12"] = new(1, 5, 4, 323, 858,
-            0x9CC902BC9204FB0CUL, 0xE433868004CA4768UL, 0xC5DF7F3D2A96BBDEUL, 0x056B75C26DFCACBFUL, 0xD5AC1204B8BA5652UL, 0xFF4E18490A2216CFUL),
-        ["SmallNoCliffs"] = new(2, 5, 4, 330, 865,
-            0x92B319A27741ABF5UL, 0xE903AC210E6E8208UL, 0xCE8D8A063A89B00AUL, 0x63E0117754FDF23AUL, 0x3355E2C8AAC931D1UL, 0xB8B7D55FA476265EUL),
-        ["CoolWet"] = new(1, 5, 4, 323, 837,
-            0xE8C95C6E00A2470AUL, 0x01D04671DD1A1C89UL, 0x844A7BDC674C3828UL, 0xDF6F5966668B7B75UL, 0xB5967A5DD6E53897UL, 0xCD1605C7D53076E8UL),
+        ["Default"] = new(1, 3, 4, 378, 943,
+            0x6508374AFCC44764UL, 0x37E3C245F42A4A83UL, 0xD0C5EB116F22B575UL, 0xB301EA2198D0630FUL, 0xA8EFAE773E8ECC38UL, 0xDD40B49FE75CF0F4UL),
+        ["Seed12"] = new(1, 4, 4, 426, 1071,
+            0xADE551567DD2D913UL, 0x3FFC2CDC5FDF426AUL, 0x5BB6B75E2D98BC6DUL, 0x79619430822C9CB8UL, 0x97BF93017587DB55UL, 0xA59211DC1C5E06C3UL),
+        ["SmallNoCliffs"] = new(1, 4, 4, 426, 1059,
+            0x79B4FB44B1F168B5UL, 0xED9950036F9BDC11UL, 0x91B51C3DE5CF3D73UL, 0x72798B2F0121278AUL, 0x3E4EC70B4BC044F5UL, 0x70028310F2921208UL),
+        ["CoolWet"] = new(1, 4, 4, 394, 977,
+            0x430F46135D894E82UL, 0xBFD927F62D1B195DUL, 0xA52FA6B8B00DAA55UL, 0xFCF31881161173C3UL, 0x7940B602CBAB3184UL, 0xBA0EB92AA391EE3DUL),
     };
 
     public static IEnumerable<object[]> CaseNames => Golden.Keys.Select(k => new object[] { k });
@@ -149,13 +149,13 @@ public class IslandTransitTests
     }
 
     [Fact]
-    public void MonorailKey_IsInTheGeneticsSecurityOffice()
+    public void MonorailKey_IsAtTheCourt_InCentralAdministrationsSecurityLobby()
     {
         IslandWorks w = TestIslands.Works("Default");
         Objective key = Assert.Single(w.Objectives);
         Assert.Equal("monorail-key", key.Key);
-        Assert.Equal("Genetics complex", key.Site);
-        Assert.Equal("Administration and security · Security office", key.Room);
+        Assert.Equal("Court of Unfinished Measures", key.Site);
+        Assert.Equal("Central Administration entrance · Security lobby", key.Room);
         Assert.NotNull(w.Monorail);
         Assert.All(w.Monorail!.Stations, st => Assert.True(st.Shaft >= 20, st.Name));
     }

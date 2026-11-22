@@ -14,10 +14,10 @@ public class IslandClimateTests
     // node tools/island-lab/golden-climate.js
     private static readonly Dictionary<string, Expected> Golden = new()
     {
-        ["Default"] = new(8, 0x12C012BF41711B90UL, 0x5C0F2A6B9D32381DUL, 0xB59CFCBD4929C3AEUL),
-        ["Seed12"] = new(10, 0xE60AB1813ADA4C97UL, 0x1AD774AE01434A26UL, 0xAB8F6CDFE5AD0A8BUL),
-        ["SmallNoCliffs"] = new(7, 0xD9BA286A2CF5382EUL, 0x3CE159D9D39C92D8UL, 0xE12B87DE97BC7E3DUL),
-        ["CoolWet"] = new(8, 0x71AC6133EE50AE21UL, 0x36BB0523079F3091UL, 0x3559AE9B363B5DD0UL),
+        ["Default"] = new(11, 0x60882E16BC0814EBUL, 0x45B4B7C97698514DUL, 0x2E1FC0AB03207B3CUL),
+        ["Seed12"] = new(10, 0xE60AB1813ADA4C97UL, 0x123D0A9B8E1E1BB8UL, 0xAB8F6CDFE5AD0A8BUL),
+        ["SmallNoCliffs"] = new(7, 0xD9BA286A2CF5382EUL, 0x3D870577BD172909UL, 0xE12B87DE97BC7E3DUL),
+        ["CoolWet"] = new(8, 0x71AC6133EE50AE21UL, 0x7FB51F414EC38757UL, 0x3559AE9B363B5DD0UL),
     };
 
     public static IEnumerable<object[]> CaseNames => Golden.Keys.Select(k => new object[] { k });

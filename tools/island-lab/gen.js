@@ -12,11 +12,13 @@ var IslandGen = (function () {
   const CHUNK = 64;
 
   const DEFAULTS = {
-    seed: 7, scale: 75, cell: 128, peak: 1100, saddle: 240, rough: 0.6, warp: 5,
+    seed: 7, scale: 100, cell: 128, peak: 1100, saddle: 240, rough: 0.6, warp: 5,
     wind: 60, rain: 1, erosion: 1, iterations: 8, lakeDepth: 40, lakeArea: 0.15, riverQ: 0.1,
     pali: 0.85, cliffs: 1.2, seaTemp: 24, cloudBase: 650, wetlands: 1,
     paddockSize: 1, tubes: 5, wrecks: 10, ruins: 16, transit: 1,
-    program: 1 // 2 = the Crosswake Island site program (P4a), whose default scale is 100
+    // 2 = the Crosswake Island site program (P4a, with the P4b anchors), ported to C# in P4c: the default since then.
+    // 1 = the old program (14 facility kinds, at 75% by default), kept so the old golden values can still be reproduced
+    program: 2
   };
 
   // ---------- portable maths ----------
@@ -1640,7 +1642,7 @@ var IslandGen = (function () {
         }
       }
     }
-    if (p.stopAfter === 'sites') return { stop: { sites, leylines, paddocks, padCell, power, powerKm, labels, prims, mx, my } };
+    if (p.stopAfter === 'sites') return { stop: { sites, leylines, paddocks, padCell, power, powerKm, labels, prims, mx, my, program2: P2 ? Object.assign({}, P2, { R: undefined }) : null } };
     // ---------- caves: lava tubes on the young flanks, sea caves in the cliffs ----------
     say('Tracing lava tubes');
     const caves = [];
@@ -2020,6 +2022,7 @@ var IslandGen = (function () {
   // ---------- the pipeline ----------
   function generate(params, progress) {
     const p = Object.assign({}, DEFAULTS, params);
+    if (p.program === 1 && !(params && params.scale != null)) p.scale = 75; // the old program's scale
     if (p.program === 2 && !(params && params.scale != null)) p.scale = 100;
     const say = progress || function () { };
     const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -3025,7 +3028,8 @@ var IslandGen = (function () {
   }
 
   return {
-    DEFAULTS, COVER, BIOMES, REGIONS, FAC, CORPS, FAUNA, PADDOCKS, CHUNK, generate, classify, transferables, indexRivers, chunk, riverWidth, riverDepth, bicubic, bilinear, hash2, facilityAreas, AREA_SHEETS,
+    DEFAULTS, COVER, BIOMES, REGIONS, FAC, CORPS, FAUNA, PADDOCKS, CHUNK,
+    FAC2, POWERS, SECTORS, SECTOR_SITE, PADDOCKS2, RUINS7, LEY2, STATES, RUIN_KINDS2, ANCHOR_KINDS2, generate, classify, transferables, indexRivers, chunk, riverWidth, riverDepth, bicubic, bilinear, hash2, facilityAreas, AREA_SHEETS,
     _internal: { sample, makeAnchors, noise, fbm, ridged, hashStr, mix, hash2, stream, makeRng, Heap, chamfer, boxBlur, components, chaikin, D, smax, smoothstep, clamp, flood, buildTree, makeTree }
   };
 })();

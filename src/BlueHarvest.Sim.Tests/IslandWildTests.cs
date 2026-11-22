@@ -14,10 +14,10 @@ public class IslandWildTests
     // node tools/island-lab/golden-wild.js
     private static readonly Dictionary<string, Expected> Golden = new()
     {
-        ["Default"] = new(9, 12, 16, 32155, 0x6BACBD8EE6FF3157UL, 0xC40DD5DC92843214UL, 0x58E0B45C200CB090UL, 0xC9D5F2CAAAF71FD8UL),
-        ["Seed12"] = new(9, 12, 16, 28625, 0x7F96CB3EB730BF18UL, 0xBE06CFE9987A68BDUL, 0x3C9F08392D953F84UL, 0xFD567CA7C056960BUL),
-        ["SmallNoCliffs"] = new(9, 12, 16, 14698, 0x3260BD2AC3DA9139UL, 0xD5C9DA2E056CACEBUL, 0xABBDE851105B830CUL, 0xA28CF5DE873D73FCUL),
-        ["CoolWet"] = new(9, 12, 16, 22939, 0x2BAEA76333B8EC4CUL, 0xF413F410103AF549UL, 0xBF902280B660FAFAUL, 0x9620891A0C8375CAUL),
+        ["Default"] = new(16, 22, 28, 55094, 0x91839A1F54B458C8UL, 0x93D5F6E2BF6EFBD0UL, 0xF8A038D4D3F96D13UL, 0xBBC8B21CBBF488E0UL),
+        ["Seed12"] = new(9, 12, 16, 28274, 0x7F96CB3EB730BF18UL, 0xBE06CFE9987A68BDUL, 0xD43B90A143C44DE3UL, 0xB1D754EB8EE9B40DUL),
+        ["SmallNoCliffs"] = new(4, 5, 7, 14660, 0xB6D47FAA46B003C9UL, 0x8906F266BFB88A72UL, 0xFF5644FAC9F9834CUL, 0xBDE2D8A8272FD3FAUL),
+        ["CoolWet"] = new(6, 7, 10, 22592, 0xF13813CD4F909A06UL, 0x2E82B68A05A40EE4UL, 0x1E31371E7044F481UL, 0x39C2E5DDC37F0733UL),
     };
 
     public static IEnumerable<object[]> CaseNames => Golden.Keys.Select(k => new object[] { k });
@@ -73,7 +73,7 @@ public class IslandWildTests
     {
         IslandWorks w = TestIslands.Works(name);
         var h = new GenHasher().I(w.Ruins.Count);
-        foreach (Ruin q in w.Ruins) h.I(q.Id).S(q.Kind).D(q.X).D(q.Y).D(q.R).S(q.Era).S(q.Name).D(q.Rot);
+        foreach (Ruin q in w.Ruins) h.I(q.Id).S(q.Kind).D(q.X).D(q.Y).D(q.R).S(q.Era).S(q.Name).D(q.Rot).S(q.SatelliteOf ?? "");
         Assert.Equal(Golden[name].RuinGroup, h.Value);
     }
 

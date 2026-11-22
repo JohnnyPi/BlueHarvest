@@ -7,7 +7,7 @@ public readonly record struct RoomSpec(string Name, int Weight, Furnish Furnish 
 
 public sealed record BuildingSpec(string Name, int W, int H, RoomSpec[] Rooms);
 
-public enum YardKind : byte { Helipad, Tanks, Tower, Parking, Dish, Dome, Ring, Switchyard, Antennas, Towers, Marker, Pen }
+public enum YardKind : byte { Helipad, Tanks, Tower, Parking, Dish, Dome, Ring, Switchyard, Antennas, Towers, Marker, Pen, Courts, Stones }
 
 /// <summary>An outdoor feature of a compound. A and B are its numbers (count, size or radius, by kind).</summary>
 public sealed record YardSpec(YardKind Kind, string Label = "", int A = 0, int B = 0);
@@ -50,14 +50,6 @@ public static class FacilityPrograms
             new("Vehicle garage", 28, 16, [Rm("Vehicle bays", 4), Rm("Workshop", 1, Fur)]),
         ],
         [new(YardKind.Helipad), new(YardKind.Tanks, "Fuel tanks", 3), new(YardKind.Tower, "Water tower"), new(YardKind.Parking, "", 30, 16)]),
-        ["control"] = new(
-        [
-            new("Operations centre", 50, 28, [Rm("Control room", 5, Con), Rm("Data centre", 2, Rack), Rm("Briefing room", 2, Fur), Rm("Radio room", 1, Con), Rm("Offices", 2, Fur), Rm("Washrooms", 1), Rm("Canteen", 2, Fur)]),
-            new("Staff quarters", 34, 15, Join(Bunks(5), Rm("Showers", 1), Rm("Washrooms", 1), Rm("Kitchen", 2, Con))),
-            new("Generator house", 16, 12, [Rm("Backup generators", 3, Tnk), Rm("Switch room", 1, Con)]),
-            new("Motor pool", 26, 14, [Rm("Vehicle bays", 4), Rm("Parts store", 1, Rack)]),
-        ],
-        [new(YardKind.Tower, "Radio mast"), new(YardKind.Helipad), new(YardKind.Parking, "", 26, 14)]),
         ["docks"] = new(
         [
             new("Warehouse", 40, 24, [Rm("Cargo hall", 5, Rack), Rm("Cold store", 1, Rack), Rm("Loading office", 1, Fur)]),
@@ -78,15 +70,6 @@ public static class FacilityPrograms
             new("Generator shed", 9, 7, [Rm("Generator", 1, Tnk)]),
         ],
         [new(YardKind.Tower, "Lattice mast"), new(YardKind.Dish, "Satellite dish")]),
-        ["nuclear"] = new(
-        [
-            new("Turbine hall", 64, 24, [Rm("Turbine hall", 6, Tnk), Rm("Feedwater pumps", 1, Tnk)]),
-            new("Control building", 32, 18, [Rm("Main control room", 3, Con), Rm("Shift office", 1, Fur), Rm("Health physics", 1, Rack), Rm("Kitchen", 1, Con), Rm("Washrooms", 1), Rm("Security", 1, Con)]),
-            new("Spent-fuel store", 22, 14, [Rm("Fuel pool", 2, Tnk), Rm("Cask store", 1, Rack)]),
-            new("Pump house", 14, 10, [Rm("Cooling-water pumps", 1, Tnk)]),
-            new("Guard post", 8, 6, [Rm("Gatehouse", 1, Con)]),
-        ],
-        [new(YardKind.Dome, "Reactor containment", 22), new(YardKind.Switchyard)]),
         ["geothermal"] = new(
         [
             new("Power house", 42, 20, [Rm("Turbine hall", 4, Tnk), Rm("Control room", 1, Con), Rm("Workshop", 1, Fur)]),
@@ -104,7 +87,8 @@ public static class FacilityPrograms
             new("Laboratory", 26, 16, [Rm("Laboratory", 2, Fur), Rm("Records", 1, Rack), Rm("Quarters", 1, Bnk), Rm("Washroom", 1)]),
         ],
         [new(YardKind.Towers, "Cloudbuster array", 3)]),
-        ["lab"] = new(
+        // a sector's outstation is the old research lab
+        ["outstation"] = new(
         [
             new("Laboratory", 38, 20, [Rm("Wet lab", 2, Fur), Rm("Genetics lab", 2, Con), Rm("Specimen store", 1, Rack), Rm("Animal holding", 2, Rack), Rm("Offices", 1, Fur), Rm("Washrooms", 1)]),
             new("Bunkhouse", 24, 13, Join(Bunks(3), Rm("Kitchen", 1, Con), Rm("Washrooms", 1))),
@@ -118,7 +102,8 @@ public static class FacilityPrograms
             new("Depot office", 14, 10, [Rm("Dispatch", 1, Con), Rm("Washroom", 1)]),
         ],
         [new(YardKind.Tanks, "Fuel tanks", 4), new(YardKind.Parking, "", 30, 16)]),
-        ["ley"] = new(
+        // an ADM survey post is the old ley-line survey hut
+        ["survey"] = new(
         [new("Survey hut", 16, 10, [Rm("Map room", 2, Fur), Rm("Instrument room", 1, Con), Rm("Bunks", 1, Bnk)])],
         [new(YardKind.Tower, "Instrument mast"), new(YardKind.Marker, "Survey marker")]),
         ["watch"] = new(
@@ -131,6 +116,47 @@ public static class FacilityPrograms
             new("Holding block", 34, 10, [Rm("Holding cell 1", 1), Rm("Holding cell 2", 1), Rm("Holding cell 3", 1), Rm("Holding cell 4", 1), Rm("Squeeze chute", 1)]),
         ],
         [new(YardKind.Pen, "Raptor enclosure", 120, 90), new(YardKind.Tower, "Feeding gantry")]),
+        // ---- Crosswake Island's surface sites (P4c) ----
+        // RUIN-07's surface: ancient stones, the 1916 Meridian Station building, Central Administration's way down
+        ["court"] = new(
+        [
+            new("Meridian Station survey building", 30, 16, [Rm("Map room", 2, Fur), Rm("Instrument room", 1, Con), Rm("Quarters", 1, Bnk), Rm("Store", 1, Rack)]),
+            new("Central Administration entrance", 28, 18, [Rm("Security lobby", 2), Rm("Security office", 1, Con), Rm("Stair hall", 1), Rm("Guard room", 1, Bnk)]),
+            new("Survey annexe", 24, 12, [Rm("Offices", 2, Fur), Rm("Radio room", 1, Con), Rm("Washrooms", 1)]),
+        ],
+        [new(YardKind.Courts, "Approach court", 6), new(YardKind.Stones, "Standing measure"), new(YardKind.Tower, "Survey mast")]),
+        ["orchard"] = new(
+        [
+            new("Greenhouse range A", 60, 20, [Rm("Growing house", 4, Fur), Rm("Potting room", 1, Rack)]),
+            new("Greenhouse range B", 60, 20, [Rm("Growing house", 4, Fur), Rm("Potting room", 1, Rack)]),
+            new("Cornucopia laboratory", 30, 16, [Rm("Plant genetics lab", 2, Con), Rm("Seed vault", 1, Rack), Rm("Offices", 1, Fur), Rm("Washrooms", 1)]),
+            new("Packing shed", 26, 14, [Rm("Packing floor", 3), Rm("Cold store", 1, Rack)]),
+            new("Pump house", 12, 10, [Rm("River intake pumps", 1, Tnk)]),
+            new("Quarters", 24, 13, Join(Bunks(3), Rm("Kitchen", 1, Con), Rm("Washrooms", 1))),
+        ],
+        [new(YardKind.Tanks, "Irrigation tanks", 3), new(YardKind.Tower, "Water tower"), new(YardKind.Parking, "", 20, 12)]),
+        ["choir"] = new(
+        [
+            new("Listening hall", 36, 18, [Rm("Resonance chamber", 3, Rack), Rm("Recording booths", 2, Con), Rm("Sound archive", 1, Rack)]),
+            new("Cliff lodge", 26, 13, Join(Bunks(3), Rm("Kitchen", 1, Con), Rm("Washrooms", 1))),
+            new("Generator shed", 10, 8, [Rm("Generator", 1, Tnk)]),
+        ],
+        [new(YardKind.Towers, "Bell frames", 3), new(YardKind.Tower, "Cliff winch")]),
+        ["drowned"] = new(
+        [
+            new("Observatory", 32, 18, [Rm("Pressure-lock hall", 2, Con), Rm("Instrument room", 1, Con), Rm("Chart room", 1, Fur), Rm("Records", 1, Rack)]),
+            new("Dive store", 24, 12, [Rm("Dive lockers", 2, Rack), Rm("Compressor room", 1, Tnk)]),
+            new("Quarters", 24, 13, Join(Bunks(3), Rm("Galley", 1, Con), Rm("Washrooms", 1))),
+        ],
+        [new(YardKind.Dome, "Observatory dome", 8), new(YardKind.Tower, "Tide gauge")]),
+        // ADM's coastal service yard: the P5 slice's maintenance yard
+        ["yard"] = new(
+        [
+            new("Maintenance workshop", 34, 18, [Rm("Workshop floor", 3), Rm("Electrical bench", 1, Con), Rm("Parts store", 1, Rack)]),
+            new("Pump house", 16, 10, [Rm("Pump room", 1, Tnk), Rm("Controller room", 1, Con)]),
+            new("Stores", 24, 14, [Rm("Store", 3, Rack), Rm("Office", 1, Fur)]),
+        ],
+        [new(YardKind.Tanks, "Fuel tanks", 3), new(YardKind.Parking, "", 20, 12)]),
     };
 
     /// <summary>The viewing station at each paddock gate.</summary>
@@ -149,6 +175,8 @@ public static class FacilityPrograms
         YardKind.Towers => (y.A * 10, 10),
         YardKind.Marker => (4, 4),
         YardKind.Pen => (y.A, y.B),
+        YardKind.Courts => (y.A * 26, 26),
+        YardKind.Stones => (16, 16),
         _ => (8, 8),
     };
 
@@ -388,6 +416,20 @@ public static class FacilityPrograms
             case YardKind.Pen:
                 prims.Add(new Prim { Kind = PrimKind.Pen, X0 = x0, Y0 = y0, X1 = x1, Y1 = y1, Label = Lab(labels, site + " · " + y.Label) });
                 break;
+            case YardKind.Courts: // ancient approach courts: rings of worn stone with a paved floor, each labelled
+                for (int k = 0; k < y.A; k++)
+                    prims.Add(new Prim { Kind = PrimKind.Circle, X = x0 + 13 + k * 26, Y = cy, R = 10, Cover = Cover.Ruin, Ring = true, Fill = Cover.Floor, Label = Lab(labels, site + " · " + y.Label + " " + (k + 1)) });
+                break;
+            case YardKind.Stones: // eight standing stones in a ring
+            {
+                int label = Lab(labels, site + " · " + y.Label);
+                for (int k = 0; k < 8; k++)
+                {
+                    double a = k * GenMath.Pi / 4;
+                    prims.Add(new Prim { Kind = PrimKind.Circle, X = cx + GenMath.Cos(a) * 6, Y = cy + GenMath.Sin(a) * 6, R = 1.2, Cover = Cover.Ruin, Label = label });
+                }
+                break;
+            }
         }
     }
 }

@@ -19,7 +19,7 @@ function hasher() { // BlueHarvest.Sim.Core.StateHasher
 }
 const CASES = [
   ['Default', {}],
-  ['Seed12', { seed: 12 }],
+  ['Seed12', { seed: 12, scale: 75 }],
   ['SmallNoCliffs', { seed: 44, scale: 50, wind: 100, cliffs: 0, iterations: 5, pali: 0.5 }],
   ['CoolWet', { seed: 9, scale: 60, seaTemp: 21, cloudBase: 500, wetlands: 1.5, rain: 1.3 }]
 ];
@@ -33,12 +33,14 @@ for (const [name, params] of CASES) {
   const at = (x, y) => { const cx = Math.floor(x / 64), cy = Math.floor(y / 64), k = cx + ',' + cy; if (!seen.has(k)) { seen.add(k); picks.push([cx, cy]); } };
   const site = k => W.sites.find(t => t.kind === k);
   at(0, 0); at(w.W / 2, w.H / 2);
-  for (const k of ['genetics', 'raptors', 'nuclear', 'weather', 'comms']) { const t = site(k); if (t) at(t.x, t.y); }
+  for (const k of ['genetics', 'raptors', 'court', 'weather', 'comms', 'orchard', 'drowned']) { const t = site(k); if (t) at(t.x, t.y); }
   { const t = site('docks'); if (t) { at(t.x + t.dir[0] * (t.r + 60), t.y + t.dir[1] * (t.r + 60)); at(t.x + t.r, t.y + t.r); } }
   { const t = site('airstrip'); if (t) at((t.runway.x1 + t.runway.x2) / 2, (t.runway.y1 + t.runway.y2) / 2); }
-  for (const q of W.paddocks) if (q.key === 'rex' || q.key === 'trike') { at(q.gate[0], q.gate[1]); if (q.wallow) at(q.wallow[0], q.wallow[1]); }
+  for (const q of W.paddocks) if (q.key === 'tyrant' || q.key === 'ceratopsian') { at(q.gate[0], q.gate[1]); if (q.wallow) at(q.wallow[0], q.wallow[1]); }
   { const r = w.rivers[0]; at(r.xs[r.xs.length >> 1], r.ys[r.ys.length >> 1]); at(r.xs[r.xs.length - 1], r.ys[r.ys.length - 1]); }
   if (w.lakes.length) at(w.lakes[0].cx, w.lakes[0].cy);
+  if (w.reefFlat) at(w.reefFlat.x, w.reefFlat.y); // the P4b anchors: the reef flat's shore cell, and the floodplain's centre
+  if (w.floodplain) at(w.floodplain.x, w.floodplain.y);
   if (name === 'Default') {
     for (const c of W.caves.slice(0, 2)) { at(c.mouths[0][0], c.mouths[0][1]); if (c.skylights.length) at(c.skylights[0][0], c.skylights[0][1]); }
     at(W.caves[W.caves.length - 1].xs[0], W.caves[W.caves.length - 1].ys[0]);

@@ -83,8 +83,8 @@ public sealed partial class Simulation
     /// <summary>Picking up a park map charts its sheet (step 25b-2).</summary>
     private void ChartParkMap(Actor actor, Item item)
     {
-        if (item.Kind != ItemKind.ParkMap || !_knowledge.TryGetValue(actor.Id, out MapKnowledge? k)
-            || !ParkMaps.TryParse(item.Tag, out int area, out int sheet))
+        if (item.Kind != ItemKind.ParkMap || _mapWorld is null || !_knowledge.TryGetValue(actor.Id, out MapKnowledge? k)
+            || !ParkMaps.TryParse(item.Tag, _mapWorld.Works, out int area, out int sheet))
             return;
         bool fresh = k.Chart(area, sheet);
         MapCharted?.Invoke(actor, item, new ChartedSheet(area, sheet), fresh);
@@ -98,7 +98,7 @@ public sealed partial class Simulation
     private void ReadParkMap(Actor actor, Item item)
     {
         if (item.Kind != ItemKind.ParkMap || _mapWorld is null || !_knowledge.TryGetValue(actor.Id, out MapKnowledge? k)
-            || !ParkMaps.TryParse(item.Tag, out int area, out int sheet) || !k.MarkRead(item.Id))
+            || !ParkMaps.TryParse(item.Tag, _mapWorld.Works, out int area, out int sheet) || !k.MarkRead(item.Id))
             return;
         k.Chart(area, sheet); // a map read is a map in hand
         ulong roll = ParkMaps.ReadHash(Rng.Seed, item.Id, actor.Id);

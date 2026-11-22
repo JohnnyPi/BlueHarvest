@@ -409,7 +409,7 @@ public class PowerGridTests
 /// <summary>The island's network as PowerPlan builds it from the generated facilities.</summary>
 public class PowerPlanTests
 {
-    private static readonly HashSet<string> Majors = ["genetics", "control", "nuclear", "geothermal", "lab", "depot", "docks", "airstrip"];
+    private static readonly HashSet<string> Majors = ["genetics", "court", "geothermal", "outstation", "depot", "docks", "airstrip", "orchard", "choir", "drowned", "yard"];
 
     [Theory]
     [InlineData("Default")]
@@ -425,7 +425,8 @@ public class PowerPlanTests
             int own = PowerPlan.OwnWaysBack(grid, site);
             // the grid is always one way; every site has one of its own, the majors two
             Assert.True(own >= (Majors.Contains(site.Kind) ? 2 : 1), $"{site.Name} ({site.Kind}) has {own} way(s) back of its own");
-            if (site.Kind is "nuclear" or "geothermal")
+            Assert.NotEqual("nuclear", site.Kind); // no nuclear plant (D-9)
+            if (site.Kind == "geothermal")
             {
                 Assert.NotNull(site.PlantId);
                 Assert.NotNull(site.GeneratorId); // for the black start
@@ -451,13 +452,15 @@ public class PowerPlanTests
     }
 
     [Fact]
-    public void TheLines_FollowTheGeneratedPowerTree_PlusATieBetweenThePlants()
+    public void TheLines_FollowTheGeneratedPowerTree_FromTheOnePlant()
     {
         IslandWorld world = TestIslands.World("Default");
         PowerGrid grid = PowerPlan.Build(world, runSeed: 1);
-        int plants = grid.Sites.Count(s => s.Kind is "nuclear" or "geothermal");
-        Assert.Equal(world.Works.Power.Count + (plants >= 2 ? 1 : 0), grid.Feeders.Count);
-        Assert.Equal(plants >= 2 ? 1 : 0, grid.Feeders.Count(f => f.Underground));
+        // the geothermal plant is the grid's one source (no nuclear plant, D-9), so there's no tie cable between two plants
+        Assert.Equal(1, grid.Sites.Count(s => grid.PlantOf(s) is not null));
+        Assert.Equal("geothermal", grid.Sites.Single(s => grid.PlantOf(s) is not null).Kind);
+        Assert.Equal(world.Works.Power.Count, grid.Feeders.Count);
+        Assert.Equal(0, grid.Feeders.Count(f => f.Underground));
         foreach (Feeder f in grid.Feeders.Where(f => f.Down))
             Assert.NotNull(f.FaultDevice);
         Assert.All(grid.Feeders.Where(f => f.Underground), f => Assert.Equal(BreakerState.Open, f.Breaker));

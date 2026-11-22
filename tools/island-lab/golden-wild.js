@@ -18,7 +18,7 @@ function hasher() { // BlueHarvest.Sim.Core.StateHasher
 }
 const CASES = [
   ['Default', {}],
-  ['Seed12', { seed: 12 }],
+  ['Seed12', { seed: 12, scale: 75 }],
   ['SmallNoCliffs', { seed: 44, scale: 50, wind: 100, cliffs: 0, iterations: 5, pali: 0.5 }],
   ['CoolWet', { seed: 9, scale: 60, seaTemp: 21, cloudBase: 500, wetlands: 1.5, rain: 1.3 }]
 ];
@@ -30,7 +30,7 @@ for (const [name, params] of CASES) {
   const hw = hasher().int(w.wrecks.length);
   for (const q of w.wrecks) hw.int(q.id).dbl(q.x).dbl(q.y).str(q.kind).str(q.era).dbl(q.length).dbl(q.heading).int(q.onReef ? 1 : 0).int(q.beached ? 1 : 0).int(q.inland ? 1 : 0).str(q.name);
   const hr = hasher().int(w.ruins.length);
-  for (const q of w.ruins) hr.int(q.id).str(q.kind).dbl(q.x).dbl(q.y).dbl(q.r).str(q.era).str(q.name).dbl(q.rot);
+  for (const q of w.ruins) hr.int(q.id).str(q.kind).dbl(q.x).dbl(q.y).dbl(q.r).str(q.era).str(q.name).dbl(q.rot).str(q.satelliteOf || '');
   const hf = hasher().int(w.fauna.length);
   for (const f of w.fauna) hf.str(f.key).ints(f.density).dbl(f.population);
   console.log(`        ["${name}"] = new(${w.caves.length}, ${w.wrecks.length}, ${w.ruins.length}, ${w.fauna[0].population}, ${hc.hex()}, ${hw.hex()}, ${hr.hex()}, ${hf.hex()}),`);

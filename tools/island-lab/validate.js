@@ -31,7 +31,7 @@ if (!isMainThread) {
 const args = process.argv.slice(2), opt = {};
 const pos = [];
 for (let k = 0; k < args.length; k++) { if (args[k].startsWith('--')) opt[args[k].slice(2)] = args[++k]; else pos.push(args[k]); }
-const first = pos[0] && pos[0] !== '-' ? Number(pos[0]) : 1, count = pos[1] && pos[1] !== '-' ? Number(pos[1]) : 200, scale = pos[2] && pos[2] !== '-' ? Number(pos[2]) : 75;
+const first = pos[0] && pos[0] !== '-' ? Number(pos[0]) : 1, count = pos[1] && pos[1] !== '-' ? Number(pos[1]) : 200, scale = pos[2] && pos[2] !== '-' ? Number(pos[2]) : 100;
 const workers = Number(opt.workers || require('os').cpus().length), extra = opt.params ? JSON.parse(opt.params) : {};
 run().catch(e => { console.error(e); process.exit(1); });
 

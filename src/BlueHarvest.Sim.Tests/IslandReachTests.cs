@@ -22,17 +22,18 @@ public class IslandReachTests
 
     private static IslandReach Reach(string name) => Walked[name].Value;
 
-    // the step 24c establishing run (17 Nov 2026, with the corner rule), pinned in step 24d;
+    // the step 24c establishing run (17 Nov 2026, with the corner rule), pinned in step 24d; re-pinned from the
+    // island lab for the Crosswake program (P4c: node tools/island-lab/checks.js --print);
     // compared column by column, so columns added later don't disturb it
     private const string PinnedColumns =
         "anchors,anchor_pairs,anchor_gaps,tunnel_gaps,deep_gaps,no_ground_gaps,must_ford_pairs,slowest_anchor_minutes,worst_dry_detour";
 
     private static readonly Dictionary<string, string> Pinned = new()
     {
-        ["Default"] = "8,28,0,0,0,0,0,698.718161,1.041022",
-        ["Seed12"] = "8,28,0,0,0,0,0,601.924755,1.065566",
-        ["SmallNoCliffs"] = "8,28,0,0,0,0,0,370.849828,1.036581",
-        ["CoolWet"] = "8,28,0,0,0,0,0,661.139865,1.001917",
+        ["Default"] = "8,28,0,0,0,0,0,922.335711,1.147902",
+        ["Seed12"] = "8,28,0,0,0,0,0,770.256661,1.062727",
+        ["SmallNoCliffs"] = "8,28,0,0,0,0,0,395.148648,1.01727",
+        ["CoolWet"] = "8,28,0,0,0,0,0,560.053636,1",
     };
 
     [Theory]
@@ -87,7 +88,7 @@ public class IslandReachTests
         var keySites = Enumerable.Range(0, works.Sites.Count)
             .Where(a => IslandReach.AnchorKinds.Contains(works.Sites[a].Kind)).ToList();
         Assert.Equal(keySites, reach.AnchorSites.ToList());
-        Assert.Equal(8, keySites.Count); // 2 docks, airstrip, comms relay, control centre, 3 watch posts
+        Assert.Equal(8, keySites.Count); // 2 docks, airstrip, comms relay, the Court, 3 watch posts
         Assert.Equal(keySites.Count * (keySites.Count - 1) / 2, reach.Routes.Count);
         Assert.Equal(reach.Routes.Count, reach.Routes.Select(r => (r.FromSite, r.ToSite)).Distinct().Count());
         Assert.All(reach.Routes, r => Assert.True(r.FromSite < r.ToSite));

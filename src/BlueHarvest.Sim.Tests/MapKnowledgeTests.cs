@@ -36,10 +36,10 @@ public class MapKnowledgeTests
     // node tools/island-lab/golden-knowledge.js
     private static readonly Dictionary<string, Expected> Golden = new()
     {
-        ["Default"] = new(940, 0x1F0805D8FC8BAE23UL, 0, 0, 2, 0xD2C05D2714C77E07UL, 305, 0xADA313F2968895F1UL, "0,4,5", 0, 1),
-        ["Seed12"] = new(1303, 0x073913A7A4DDCFECUL, 0, 1, 2, 0xC283E6FB9D4E3EA5UL, 438, 0x583D167B200680C9UL, "0,4,5", 0, 1),
-        ["SmallNoCliffs"] = new(588, 0xE648A710205C66DAUL, 0, 0, 2, 0x5C0EDA024E681A27UL, 191, 0xB18A00419C13F3EFUL, "0,4,5", 0, 1),
-        ["CoolWet"] = new(725, 0xD45C4EBFB050B157UL, 1, 0, 2, 0x0A07FA3602C6BFD1UL, 229, 0xEE035238D79556B8UL, "0,4,5", 0, 1),
+        ["Default"] = new(1556, 0x3FC6133E5C58F805UL, 0, 0, 2, 0x95252A935B677E67UL, 493, 0x6152CD8C4EB61DD4UL, "0,1,9,18", 0, 1),
+        ["Seed12"] = new(1272, 0xC2623A9F398547F7UL, 0, 3, 2, 0xFE3143CBB17638FEUL, 384, 0x110C9E9EF67548BDUL, "0,1,9", 0, 1),
+        ["SmallNoCliffs"] = new(556, 0xD326B646EFD791CEUL, 0, 0, 2, 0x585AA34051E0E4AFUL, 176, 0xEC4CD771B5DFD696UL, "0,1,9,10", 0, 1),
+        ["CoolWet"] = new(722, 0x1438895CA08C3AD9UL, 0, 0, 2, 0x7ABD607DC9D70F8BUL, 227, 0x073201F5922A5BBDUL, "0,1,9", 0, 1),
     };
 
     public static IEnumerable<object[]> CaseNames => Golden.Keys.Select(k => new object[] { k });
@@ -75,10 +75,10 @@ public class MapKnowledgeTests
         IslandWorld world = TestIslands.World(island);
         FeatureIndex f = Features[island].Value;
         IslandWorks w = world.Works;
-        Site docks = w.Sites.First(t => t.Kind == "docks"), control = w.Sites.First(t => t.Kind == "control"), genetics = w.Sites.First(t => t.Kind == "genetics");
+        Site docks = w.Sites.First(t => t.Kind == "docks"), court = w.Sites.First(t => t.Kind == "court"), genetics = w.Sites.First(t => t.Kind == "genetics");
         MapKnowledge k = Empty(world);
-        long tick = Walk(k, world, f, docks, control, day: true, 0);
-        tick = Walk(k, world, f, control, genetics, day: false, tick);
+        long tick = Walk(k, world, f, docks, court, day: true, 0);
+        tick = Walk(k, world, f, court, genetics, day: false, tick);
         Cave c0 = w.Caves[0], c1 = w.Caves[1];
         double fx = Math.Floor(c0.Mouths[0].X + 20) + 0.5, fy = Math.Floor(c0.Mouths[0].Y) + 0.5;
         Look(k, world, f, fx, fy, day: true, tick);
@@ -353,14 +353,15 @@ public class MapKnowledgeTests
     private readonly record struct WalkStep(TilePos At, long Before, long After);
 
     /// <summary>
-    /// A survivor walks 350 m south from the Default island's control centre gate, across open grassland,
+    /// A survivor walks 350 m south from the Default island's Court of Unfinished Measures gate (the old control
+    /// centre's walk), across open grassland and dry scrub,
     /// with map knowledge on. Every move is recorded. Returns what the simulation knows at the end and the
     /// positions walked (the first is the start, before any move).
     /// </summary>
-    private (MapKnowledge Known, List<WalkStep> Steps, Simulation Sim) WalkFromTheControlCentre(int hour)
+    private (MapKnowledge Known, List<WalkStep> Steps, Simulation Sim) WalkFromTheCourt(int hour)
     {
         IslandWorld world = TestIslands.World("Default");
-        Site control = world.Works.Sites.First(t => t.Kind == "control");
+        Site control = world.Works.Sites.First(t => t.Kind == "court");
         Assert.Equal('s', control.Gate); // the walk goes out of the gate, away from the buildings
         double gateY = control.Y + control.R;
         var window = new IslandWindow(world, TestIslands.Chunker("Default"), control.X, gateY + 175, 9);
@@ -403,7 +404,7 @@ public class MapKnowledgeTests
         var seen = new Dictionary<int, int>();
         foreach (int hour in new[] { 12, 0 })
         {
-            var (k, steps, sim) = WalkFromTheControlCentre(hour);
+            var (k, steps, sim) = WalkFromTheCourt(hour);
             bool day = hour == 12;
             Assert.Equal(day, sim.AmbientLightPercent >= Simulation.DaylightPercent);
 

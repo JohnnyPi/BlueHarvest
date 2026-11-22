@@ -184,18 +184,40 @@ public sealed class FacilityAreas
 /// <summary>A park map's place on the island: the area (a site index) and the sheet it charts, kept in the item's tag.</summary>
 public static class ParkMaps
 {
-    public static string Tag(int area, int sheet) => $"area={area};sheet={sheet}";
+    /// <summary>
+    /// A park map's tag: the area it charts, by its facility's stable <see cref="Site.Key"/> (not its place in the site list,
+    /// which shifts whenever the site table changes), and the sheet: "area=site.court:0;sheet=3".
+    /// </summary>
+    public static string Tag(string siteKey, int sheet) => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"area={siteKey};sheet={sheet}");
 
-    public static bool TryParse(string? tag, out int area, out int sheet)
+    public static string Tag(Site site, int sheet) => Tag(site.Key, sheet);
+
+    /// <summary>Reads a tag back into its facility's key and its sheet.</summary>
+    public static bool TryParse(string? tag, out string siteKey, out int sheet)
     {
-        area = sheet = -1;
+        siteKey = "";
+        sheet = -1;
         if (tag is null || !tag.StartsWith("area=", StringComparison.Ordinal))
             return false;
         string[] parts = tag.Split(';');
-        return parts.Length == 2
-            && int.TryParse(parts[0].AsSpan(5), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out area)
-            && parts[1].StartsWith("sheet=", StringComparison.Ordinal)
-            && int.TryParse(parts[1].AsSpan(6), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out sheet);
+        if (parts.Length != 2 || parts[0].Length <= 5 || !parts[1].StartsWith("sheet=", StringComparison.Ordinal)
+            || !int.TryParse(parts[1].AsSpan(6), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out sheet))
+        {
+            sheet = -1;
+            return false;
+        }
+        siteKey = parts[0][5..];
+        return true;
+    }
+
+    /// <summary>Reads a tag back into the area it charts on this island (the site's index), and its sheet; false if the site isn't on it.</summary>
+    public static bool TryParse(string? tag, IslandWorks works, out int area, out int sheet)
+    {
+        area = -1;
+        if (!TryParse(tag, out string key, out sheet))
+            return false;
+        area = works.SiteIndex(key);
+        return area >= 0;
     }
 
     /// <summary>The chance (%) of finding something marked on a park map on its first read, by Tracking level 0–3.</summary>

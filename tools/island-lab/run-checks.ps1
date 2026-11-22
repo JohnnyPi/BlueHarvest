@@ -47,8 +47,8 @@ if (-not $SkipTests) {
     & dotnet test 2>&1 | Tee-Object -Variable testLog
     $testExit = $LASTEXITCODE
     # dotnet test prints one of two summary formats, depending on whether its output goes to a pipe:
-    #   new:    Test summary: total: 1007, failed: 0, succeeded: 1007, skipped: 0, duration: 12s
-    #   VSTest: Passed!  - Failed:     0, Passed:  1007, Skipped:     0, Total:  1007, Duration: 12 s
+    #   new:    Test summary: total: 1045, failed: 0, succeeded: 1045, skipped: 0, duration: 12s
+    #   VSTest: Passed!  - Failed:     0, Passed:  1045, Skipped:     0, Total:  1045, Duration: 12 s
     # Each test project prints its own line, so the counts are added up.
     $total = 0; $failed = 0; $found = 0
     foreach ($t in $testLog) {
@@ -61,8 +61,8 @@ if (-not $SkipTests) {
     }
     if ($found -eq 0) { $line = 'no test summary line found in the output' }
     else { $line = "total $total, failed $failed (from $found summary line(s)), exit code $testExit" }
-    $ok = ($testExit -eq 0) -and ($found -gt 0) -and ($total -eq 1007) -and ($failed -eq 0)
-    Add-Result 'C# tests (expect 1007 passed)' $ok $line
+    $ok = ($testExit -eq 0) -and ($found -gt 0) -and ($total -eq 1045) -and ($failed -eq 0)
+    Add-Result 'C# tests (expect 1045 passed)' $ok $line
     $testLog | Out-File -Encoding utf8 (Join-Path $outDir 'dotnet-test.log')
 }
 
@@ -89,7 +89,7 @@ foreach ($g in $goldens) {
     Write-Host ("  {0,-18} {1,3} hashes, {2} not in the tests" -f $g, @($tokens).Count, $miss.Count)
     foreach ($m in $miss) { Write-Host "    missing: $m" -ForegroundColor Red }
 }
-Add-Result 'Golden hashes pinned in the C# tests (expect 255)' (($missing -eq 0) -and ($allHashes -eq 255)) "$allHashes hashes, $missing missing"
+Add-Result 'Golden hashes pinned in the C# tests (expect 273)' (($missing -eq 0) -and ($allHashes -eq 273)) "$allHashes hashes, $missing missing"
 
 # ---------- 4. island validate: C# and lab, at 75% and 100%, compared column by column ----------
 $timings = @{}

@@ -24,7 +24,8 @@ public sealed record Wreck(int Id, double X, double Y, string Kind, string Era, 
 
 public sealed record RuinKind(string Key, string Name, string Era, int R);
 
-public sealed record Ruin(int Id, string Kind, double X, double Y, int R, string Era, string Name, double Rot);
+/// <summary>A lesser ruin. An ancient one is a satellite of the authored ruin nearest it (SatelliteOf, e.g. "RUIN-03").</summary>
+public sealed record Ruin(int Id, string Kind, double X, double Y, int R, string Era, string Name, double Rot, string? SatelliteOf = null);
 
 /// <summary>
 /// A kind of wildlife: habitat weight by biome plus modifiers (0 = not used). PerKm2 is the density
@@ -44,19 +45,24 @@ public sealed partial class IslandWorks
         new("navy landing craft", "1940s", 24), new("fishing trawler", "1970s", 26), new("research yacht", "2000s", 18), new("corporate supply barge", "year 4", 45),
     ];
 
+    /// <summary>
+    /// Lesser ruins: ancient kinds are satellites of the seven authored ruins; newer kinds fit the island's visit windows
+    /// of 1916, the 1970s and now.
+    /// </summary>
     public static readonly RuinKind[] RuinKinds =
     [
         new("terraces", "Stone-walled terraces", "ancient", 30),
         new("stones", "Ring of standing stones", "ancient", 12),
         new("platform", "Stone platform", "ancient", 16),
-        new("chapel", "Mission chapel", "1800s", 10),
-        new("mill", "Sugar mill", "1800s", 18),
-        new("lighthouse", "Lighthouse", "1890s", 8),
-        new("bunker", "Coastal gun bunker", "1940s", 10),
-        new("radar", "Radar station", "1950s", 14),
-        new("camp", "Abandoned survey camp", "year 2", 14),
-        new("fieldlab", "Burned field lab", "year 5", 12),
+        new("lighthouse", "Meridian Station light", "1916", 8),
+        new("bunker", "Coastal battery", "1916", 10),
+        new("radar", "Radar station", "1970s", 14),
+        new("camp", "Survey camp", "1970s", 14),
+        new("fieldlab", "Burned field lab", "now", 12),
     ];
+
+    /// <summary>Lesser-site counts scale with land area: about 1.8× the 75% island's at 100% (P4.9).</summary>
+    private double CountScale => _s * _s / 0.5625;
 
     private static Dictionary<Biome, double> Hab(params (Biome B, double W)[] w) => w.ToDictionary(e => e.B, e => e.W);
 
@@ -111,7 +117,8 @@ public sealed partial class IslandWorks
             return ((GenGrid.Bilinear(h0, nx, ny, gx + e, gy) - GenGrid.Bilinear(h0, nx, ny, gx - e, gy)) / (2 * e * cell),
                 (GenGrid.Bilinear(h0, nx, ny, gx, gy + e) - GenGrid.Bilinear(h0, nx, ny, gx, gy - e)) / (2 * e * cell));
         }
-        for (int k = 0, tries = 0; k < p.Tubes && tries < 300; tries++)
+        int nTubes = (int)GenMath.Round(p.Tubes * CountScale), nSea = (int)GenMath.Round(4 * CountScale);
+        for (int k = 0, tries = 0; k < nTubes && tries < Math.Max(300, nTubes * 60); tries++)
         {
             int i = landCells[(int)Math.Floor(rc.Next() * landCells.Count)];
             double vd = GenMath.Hyp(CxOf(i) - a.Vent.X, CyOf(i) - a.Vent.Y) / a.Vent.R;
@@ -174,7 +181,7 @@ public sealed partial class IslandWorks
         }
         var cliffCells = new List<int>();
         for (int i = 0; i < n; i++) if (w.Coast[i] == CoastClass.Cliff) cliffCells.Add(i);
-        for (int k = 0, tries = 0; k < 4 && tries < 200 && cliffCells.Count > 0; tries++)
+        for (int k = 0, tries = 0; k < nSea && tries < Math.Max(200, nSea * 50) && cliffCells.Count > 0; tries++)
         {
             int i = cliffCells[(int)Math.Floor(rc.Next() * cliffCells.Count)];
             double x = CxOf(i) + w.CoastNx[i] * cell * 0.45, y = CyOf(i) + w.CoastNy[i] * cell * 0.45;
@@ -223,21 +230,22 @@ public sealed partial class IslandWorks
             else continue;
             cand.Add((i, ex + (onReef ? 0.6 : 0) + (beached ? 0.2 : 0) + 0.8 * GenHash.Hash2(js, i, 1) / 4294967296.0, onReef, beached));
         }
+        int nWrecks = (int)GenMath.Round(p.Wrecks * CountScale), nAir = p.Wrecks > 0 ? (int)GenMath.Round(2 * CountScale) : 0;
         foreach (var c in cand.OrderByDescending(e => e.Score))
         {
-            if (Wrecks.Count >= p.Wrecks) break;
+            if (Wrecks.Count >= nWrecks) break;
             double x = CxOf(c.I), y = CyOf(c.I);
             if (Wrecks.Exists(q => GenMath.Hyp(q.X - x, q.Y - y) < 1500 * s)) continue;
             WreckEra e = WreckEras[(int)Math.Floor(rw.Next() * WreckEras.Length)];
             double heading = rw.Next() * GenMath.Pi;
             Wrecks.Add(new Wreck(Wrecks.Count, x, y, e.Kind, e.Era, e.Length, heading, c.OnReef, c.Beached, false, Capitalise(e.Kind) + ", " + e.Era));
         }
-        for (int k = 0, tries = 0; k < (p.Wrecks > 0 ? 2 : 0) && tries < 300; tries++)
+        for (int k = 0, tries = 0; k < nAir && tries < Math.Max(300, nAir * 150); tries++)
         {
             int i = _landCells[(int)Math.Floor(rw.Next() * _landCells.Count)];
             var b = (Biome)biome[i];
             if (!(b == Biome.Wet || b == Biome.Moist || b == Biome.Cloud || b == Biome.Ridge) || _c.SlopeDeg[i] > 25) continue;
-            WreckEra e = k == 0 ? new WreckEra("transport aircraft", "1940s", 28) : new WreckEra("light aircraft", "1990s", 11);
+            WreckEra e = k % 2 == 0 ? new WreckEra("transport aircraft", "1940s", 28) : new WreckEra("light aircraft", "1990s", 11);
             double heading = rw.Next() * GenMath.Pi;
             Wrecks.Add(new Wreck(Wrecks.Count, CxOf(i), CyOf(i), e.Kind, e.Era, e.Length, heading, false, false, true, Capitalise(e.Kind) + ", " + e.Era));
             k++;
@@ -257,7 +265,7 @@ public sealed partial class IslandWorks
         const double No = -1;
         Func<int, double> Score(string key) => key switch
         {
-            "terraces" => i => rain[i] > 1800 && slopeD[i] > 6 && slopeD[i] < 25 && h[i] > 40 && h[i] < 500 ? 1 + slopeD[i] / 25 : No,
+            "terraces" => i => rain[i] > 1800 && slopeD[i] > 6 && slopeD[i] < 25 && h[i] > 40 && h[i] < 500 ? 1 + slopeD[i] / 25.0 : No,
             "stones" => i => h[i] > 400 && crest[i] > 0.4 && slopeD[i] < 18 ? crest[i] + h[i] / 1000 : No,
             "platform" => i => distLand[i] < 900 && slopeD[i] < 8 && nearRiver[i] != 0 ? 1.5 : No,
             "chapel" => i => h[i] < 120 && slopeD[i] < 6 && nearRiver[i] != 0 ? 1.2 : No,
@@ -274,7 +282,9 @@ public sealed partial class IslandWorks
         var drawn = new List<(double R, RuinKind K)>();
         foreach (RuinKind rk in RuinKinds) drawn.Add((ru.Next(), rk));
         List<RuinKind> order = drawn.OrderBy(e => e.R).Select(e => e.K).ToList();
-        for (int k = 0, tries = 0; k < p.Ruins && tries < p.Ruins * 6; tries++)
+        int nRuins = (int)GenMath.Round(p.Ruins * CountScale);
+        List<AuthoredRuin> authored = AuthoredRuins.Where(q => q.Placed).ToList();
+        for (int k = 0, tries = 0; k < nRuins && tries < nRuins * 6; tries++)
         {
             RuinKind kind = order[tries % order.Count];
             if ((kind.Key == "lighthouse" || kind.Key == "radar") && used.Contains(kind.Key)) continue;
@@ -288,12 +298,24 @@ public sealed partial class IslandWorks
                 double v = score(i);
                 if (v <= bs) continue;
                 double x = CxOf(i), y = CyOf(i);
+                if (authored.Exists(q => GenMath.Hyp(q.X - x, q.Y - y) < 800 * s) || PaddockCell[i] >= 0) continue;
+                if (kind.Era == "ancient" && !authored.Exists(q => GenMath.Hyp(q.X - x, q.Y - y) <= 4000 * s)) continue; // satellites of the seven
                 if (Ruins.Exists(q => GenMath.Hyp(q.X - x, q.Y - y) < 1800 * s) || Sites.Exists(t => GenMath.Hyp(t.X - x, t.Y - y) < t.R + 300)) continue;
                 bs = v; best = i;
             }
             if (best < 0) continue;
             used.Add(kind.Key);
-            Ruins.Add(new Ruin(Ruins.Count, kind.Key, CxOf(best), CyOf(best), kind.R, kind.Era, kind.Name + " (" + kind.Era + ")", ru.Next() * GenMath.Pi / 2));
+            string? satelliteOf = null;
+            if (kind.Era == "ancient")
+            {
+                double bd = 1e30;
+                foreach (AuthoredRuin q in authored)
+                {
+                    double d = GenMath.Hyp(q.X - CxOf(best), q.Y - CyOf(best));
+                    if (d < bd) { bd = d; satelliteOf = q.Id; }
+                }
+            }
+            Ruins.Add(new Ruin(Ruins.Count, kind.Key, CxOf(best), CyOf(best), kind.R, kind.Era, kind.Name + " (" + kind.Era + ")", ru.Next() * GenMath.Pi / 2, satelliteOf));
             k++;
         }
     }
@@ -311,6 +333,7 @@ public sealed partial class IslandWorks
         Array.Fill(people, (byte)1);
         foreach (Site t in Sites) people[Idx(t.X, t.Y)] = 0;
         foreach (Ruin q in Ruins) people[Idx(q.X, q.Y)] = 0;
+        foreach (AuthoredRuin q in AuthoredRuins) if (q.Placed) people[Idx(q.X, q.Y)] = 0;
         float[] dPeople = GenGrid.Chamfer(people, nx, ny, _cell);
         var caveNear = new byte[n];
         foreach (Cave c in Caves)

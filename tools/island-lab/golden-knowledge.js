@@ -77,16 +77,16 @@ function walk(S, k, a, b, day, tick0) {
 
 const CASES = [
   ['Default', {}],
-  ['Seed12', { seed: 12 }],
+  ['Seed12', { seed: 12, scale: 75 }],
   ['SmallNoCliffs', { seed: 44, scale: 50, wind: 100, cliffs: 0, iterations: 5, pali: 0.5 }],
   ['CoolWet', { seed: 9, scale: 60, seaTemp: 21, cloudBase: 500, wetlands: 1.5, rain: 1.3 }]
 ];
 for (const [name, params] of CASES) {
   const w = G.generate(params), W = w.works, S = make(w);
-  const docks = W.sites.find(t => t.kind === 'docks'), control = W.sites.find(t => t.kind === 'control'), genetics = W.sites.find(t => t.kind === 'genetics');
+  const docks = W.sites.find(t => t.kind === 'docks'), court = W.sites.find(t => t.kind === 'court'), genetics = W.sites.find(t => t.kind === 'genetics');
   const k = { seen: new Set(), found: new Map(), trail: [], sites: new Set() };
-  let tick = walk(S, k, docks, control, true, 0);
-  tick = walk(S, k, control, genetics, false, tick);
+  let tick = walk(S, k, docks, court, true, 0);
+  tick = walk(S, k, court, genetics, false, tick);
   // a cave: from 20 m off its first mouth (seen), then a second cave from standing in its mouth (entered)
   const c0 = W.caves[0], c1 = W.caves[1];
   const fx = Math.floor(c0.mouths[0][0] + 20) + 0.5, fy = Math.floor(c0.mouths[0][1]) + 0.5;
