@@ -1,0 +1,9 @@
+# Fixture choice: the catalog's Utility Knife stands in for the existing Knife here. The real crosswalk is P2a's.
+schema: blueharvest.content/v1
+kind: item
+id: knife
+name: Knife
+category: tool
+mass_g: 300
+stacking: unique
+source_ids: [ITM-MEL-002]

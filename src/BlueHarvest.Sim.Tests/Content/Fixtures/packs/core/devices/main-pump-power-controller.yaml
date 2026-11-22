@@ -1,0 +1,14 @@
+schema: blueharvest.content/v1
+kind: device
+id: DEV-ADM-001
+name: Main Pump Power Controller
+handler: device.install_and_activate
+required_parts:
+  - item: ITM-ADM-001
+    quantity: 1
+requirements:
+  power: available
+states: [offline, ready, active]
+facts_when_active:
+  - predicate: lit
+    args: [self]

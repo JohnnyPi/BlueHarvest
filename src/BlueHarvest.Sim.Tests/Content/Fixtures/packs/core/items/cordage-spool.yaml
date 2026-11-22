@@ -1,0 +1,9 @@
+schema: blueharvest.content/v1
+kind: item
+id: ITM-MAT-006
+name: Cordage Spool
+category: material
+mass_g: 400
+stack_limit: 15
+stacking: stack
+tags: [rope, crafting]

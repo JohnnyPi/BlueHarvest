@@ -1,0 +1,45 @@
+schema: "blueharvest.content/v1"
+kind: "narrative"
+id: "MEN-01-TALK-001"
+form: "dialogue"
+presentation: "dialogue"
+status: "ready"
+title: "Ask about the eastern paddock"
+facility: "MEN"
+tags:
+  - "containment"
+source:
+  kind: "npc"
+  ref: "MEN-01"
+requires_facts: []
+reveals_facts: []
+dialogue:
+  start_node: "start"
+  nodes:
+    -
+      id: "start"
+      speaker: "Dr. Sera Okonkwo"
+      text: "The animals refuse to enter that part of the enclosure."
+      ending: false
+      choices:
+        -
+          id: "c1"
+          text: "What frightened them?"
+          to: "explanation"
+          requires_facts: []
+          reveals_facts: []
+        -
+          id: "c2"
+          text: "I'll investigate on my own."
+          to: "__end__"
+          requires_facts: []
+          reveals_facts:
+            - "FACT-MEN-001"
+    -
+      id: "explanation"
+      speaker: "Dr. Sera Okonkwo"
+      text: |-
+        I don't yet know.
+        They may have seen something we haven't.
+      ending: true
+      choices: []

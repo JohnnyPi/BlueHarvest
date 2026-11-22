@@ -1,0 +1,23 @@
+schema: "blueharvest.content/v1"
+kind: "narrative"
+id: "NAR-TERM-0001"
+form: "document"
+presentation: "terminal"
+status: "ready"
+title: "Enclosure monitor"
+facility: ""
+tags: []
+source:
+  kind: "device"
+  ref: "core:DEV-ADM-001"
+requires_facts: []
+reveals_facts: []
+document:
+  author: "Enclosure Security"
+  recipient: "Maintenance"
+  subject: "EVENT REPORT / 16:22"
+  severity: "warning"
+  body: |-
+    WARNING: "CAMERA" CLOCK
+    
+    Frame timestamps preserved.

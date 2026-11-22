@@ -8,6 +8,6 @@ public class SimInfoTests
     [Fact]
     public void Version_IsSet()
     {
-        Assert.Equal("0.0.1", SimInfo.Version);
+        Assert.Equal("0.1.0", SimInfo.Version);
     }
 }

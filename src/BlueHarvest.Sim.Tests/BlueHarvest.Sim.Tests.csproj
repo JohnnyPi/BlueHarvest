@@ -22,4 +22,9 @@
     <ProjectReference Include="..\BlueHarvest.Sim\BlueHarvest.Sim.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Content-library fixtures, read from disk by Content/FixturePackTests.cs. -->
+    <None Update="Content\Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

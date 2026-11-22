@@ -1,0 +1,9 @@
+schema: blueharvest.content/v1
+kind: item
+id: ITM-CRF-005
+name: Straight Branch
+category: material
+mass_g: 500
+stack_limit: 20
+stacking: stack
+tags: [natural, wood, crafting]

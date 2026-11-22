@@ -5,11 +5,13 @@ using BlueHarvest.Sim.Demo;
 using BlueHarvest.Sim.Scenarios;
 using BlueHarvest.Sim.Testing;
 using BlueHarvest.Sim.World;
+using BhContent = BlueHarvest.Content;
 using Gen = BlueHarvest.Sim.World.Generation;
 
 // Usage: BlueHarvest.Runner [seed] [seconds] [map file] [weather]
 //    or: BlueHarvest.Runner batch [runs per option] [minutes] [weather] [options] [map file]
 //    or: BlueHarvest.Runner island validate [first seed] [count] [scale]
+//    or: BlueHarvest.Runner content validate [--path <packs folder or pack folder>] [--runtime]
 // Island mode generates islands from count seeds starting at first seed (defaults 1, 200, 100% scale),
 // measures each one, walks the routes between its key sites, runs the seed checks (IslandChecks), and
 // writes reports/island-<time>/report.md and seeds.csv under the repo.
@@ -21,6 +23,9 @@ using Gen = BlueHarvest.Sim.World.Generation;
 // and falls back to the built-in demo map if it can't find one. Pass "-" as the map file to use
 // that default while still choosing the weather.
 // Weather (optional): clear, rain, storm or fog, overriding the map's own weather line.
+// Content mode loads YAML content packs (default: content/packs above the program folder) with the content
+// library, prints every diagnostic, and exits 1 if there are errors. --runtime also requires every definition
+// to be runtime-ready (all its handlers implemented), as the game will at startup.
 if (args.Length > 0 && args[0] == "batch")
 {
     RunBatch(args.Skip(1).ToArray());
@@ -29,6 +34,11 @@ if (args.Length > 0 && args[0] == "batch")
 if (args.Length > 0 && args[0] == "island")
 {
     RunIsland(args.Skip(1).ToArray());
+    return;
+}
+if (args.Length > 0 && args[0] == "content")
+{
+    Environment.ExitCode = RunContent(args.Skip(1).ToArray());
     return;
 }
 
@@ -266,6 +276,77 @@ static void RunIsland(string[] args)
     Console.WriteLine($"Done in {clock.Elapsed.TotalSeconds:0}s.");
     Console.WriteLine($"Report: {reportPath}");
     Console.WriteLine($"Seeds:  {csvPath}");
+}
+
+static int RunContent(string[] args)
+{
+    if (args.Length == 0 || args[0] != "validate")
+    {
+        Console.Error.WriteLine("Usage: BlueHarvest.Runner content validate [--path <packs folder or pack folder>] [--runtime]");
+        return 2;
+    }
+    string? path = null;
+    bool runtime = false;
+    for (int i = 1; i < args.Length; i++)
+    {
+        if (args[i] == "--path" && i + 1 < args.Length)
+            path = args[++i];
+        else if (args[i] == "--runtime")
+            runtime = true;
+        else
+        {
+            Console.Error.WriteLine($"Unknown option {args[i]}. Usage: content validate [--path <folder>] [--runtime]");
+            return 2;
+        }
+    }
+    path ??= FindUpDirectory(Path.Combine("content", "packs"));
+    if (path is null || !Directory.Exists(path))
+    {
+        Console.Error.WriteLine(path is null
+            ? "Could not find content/packs above the program folder; pass --path."
+            : $"No folder at {path}.");
+        return 2;
+    }
+
+    BhContent.SemVersion? game = BhContent.SemVersion.TryParse(SimInfo.Version, out var parsedGame) ? parsedGame : null;
+    var options = (runtime ? BhContent.ContentLoadOptions.Runtime : BhContent.ContentLoadOptions.Authoring) with { GameVersion = game };
+    var source = new BhContent.FileSystemContentSource(path);
+    Console.WriteLine($"Blue Harvest content validate | {source.Description} | {(runtime ? "runtime" : "authoring")} mode | game {SimInfo.Version}");
+    Console.WriteLine();
+
+    BhContent.ContentLoadResult result = BhContent.ContentLoader.LoadFrom(source, options);
+    foreach (BhContent.ContentDiagnostic d in result.Diagnostics)
+        Console.WriteLine(d);
+    if (result.Diagnostics.Count > 0)
+        Console.WriteLine();
+
+    int errors = result.Diagnostics.Count(d => d.Severity == BhContent.ContentSeverity.Error);
+    int warnings = result.Diagnostics.Count(d => d.Severity == BhContent.ContentSeverity.Warning);
+    int notes = result.Diagnostics.Count(d => d.Severity == BhContent.ContentSeverity.Note);
+    if (result.Registry is { } registry)
+    {
+        Console.WriteLine($"Packs, in load order: {string.Join(", ", registry.Packs.Select(p => $"{p.Id} {p.Version}"))}");
+        var kinds = BhContent.ContentKinds.All
+            .Select(k => (kind: k, count: registry.Definitions.Count(x => x.Kind == k)))
+            .Where(t => t.count > 0)
+            .Select(t => $"{t.count} {BhContent.ContentKinds.Label(t.kind)}");
+        Console.WriteLine($"Definitions: {registry.Count} ({string.Join(", ", kinds)})");
+        Console.WriteLine($"Not runtime-ready: {registry.NotRuntimeReady.Count}");
+        Console.WriteLine($"Fingerprint: {registry.Fingerprint}");
+    }
+    Console.WriteLine($"Result: {(result.Succeeded ? "OK" : "FAILED")}, {errors} error(s), {warnings} warning(s), {notes} note(s)");
+    return result.Succeeded ? 0 : 1;
+}
+
+static string? FindUpDirectory(string relativePath)
+{
+    for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+    {
+        string candidate = Path.Combine(dir.FullName, relativePath);
+        if (Directory.Exists(candidate))
+            return candidate;
+    }
+    return null;
 }
 
 static string? FindUp(string relativePath)

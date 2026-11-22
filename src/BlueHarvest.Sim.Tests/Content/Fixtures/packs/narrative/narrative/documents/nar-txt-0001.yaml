@@ -1,0 +1,21 @@
+schema: "blueharvest.content/v1"
+kind: "narrative"
+id: "NAR-TXT-0001"
+form: "document"
+presentation: "note"
+status: "draft"
+title: "Shift change"
+facility: "ADM"
+tags:
+  - "draft"
+source:
+  kind: "unbound"
+  ref: ""
+requires_facts: []
+reveals_facts: []
+document:
+  author: "Night shift"
+  recipient: ""
+  subject: ""
+  severity: "info"
+  body: "Left the keys where we agreed. Not writing down where."

@@ -1,0 +1,9 @@
+schema: "blueharvest.pack/v1"
+id: "blueharvest.narrative"
+version: "0.1.0"
+requires_game: ">=0.1.0"
+dependencies:
+  - "core"
+priority: 0
+content_roots:
+  - "narrative"

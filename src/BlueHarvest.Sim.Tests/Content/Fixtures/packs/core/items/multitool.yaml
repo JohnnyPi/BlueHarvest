@@ -1,0 +1,10 @@
+# An existing kind (ItemKind.Multitool), so the core: ID wins and the catalog's Multi-Tool is provenance
+# (contracts §1). Its mechanical fields arrive with the 91 kinds in P2a.
+schema: blueharvest.content/v1
+kind: item
+id: multitool
+name: Multitool
+category: tool
+mass_g: 250
+stacking: unique
+source_ids: [ITM-TOL-001]

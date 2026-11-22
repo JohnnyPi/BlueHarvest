@@ -1,0 +1,17 @@
+schema: blueharvest.content/v1
+kind: resource_source
+id: SRC-005
+name: Vine Thicket
+handler: resource.harvest
+required_tool: knife
+renewal:
+  mode: world_event
+  event: ecology.plant_regrowth
+  max_batches: 3   # illustrative, as in the YAML plan §4.5
+yields:
+  - item: ITM-CRF-004
+    min_quantity: 2
+    max_quantity: 5
+  - item: ITM-CRF-005
+    min_quantity: 0
+    max_quantity: 1

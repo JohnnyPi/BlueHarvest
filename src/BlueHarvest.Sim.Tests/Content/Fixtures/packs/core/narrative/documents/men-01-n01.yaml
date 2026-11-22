@@ -1,0 +1,27 @@
+schema: "blueharvest.content/v1"
+kind: "narrative"
+id: "MEN-01-N01"
+form: "document"
+presentation: "journal"
+status: "ready"
+title: "The North Enclosure"
+facility: "MEN"
+tags:
+  - "animal behavior"
+  - "containment"
+source:
+  kind: "world_object"
+  ref: "MEN-OBSERVATION-BLIND"
+requires_facts: []
+reveals_facts:
+  - "FACT-MEN-ANIMAL-FOREKNOWLEDGE"
+document:
+  author: "Dr. Sera Okonkwo"
+  recipient: ""
+  subject: "Field observation"
+  severity: "personal"
+  body: |-
+    [Author's journal text goes here.]
+
+    This is placeholder text illustrating the shape of a record,
+    not a replacement for the existing worker note.

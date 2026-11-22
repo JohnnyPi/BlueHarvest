@@ -1,0 +1,5 @@
+schema: blueharvest.content/v1
+kind: station
+id: STN-HAND
+name: By Hand
+description: Work done in your own hands, anywhere.

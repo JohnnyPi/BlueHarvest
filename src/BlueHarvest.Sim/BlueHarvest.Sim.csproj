@@ -10,4 +10,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- The content library: ContentId and the registry (contracts §1). Nothing in the sim reads it yet (P1). -->
+    <ProjectReference Include="..\BlueHarvest.Content\BlueHarvest.Content.csproj" />
+  </ItemGroup>
+
 </Project>

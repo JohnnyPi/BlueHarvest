@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- net9.0 for the same reason as BlueHarvest.Sim: the Godot project reaches this library through the
+         sim, and the Godot editor loads the game's scripts on .NET 9. Godot-free: nothing here references
+         Godot or the sim. -->
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pinned. Only the low-level event parser (YamlDotNet.Core) is used; see Yaml/StrictYamlReader.cs. -->
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+  </ItemGroup>
+
+</Project>

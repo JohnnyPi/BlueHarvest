@@ -1,0 +1,15 @@
+# A test fixture, not the real core pack (that's P1b, at content/packs/core in the repo root).
+schema: blueharvest.pack/v1
+id: core
+name: Core (test fixture)
+version: 1.0.0
+requires_game: ">=0.1.0"
+dependencies: []
+priority: 0
+content_roots:
+  - items
+  - recipes
+  - resource-sources
+  - stations
+  - devices
+  - narrative
