@@ -2,6 +2,7 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.World;
 using Xunit;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -70,9 +71,9 @@ public class NeedsTests
     public void EatingAndDrinking_MakeUpWhatsShort_AndCoffeeKeepsYouUp()
     {
         var (sim, drive, you) = Person(new NeedsStart(HungerKcal: 1000, ThirstMl: 1000, AwakeMinutes: 600));
-        var water = sim.CreateItem(ItemKind.WaterBottle);
-        var bar = sim.CreateItem(ItemKind.EnergyBar);
-        var coffee = sim.CreateItem(ItemKind.Thermos);
+        var water = sim.CreateItem(CoreItems.WaterBottle);
+        var bar = sim.CreateItem(CoreItems.EnergyBar);
+        var coffee = sim.CreateItem(CoreItems.Thermos);
         Assert.True(sim.GiveItem(you, water));
         Assert.True(sim.GiveItem(you, bar));
         Assert.True(sim.GiveItem(you, coffee));
@@ -149,7 +150,7 @@ public class NeedsTests
         Do(sim, drive, new WaitAction(1));
         Assert.Equal(2, sim.NeedStage(you, NeedKind.Pain)); // hurting
 
-        var pills = sim.CreateItem(ItemKind.Painkillers);
+        var pills = sim.CreateItem(CoreItems.Painkillers);
         Assert.True(sim.GiveItem(you, pills));
         Do(sim, drive, new UseItemAction(pills.Id));
         Assert.Equal(0, sim.NeedStage(you, NeedKind.Pain));
@@ -165,7 +166,7 @@ public class NeedsTests
         var (sim, drive, you) = Person(new NeedsStart(HungerKcal: 0, ThirstMl: 0, AwakeMinutes: 600));
         sim.Injure(you, BodySection.LeftLeg, Severity.Red, bleeding: false, "a test");
         sim.SetNeeds(you, stamina: 0);
-        var pen = sim.CreateItem(ItemKind.EpiPen);
+        var pen = sim.CreateItem(CoreItems.EpiPen);
         Assert.True(sim.GiveItem(you, pen));
         Do(sim, drive, new UseItemAction(pen.Id));
         Assert.Equal(NeedRules.MaxStamina, you.Needs!.Stamina);

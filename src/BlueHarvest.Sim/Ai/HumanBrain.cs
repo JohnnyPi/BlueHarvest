@@ -4,6 +4,7 @@ using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.Navigation;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Ai;
 
@@ -245,15 +246,15 @@ public sealed class HumanBrain : IActorController, IWindowShiftListener
         Item? Find(Func<Item, bool> wanted) => inventory.All.FirstOrDefault(i => i.Amount > 0 && wanted(i));
         ActorAction Use(Item item) => new UseItemAction(item.Id);
 
-        if (self.Health.BleedingWounds > 0 && Find(i => i.Kind is ItemKind.Bandage or ItemKind.Tourniquet) is { } bandage)
+        if (self.Health.BleedingWounds > 0 && Find(i => i.Def.Has(ItemHandlers.StopBleeding)) is { } bandage)
             return Use(bandage);
-        if (sim.NeedStage(self, NeedKind.Pain) >= 2 && !needs.OnPainkillers(now) && Find(i => i.Kind == ItemKind.Painkillers) is { } pills)
+        if (sim.NeedStage(self, NeedKind.Pain) >= 2 && !needs.OnPainkillers(now) && Find(i => i.Def.Has(ItemHandlers.Painkillers)) is { } pills)
             return Use(pills);
-        if (sim.UncleanedWounds(self) > 0 && Find(i => i.Kind is ItemKind.Antiseptic or ItemKind.SutureKit or ItemKind.BurnGel) is { } clean)
+        if (sim.UncleanedWounds(self) > 0 && Find(i => i.Def.Has(ItemHandlers.CleanWounds)) is { } clean)
             return Use(clean);
-        if (sim.NeedStage(self, NeedKind.Sickness) >= 2 && !needs.OnAntibiotics(now) && Find(i => i.Kind == ItemKind.Antibiotics) is { } cure)
+        if (sim.NeedStage(self, NeedKind.Sickness) >= 2 && !needs.OnAntibiotics(now) && Find(i => i.Def.Has(ItemHandlers.Antibiotics)) is { } cure)
             return Use(cure);
-        if (Find(i => i.Unsafe) is not null && Find(i => i.Kind == ItemKind.WaterTablets) is { } tablet)
+        if (Find(i => i.Unsafe) is not null && Find(i => i.Def.Has(ItemHandlers.TreatWater)) is { } tablet)
             return Use(tablet);
         int thirst = sim.NeedStage(self, NeedKind.Thirst);
         if (thirst >= 1)
@@ -447,7 +448,7 @@ public sealed class HumanBrain : IActorController, IWindowShiftListener
     /// </summary>
     private ActorAction? HelpAction(Actor self, Simulation sim)
     {
-        if (Traits.Courage < 50 || Fear >= 50 || !self.Inventory.Has(ItemKind.FirstAidKit))
+        if (Traits.Courage < 50 || Fear >= 50 || !self.Inventory.HasWith(ItemHandlers.FirstAid))
             return null;
 
         Actor? patient = null;

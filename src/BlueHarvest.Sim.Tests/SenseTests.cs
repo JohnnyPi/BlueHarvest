@@ -2,6 +2,7 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 using Xunit;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -120,7 +121,7 @@ public class SenseTests
     public void AThrownFlare_IsSeen_AndHeard_ThoughNobodyMadeTheNoise()
     {
         var sim = Field(cover: CoverType.Track); // nothing to catch fire
-        var you = You(sim, new TilePos(10, 10), new ThrowAction(ItemKind.Flare, new TilePos(15, 10)), Loadout.TestbedSurvivor);
+        var you = You(sim, new TilePos(10, 10), new ThrowAction(CoreItems.Flare, new TilePos(15, 10)), Loadout.TestbedSurvivor);
         sim.RunUntil(1);
         TilePos landed = Assert.Single(sim.GroundFlares);
 

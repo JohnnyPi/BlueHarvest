@@ -67,7 +67,13 @@ public static class GlyphSet
         }
         // items: approved, never a glyph that means something else, and never one the ground uses
         var ground = new HashSet<char>(MapLook.AllGlyphs + FacilityLook.AllGlyphs + string.Concat(VisualProfiles.All.Select(v => v.AllGlyphs)));
-        foreach (var def in BlueHarvest.Sim.Actors.ItemCatalog.All)
+        // the items come from the content packs: loading them here is the first use on most runs
+        if (!ContentIntegration.GameContent.ItemsReady)
+        {
+            GD.PushWarning("Glyph check: the items didn't load, so their glyphs weren't checked.");
+            problems++;
+        }
+        foreach (var def in ContentIntegration.GameContent.ItemsReady ? BlueHarvest.Sim.Actors.ItemCatalog.All : System.Array.Empty<BlueHarvest.Sim.Actors.ItemDef>())
         {
             char c = def.Glyph;
             if (!IsApproved(c) || IsReserved(c) || ground.Contains(c))

@@ -15,8 +15,9 @@ public enum MarkerKind : byte
     /// <summary>A shorted fence tile that crackles and flickers until it's broken: it draws the Rex.</summary>
     Sparks,
     /// <summary>
-    /// Items lying on a tile; the name is an item spec ("locker locked; &gt;flashlight; &gt;energy-bar x3"),
-    /// one marker for everything on the tile (see ItemCatalog.ParseSpec).
+    /// Items lying on a tile; the name is an item spec with qualified content IDs
+    /// ("core:locker locked; &gt;core:flashlight; &gt;core:energy-bar x3"), one marker for everything on the tile
+    /// (see ItemCatalog.ParseSpec).
     /// </summary>
     Item,
 }
@@ -39,9 +40,9 @@ public sealed record MapData(
 }
 
 /// <summary>
-/// Reads and writes .bhmap files: plain text, easy to diff. Writes version 2; reads 1 and 2.
+/// Reads and writes .bhmap files: plain text, easy to diff. Writes version 3; reads 1 to 3.
 /// <code>
-/// bhmap 2
+/// bhmap 3
 /// size 4 2
 /// ambient 6        (optional; outdoor light 0-100, default 100 = daylight)
 /// weather rain 70 wind E 8 fog 0 storm
@@ -66,15 +67,22 @@ public sealed record MapData(
 /// 2 1 100 Jeep A
 /// markers          (kind x y [name]; kinds: player npc rex light headlight exit sparks item; an item's name is its spec)
 /// player 0 1 Survivor
+/// item 3 1 core:crate locked; >core:lantern
 /// end
 /// </code>
 /// Version 1 stored heights as one 0.5 m level character per tile and had no roofs, doors or
 /// vehicles sections; its floor tiles were indoors, so reading one gives every floor a 3 m roof.
+/// Version 3 (P2b) names items by content ID (<c>core:locker</c>) where 1 and 2 had the old catalog's
+/// bare names (<c>locker</c>). Those are not read: a version 1 or 2 file with item markers is refused,
+/// and the file must be moved to version 3 by hand (the rest of it reads as before).
 /// Lines starting with ';' are comments, allowed outside the grids.
 /// </summary>
 public static class MapFile
 {
-    public const int FormatVersion = 2;
+    public const int FormatVersion = 3;
+
+    /// <summary>The first version whose item markers use content IDs.</summary>
+    public const int ContentIdVersion = 3;
 
     private static readonly string[] Sections = { "roofs", "decks", "ladders", "doors", "vehicles", "markers" };
 
@@ -101,10 +109,10 @@ public static class MapFile
                 throw new FormatException($"Line {i}: expected '{keyword}', found '{line}'.");
         }
 
-        string[] header = Next("'bhmap 2'").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string[] header = Next($"'bhmap {FormatVersion}'").Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (header.Length != 2 || header[0] != "bhmap" || !int.TryParse(header[1], out int version)
             || version < 1 || version > FormatVersion)
-            throw new FormatException($"Line {i}: expected 'bhmap 1' or 'bhmap {FormatVersion}'.");
+            throw new FormatException($"Line {i}: expected 'bhmap 1' to 'bhmap {FormatVersion}'.");
 
         string[] size = Next("'size W H'").Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (size.Length != 3 || size[0] != "size"
@@ -169,7 +177,7 @@ public static class MapFile
             if (found < 0)
                 throw new FormatException($"Line {i}: expected a section ({string.Join(", ", Sections)}), found '{section}'.");
             if (version == 1)
-                throw new FormatException($"Line {i}: '{section}' needs 'bhmap {FormatVersion}'.");
+                throw new FormatException($"Line {i}: '{section}' needs 'bhmap 2' or later.");
             if (found < sectionIndex)
                 throw new FormatException($"Line {i}: '{section}' is out of order; sections go {string.Join(", ", Sections)}.");
             sectionIndex = found + 1;
@@ -273,6 +281,10 @@ public static class MapFile
             string? name = parts.Length == 4 ? parts[3].Trim() : null;
             if (kind == MarkerKind.Item)
             {
+                if (version < ContentIdVersion)
+                    throw new FormatException(
+                        $"Line {i}: item markers in 'bhmap {version}' use the old item names, which aren't read any more. " +
+                        $"Change the header to 'bhmap {FormatVersion}' and qualify each item ID ('locker' becomes 'core:locker').");
                 try
                 {
                     if (string.IsNullOrWhiteSpace(name) || BlueHarvest.Sim.Actors.ItemCatalog.ParseSpec(name).Count == 0)

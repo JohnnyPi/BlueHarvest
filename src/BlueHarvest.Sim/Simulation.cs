@@ -5,6 +5,8 @@ using BlueHarvest.Sim.Lighting;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.Time;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim;
 
@@ -172,7 +174,7 @@ public sealed partial class Simulation
     public event Action<Actor, Actor, NpcOrder>? OrderGiven;
 
     /// <summary>Raised when something is thrown: (thrower, what, where it landed).</summary>
-    public event Action<Actor, ItemKind, TilePos>? ItemThrown;
+    public event Action<Actor, ContentId, TilePos>? ItemThrown;
 
     /// <summary>Raised after a rappel: (actor, whether it slipped and fell part of the way).</summary>
     public event Action<Actor, bool>? Rappelled;
@@ -1381,13 +1383,15 @@ public sealed partial class Simulation
     /// Throws a flare toward a tile: it lands short of the target past the thrower's range, scatters
     /// with distance (less with skill), comes back off walls, then lights up and hisses for 90 s.
     /// </summary>
-    private int Throw(Actor actor, ItemKind item, TilePos target)
+    private int Throw(Actor actor, ContentId item, TilePos target)
     {
-        if (item is not (ItemKind.Flare or ItemKind.GlowStick))
+        bool flare = ItemCatalog.Find(item)?.Has(ItemHandlers.Flare) == true;
+        bool glowStick = !flare && ItemCatalog.Find(item)?.Has(ItemHandlers.GlowStick) == true;
+        if (!flare && !glowStick)
             return Bump(actor, "that isn't something to throw");
-        if (item == ItemKind.Flare && !actor.Inventory.Has(item))
+        if (flare && !actor.Inventory.Has(item))
             return Bump(actor, "no flares left");
-        if (item == ItemKind.GlowStick && !actor.Inventory.All.Any(i => i.Kind == ItemKind.GlowStick && (i.Lit || !i.Spent)))
+        if (glowStick && !actor.Inventory.All.Any(i => i.Kind == item && (i.Lit || !i.Spent)))
             return Bump(actor, "no glow sticks left");
         if (actor.Inventory.FreeHands == 0)
             return Refuse(actor, "you need a hand free to throw");
@@ -1417,7 +1421,7 @@ public sealed partial class Simulation
         for (int k = steps; k > 0 && Map.CoverAt(land).BlocksMovement; k--)
             land = new TilePos(from.X + (land.X - from.X) * (k - 1) / k, from.Y + (land.Y - from.Y) * (k - 1) / k);
 
-        if (item == ItemKind.GlowStick)
+        if (glowStick)
         {
             // a glow stick lands and lies there glowing (one is cracked on the way if none was)
             if (GlowStickToThrow(actor) is not { } stick)
@@ -1449,11 +1453,11 @@ public sealed partial class Simulation
     /// <summary>Switches the carried flashlight on (the first time, it joins the lights) or off.</summary>
     private int ToggleLight(Actor actor)
     {
-        if (!actor.Inventory.Has(ItemKind.Flashlight))
+        if (!actor.Inventory.HasWith(ItemHandlers.Flashlight))
             return Bump(actor, "no flashlight");
         bool lit = actor.CarriedLight is { } current && _lights[current].On;
         if (!lit && WorkingFlashlight(actor) is null)
-            return Refuse(actor, actor.Inventory.All.Any(i => i.Kind == ItemKind.Flashlight && i.Contents.Count > 0)
+            return Refuse(actor, actor.Inventory.All.Any(i => i.Def.Has(ItemHandlers.Flashlight) && i.Contents.Count > 0)
                 ? "the flashlight's batteries are flat" : "the flashlight has no batteries");
         actor.LightDrainTick = CurrentTick;
         if (actor.CarriedLight is { } index)
@@ -1476,7 +1480,7 @@ public sealed partial class Simulation
     private int Rappel(Actor actor, Direction direction)
     {
         actor.Facing = direction;
-        if (actor.IsLarge || !actor.Inventory.Has(ItemKind.Rope))
+        if (actor.IsLarge || !actor.Inventory.HasWith(ItemHandlers.Rope))
             return Bump(actor, "no rope");
         if (!actor.Health.CanRappel)
             return Bump(actor, "too badly hurt to rappel");
@@ -1499,7 +1503,7 @@ public sealed partial class Simulation
             return Bump(actor, "a platform is in the way at the bottom");
 
         var top = actor.Position;
-        actor.Inventory.Use(ItemKind.Rope);
+        actor.Inventory.UseWith(ItemHandlers.Rope);
         _ropes.Add(new RopeSpot(top, to));
         bool slipped = _gearRng.Chance(GearRules.RappelFailPercent(actor.Skills.Rappelling, actor.Health.YellowArms), 100);
         Place(actor, to, direction, onDeck: false);
@@ -1549,14 +1553,14 @@ public sealed partial class Simulation
             return Bump(actor, patient == actor ? "nothing needs first aid" : $"{patient.Name} needs no first aid");
         if (!actor.Health.CanTreat)
             return Bump(actor, "both arms are useless");
-        if (!actor.Inventory.Has(ItemKind.FirstAidKit))
+        if (!actor.Inventory.HasWith(ItemHandlers.FirstAid))
             return Bump(actor, "no first-aid kit");
 
         int skill = actor.Skills.FirstAid;
         bool worked = _injuryRng.Chance(InjuryRules.TreatSuccessPercent(skill), 100);
         if (worked)
         {
-            actor.Inventory.Use(ItemKind.FirstAidKit);
+            actor.Inventory.UseWith(ItemHandlers.FirstAid);
             health.Set(section, new Wound(Severity.Yellow, false, CurrentTick));
         }
         EmitNoise(actor.Position, InjuryRules.TreatLoudness, NoiseKinds.FirstAid, actor.Id);

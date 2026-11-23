@@ -279,29 +279,14 @@ public static class NeedRules
 /// </summary>
 public static class Nutrition
 {
-    /// <summary>One eaten: kcal, ml of water, and minutes of tiredness it takes off.</summary>
-    public static (int Kcal, int WaterMl, int AlertMinutes) Food(ItemKind kind) => kind switch
-    {
-        ItemKind.EnergyBar => (250, 0, 0),
-        ItemKind.CannedFood => (400, 150, 0),
-        ItemKind.Mre => (1200, 0, 0),
-        ItemKind.Crackers => (450, 0, 0),
-        ItemKind.Jerky => (80, 0, 0),
-        ItemKind.DriedFruit => (350, 0, 0),
-        ItemKind.Chocolate => (500, 0, 20),
-        ItemKind.Noodles => (380, 0, 0),
-        ItemKind.CannedPeaches => (300, 300, 0),
-        ItemKind.Coconut => (350, 300, 0),
-        _ => (0, 0, 0),
-    };
+    /// <summary>One eaten: kcal, ml of water, and minutes of tiredness it takes off (its content's <c>food</c>).</summary>
+    public static (int Kcal, int WaterMl, int AlertMinutes) Food(ItemDef def) => def.Food;
 
-    /// <summary><paramref name="ml"/> drunk: kcal, ml of water, and minutes of tiredness it takes off.</summary>
-    public static (int Kcal, int WaterMl, int AlertMinutes) Drink(ItemKind kind, int ml) => kind switch
-    {
-        ItemKind.Soda => (ml * 140 / 330, ml * 9 / 10, ml * 30 / 330),
-        ItemKind.Thermos => (0, ml, ml * 120 / 250),
-        _ => (0, ml, 0),
-    };
+    /// <summary>
+    /// <paramref name="ml"/> drunk: kcal, ml of water, and minutes of tiredness it takes off (its content's
+    /// <c>drink</c>, by the ml; plain water when it has none).
+    /// </summary>
+    public static (int Kcal, int WaterMl, int AlertMinutes) Drink(ItemDef def, int ml) => def.Drink?.For(ml) ?? (0, ml, 0);
 }
 
 /// <summary>

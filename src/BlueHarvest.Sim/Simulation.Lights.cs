@@ -2,6 +2,7 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Lighting;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim;
 
@@ -74,7 +75,7 @@ public partial class Simulation
         if (stack.Amount > 1)
         {
             stack.Amount--;
-            return _items.Create(ItemKind.GlowStick, 1);
+            return _items.Create(stack.Kind, 1);
         }
         actor.Inventory.Remove(stack);
         return stack;
@@ -88,8 +89,8 @@ public partial class Simulation
         if (torch.Spent)
             return Refuse(actor, "it's burnt out");
         var inventory = actor.Inventory;
-        var flame = inventory.All.FirstOrDefault(i => i.Kind is ItemKind.Lighter or ItemKind.Matches && i.Amount > 0);
-        bool fromTorch = inventory.All.Any(i => i.Kind == ItemKind.Torch && i.Lit);
+        var flame = inventory.All.FirstOrDefault(i => i.Def.Has(ItemHandlers.Flame) && i.Amount > 0);
+        bool fromTorch = inventory.All.Any(i => i.Def.Has(ItemHandlers.Torch) && i.Lit);
         if (flame is null && !fromTorch)
             return Refuse(actor, "you have nothing to light it with");
         if (!fromTorch)
@@ -201,7 +202,7 @@ public partial class Simulation
         {
             // held or worn shines; a glow stick shines from a pocket too (clipped on), nothing does from a bag
             var slot = holder.Inventory.SlotOf(item);
-            if (holder.LeftBehind || holder.HasEscaped || slot is null || slot == CarrySlot.Pocket && item.Kind != ItemKind.GlowStick)
+            if (holder.LeftBehind || holder.HasEscaped || slot is null || slot == CarrySlot.Pocket && !item.Def.Has(ItemHandlers.GlowStick))
                 return null;
             at = holder.Position;
             facing = holder.Facing;
@@ -218,25 +219,26 @@ public partial class Simulation
         {
             return null; // inside something
         }
-        return item.Kind switch
-        {
-            ItemKind.Headlamp => carried ? LightSource.Headlamp(at, facing) : LightSource.Lantern(at, false) with { RadiusTiles = 2, IntensityPercent = 30 },
-            ItemKind.Lantern => LightSource.Lantern(at, carried),
-            ItemKind.GlowStick => LightSource.GlowStick(at, carried),
-            _ => LightSource.Torch(at, carried),
-        };
+        var def = item.Def;
+        if (def.Has(ItemHandlers.Headlamp))
+            return carried ? LightSource.Headlamp(at, facing) : LightSource.Lantern(at, false) with { RadiusTiles = 2, IntensityPercent = 30 };
+        if (def.Has(ItemHandlers.Lantern))
+            return LightSource.Lantern(at, carried);
+        if (def.Has(ItemHandlers.GlowStick))
+            return LightSource.GlowStick(at, carried);
+        return LightSource.Torch(at, carried);
     }
 
     /// <summary>A glow stick to throw: a glowing one carried, or one cracked from a stack (out of the inventory either way).</summary>
     private Item? GlowStickToThrow(Actor actor)
     {
         var inventory = actor.Inventory;
-        if (inventory.All.FirstOrDefault(i => i.Kind == ItemKind.GlowStick && i.Lit) is { } glowing)
+        if (inventory.All.FirstOrDefault(i => i.Def.Has(ItemHandlers.GlowStick) && i.Lit) is { } glowing)
         {
             inventory.Remove(glowing);
             return glowing;
         }
-        if (inventory.All.FirstOrDefault(i => i.Kind == ItemKind.GlowStick && !i.Spent && !i.Lit && i.Amount > 0) is not { } stack)
+        if (inventory.All.FirstOrDefault(i => i.Def.Has(ItemHandlers.GlowStick) && !i.Spent && !i.Lit && i.Amount > 0) is not { } stack)
             return null;
         var stick = TakeOneGlowStick(actor, stack);
         LightUp(stick, GlowStickTicks);

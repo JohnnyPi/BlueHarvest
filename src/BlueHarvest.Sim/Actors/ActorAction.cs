@@ -1,5 +1,7 @@
 using BlueHarvest.Sim.Power;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Actors;
 
@@ -46,7 +48,7 @@ public sealed record ScreamAction : ActorAction;
 public sealed record OrderAction(int TargetId, NpcOrder Order) : ActorAction;
 
 /// <summary>Throw an item (a flare) toward a tile. It falls short past the thrower's range and may scatter.</summary>
-public sealed record ThrowAction(ItemKind Item, TilePos Target) : ActorAction;
+public sealed record ThrowAction(ContentId Item, TilePos Target) : ActorAction;
 
 /// <summary>Switch the carried flashlight on or off.</summary>
 public sealed record ToggleLightAction : ActorAction;
@@ -61,8 +63,12 @@ public sealed record RappelAction(Direction Direction) : ActorAction;
 /// </summary>
 public sealed record OperateAction(int DeviceId, PowerOp Op, int Arg = -1) : ActorAction;
 
-/// <summary>Holds a lit flare to the tile that way (or the actor's own, with no direction) to set it alight. Uses up a flare.</summary>
-public sealed record IgniteAction(Direction? Direction = null, ItemKind Source = ItemKind.Flare) : ActorAction;
+/// <summary>
+/// Holds a lit flare to the tile that way (or the actor's own, with no direction) to set it alight, using up a flare;
+/// or, with <paramref name="Source"/>, a flame or a burning torch (an item with <c>fire.flame</c> or <c>light.torch</c>).
+/// A null <paramref name="Source"/> means a flare.
+/// </summary>
+public sealed record IgniteAction(Direction? Direction = null, ContentId? Source = null) : ActorAction;
 
 /// <summary>
 /// Picks up an item within reach (your tile or the next, at your level): lying on the ground, in an

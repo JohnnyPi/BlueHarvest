@@ -2,6 +2,8 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Sim.World.Generation;
 using Xunit;
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -178,7 +180,7 @@ public class FacilityAreasTests
         IslandWorld world = TestIslands.World(island);
         FacilityAreas areas = world.Areas();
         RoomIndex rooms = RoomIndex.Build(world);
-        var maps = Everything(ItemPlan.Build(world, runSeed: 1)).Where(e => e.Item.Kind == ItemKind.ParkMap).OrderBy(e => e.Item.Id).ToList();
+        var maps = Everything(ItemPlan.Build(world, runSeed: 1)).Where(e => e.Item.Kind == CoreItems.ParkMap).OrderBy(e => e.Item.Id).ToList();
         Assert.NotEmpty(maps);
         var nth = new Dictionary<int, int>();
         foreach (var (map, x, y) in maps)
@@ -215,7 +217,7 @@ public class FacilityAreasTests
         {
             foreach (var (item, x, y) in Everything(ItemPlan.Build(world, seed)))
             {
-                if (item.Kind != ItemKind.Keycard || item.Tag is null)
+                if (item.Kind != CoreItems.Keycard || item.Tag is null)
                     continue;
                 foreach ((int site, int level) in top)
                 {
@@ -257,7 +259,7 @@ public class FacilityAreasTests
     {
         var sim = new Simulation(new WorldMap(20, 20), seed: 7);
         var drive = new PlayerController();
-        var loadout = new Loadout("reader", new Skills(Tracking: tracking), Array.Empty<(ItemKind, int)>());
+        var loadout = new Loadout("reader", new Skills(Tracking: tracking), Array.Empty<(ContentId, int)>());
         Actor you = sim.AddActor("You", '@', new TilePos(5, 5), Species.Human, drive, Direction.East, loadout: loadout);
         IslandWorld world = TestIslands.World(Island);
         MapKnowledge map = knowledge ? sim.UseMapKnowledge(you, world) : new MapKnowledge(world.Shape.Nx, world.Shape.Ny);
@@ -273,7 +275,7 @@ public class FacilityAreasTests
 
     private static Item GiveMap(Simulation sim, PlayerController drive, int area, int sheet)
     {
-        Item map = sim.CreateItem(ItemKind.ParkMap, tag: ParkMaps.Tag(TestIslands.Works(Island).Sites[area], sheet));
+        Item map = sim.CreateItem(CoreItems.ParkMap, tag: ParkMaps.Tag(TestIslands.Works(Island).Sites[area], sheet));
         sim.PlaceItem(map, new TilePos(6, 5));
         Do(sim, drive, new PickUpAction(map.Id));
         return map;
@@ -294,7 +296,7 @@ public class FacilityAreasTests
         Assert.Equal(2, map.Sheets.Count);
         Assert.False(map.HasCharted(4, 1));
         Assert.Equal(new[] { (new ChartedSheet(3, 1), true), (new ChartedSheet(3, 1), false), (new ChartedSheet(3, 2), true) }, charted.ToArray());
-        Assert.Equal(3, you.Inventory.All.Count(i => i.Kind == ItemKind.ParkMap));
+        Assert.Equal(3, you.Inventory.All.Count(i => i.Kind == CoreItems.ParkMap));
     }
 
     [Fact]

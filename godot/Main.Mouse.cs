@@ -14,6 +14,7 @@ using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 using Godot;
 using Direction = BlueHarvest.Sim.World.Direction;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Game;
 
@@ -101,7 +102,7 @@ public partial class Main
         {
             case InputMode.Aim:
                 EndMode();
-                Submit(new ThrowAction(ItemKind.Flare, tile));
+                Submit(new ThrowAction(FlareToThrow(), tile));
                 return;
             case InputMode.Normal:
                 if (tile == _playerActor.Position)
@@ -316,10 +317,10 @@ public partial class Main
             AddNeedChoices(choices);
             if (me.Health.WorstUntreated() is { } wound)
                 choices.Add(new MenuChoice($"First aid on your {InjuryRules.Name(wound)}", () => Submit(new TreatAction()),
-                    $"{inventory.Count(ItemKind.FirstAidKit)} kit(s)", inventory.Has(ItemKind.FirstAidKit) && me.Health.CanTreat));
+                    $"{inventory.CountWith(ItemHandlers.FirstAid)} kit(s)", inventory.HasWith(ItemHandlers.FirstAid) && me.Health.CanTreat));
             if (_sim.Map.Structures.HasLadder(here))
                 choices.Add(new MenuChoice(me.OnDeck ? "Climb down the ladder" : "Climb up the ladder", () => Submit(new ClimbAction())));
-            if (inventory.Has(ItemKind.Flashlight))
+            if (inventory.HasWith(ItemHandlers.Flashlight))
             {
                 bool on = me.CarriedLight is { } light && _sim.Lights[light].On;
                 choices.Add(new MenuChoice(on ? "Switch the flashlight off" : "Switch the flashlight on", () => Submit(new ToggleLightAction())));
@@ -361,7 +362,7 @@ public partial class Main
                 }
             }
             int drop = _sim.StandHeight(me) - _sim.Terrain[tile];
-            if (drop > me.Movement.MaxDropDm && inventory.Has(ItemKind.Rope))
+            if (drop > me.Movement.MaxDropDm && inventory.HasWith(ItemHandlers.Rope))
                 choices.Add(new MenuChoice("Rope down here", () => Submit(new RappelAction(direction)),
                     drop <= GearRules.RopeLengthDm ? $"{Units.FormatMeters(drop)} drop" : "the rope won't reach",
                     drop <= GearRules.RopeLengthDm));
@@ -377,23 +378,23 @@ public partial class Main
             }
             if (reach == 1 && person.Health.WorstUntreated() is not null)
                 choices.Add(new MenuChoice($"Patch up {person.Name}", () => Submit(new TreatAction(person.Id)),
-                    null, inventory.Has(ItemKind.FirstAidKit) && me.Health.CanTreat));
+                    null, inventory.HasWith(ItemHandlers.FirstAid) && me.Health.CanTreat));
         }
 
-        if (!self && inventory.Has(ItemKind.Flare))
+        if (!self && inventory.FirstWith(ItemHandlers.Flare) is { } flare)
         {
             int range = GearRules.ThrowRange(me.Skills.Throwing, me.Health);
             int dx = tile.X - here.X, dy = tile.Y - here.Y;
             double distance = Math.Sqrt(dx * dx + dy * dy);
-            choices.Add(new MenuChoice("Throw a flare here", () => Submit(new ThrowAction(ItemKind.Flare, tile)),
+            choices.Add(new MenuChoice("Throw a flare here", () => Submit(new ThrowAction(flare.Kind, tile)),
                 distance <= range ? $"{distance:0} m" : $"{distance:0} m, lands short", range > 0));
         }
-        if (!self && inventory.All.Any(i => i.Kind == ItemKind.GlowStick && (i.Lit || !i.Spent)))
+        if (!self && inventory.All.FirstOrDefault(i => i.Def.Has(ItemHandlers.GlowStick) && (i.Lit || !i.Spent)) is { } glowStick)
         {
             int range = GearRules.ThrowRange(me.Skills.Throwing, me.Health);
             int dx = tile.X - here.X, dy = tile.Y - here.Y;
             double distance = Math.Sqrt(dx * dx + dy * dy);
-            choices.Add(new MenuChoice("Throw a glow stick here", () => Submit(new ThrowAction(ItemKind.GlowStick, tile)),
+            choices.Add(new MenuChoice("Throw a glow stick here", () => Submit(new ThrowAction(glowStick.Kind, tile)),
                 distance <= range ? $"{distance:0} m, it glows where it lands" : $"{distance:0} m, lands short", range > 0));
         }
 

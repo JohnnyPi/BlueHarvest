@@ -39,6 +39,19 @@ public class TestbedTests
     }
 
     [Fact]
+    public void IsVersion3_AndItsItemsAreCoreContent()
+    {
+        Assert.StartsWith($"bhmap {MapFile.FormatVersion}", Text);
+        var data = MapFile.Parse(Text);
+        Assert.Equal(11, data.Markers.Count(m => m.Kind == MarkerKind.Item));
+        var sim = ScenarioBuilder.Build(data, seed: 1);
+        var lying = sim.ItemsOnMap().Select(l => l.Lying.Item).SelectMany(i => i.SelfAndNested()).ToList();
+        Assert.NotEmpty(lying);
+        Assert.All(lying, i => Assert.Equal("core", i.Kind.Namespace));
+        Assert.Contains(lying, i => i.Kind == BlueHarvest.Sim.ContentIntegration.CoreItems.Locker);
+    }
+
+    [Fact]
     public void RoundTripsThroughSerializer()
     {
         string once = MapFile.Serialize(MapFile.Parse(Text));

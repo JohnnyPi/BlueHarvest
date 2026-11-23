@@ -4,6 +4,8 @@ using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Sim.World.Generation;
 using Xunit;
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -25,7 +27,7 @@ public class ItemUseTests
         sim.RunUntilInputNeeded();
     }
 
-    private static Item Give(Simulation sim, Actor you, ItemKind kind, int? amount = null, bool fitted = true)
+    private static Item Give(Simulation sim, Actor you, ContentId kind, int? amount = null, bool fitted = true)
     {
         var item = sim.CreateItem(kind, amount, fitted: fitted);
         Assert.True(sim.GiveItem(you, item), $"no room for {item}");
@@ -63,12 +65,12 @@ public class ItemUseTests
     public void ANewFlashlight_ComesWithItsBatteries_UnlessMadeEmpty()
     {
         var (sim, _, _) = Person();
-        var fitted = sim.CreateItem(ItemKind.Flashlight);
-        Assert.Equal(new[] { ItemKind.BatteryD, ItemKind.BatteryD }, fitted.Contents.Select(i => i.Kind));
+        var fitted = sim.CreateItem(CoreItems.Flashlight);
+        Assert.Equal(new[] { CoreItems.BatteryD, CoreItems.BatteryD }, fitted.Contents.Select(i => i.Kind));
         Assert.True(fitted.Charged);
         Assert.Equal("a flashlight (2 D batteries, 100%)", fitted.Describe());
 
-        var empty = sim.PlaceItems(ItemCatalog.ParseSpec("flashlight empty"), new TilePos(1, 1))[0];
+        var empty = sim.PlaceItems(ItemCatalog.ParseSpec("core:flashlight empty"), new TilePos(1, 1))[0];
         Assert.Empty(empty.Contents);
         Assert.False(empty.Charged);
     }
@@ -79,9 +81,9 @@ public class ItemUseTests
     public void Rounds_LoadIntoAMagazine_TheMagazineIntoAPistol_AndBackOut()
     {
         var (sim, drive, you) = Person();
-        var rounds = Give(sim, you, ItemKind.Rounds9mm, 20);
-        var magazine = Give(sim, you, ItemKind.Magazine9mm);
-        var pistol = Give(sim, you, ItemKind.Pistol);
+        var rounds = Give(sim, you, CoreItems.Rounds9mm, 20);
+        var magazine = Give(sim, you, CoreItems.Magazine9mm);
+        var pistol = Give(sim, you, CoreItems.Pistol);
         Assert.Equal(0, magazine.Amount);
 
         Do(sim, drive, new CombineAction(rounds.Id, magazine.Id));
@@ -95,7 +97,7 @@ public class ItemUseTests
         Assert.Empty(pistol.Contents);
         Do(sim, drive, new UnloadAction(magazine.Id)); // and the rounds out of it, back with the others
         Assert.Equal(0, magazine.Amount);
-        Assert.Equal(20, you.Inventory.Count(ItemKind.Rounds9mm));
+        Assert.Equal(20, you.Inventory.Count(CoreItems.Rounds9mm));
     }
 
     [Fact]
@@ -104,8 +106,8 @@ public class ItemUseTests
         var (sim, drive, _) = Person();
         var you = sim.Actors[0];
         var refusals = Refusals(sim);
-        var magazine = Give(sim, you, ItemKind.Magazine9mm, 15);
-        var rounds = Give(sim, you, ItemKind.Rounds9mm, 5);
+        var magazine = Give(sim, you, CoreItems.Magazine9mm, 15);
+        var rounds = Give(sim, you, CoreItems.Rounds9mm, 5);
 
         Do(sim, drive, new CombineAction(magazine.Id, rounds.Id));
 
@@ -117,16 +119,16 @@ public class ItemUseTests
     public void AStickAndDuctTape_MakeASplint()
     {
         var (sim, drive, you) = Person();
-        var stick = Give(sim, you, ItemKind.Stick);
-        var tape = Give(sim, you, ItemKind.DuctTape);
+        var stick = Give(sim, you, CoreItems.Stick);
+        var tape = Give(sim, you, CoreItems.DuctTape);
         Item? made = null;
         sim.ItemsCombined += (_, _, _, m) => made = m;
 
         Do(sim, drive, new CombineAction(stick.Id, tape.Id));
 
-        Assert.Equal(ItemKind.Splint, made?.Kind);
-        Assert.True(you.Inventory.Has(ItemKind.Splint));
-        Assert.False(you.Inventory.Has(ItemKind.Stick));
+        Assert.Equal(CoreItems.Splint, made?.Kind);
+        Assert.True(you.Inventory.Has(CoreItems.Splint));
+        Assert.False(you.Inventory.Has(CoreItems.Stick));
         Assert.Equal(18, tape.Amount); // a splint takes two lengths of tape
     }
 
@@ -135,8 +137,8 @@ public class ItemUseTests
     {
         var (sim, drive, you) = Person();
         var refusals = Refusals(sim);
-        var knife = Give(sim, you, ItemKind.Knife);
-        var bar = Give(sim, you, ItemKind.EnergyBar);
+        var knife = Give(sim, you, CoreItems.Knife);
+        var bar = Give(sim, you, CoreItems.EnergyBar);
         Do(sim, drive, new CombineAction(knife.Id, bar.Id));
         Assert.Contains("don't go together", refusals[^1]);
     }
@@ -147,15 +149,15 @@ public class ItemUseTests
     public void Eating_AndDrinking_UseThingsUp()
     {
         var (sim, drive, you) = Person();
-        var bars = Give(sim, you, ItemKind.EnergyBar, 2);
-        var water = Give(sim, you, ItemKind.WaterBottle);
+        var bars = Give(sim, you, CoreItems.EnergyBar, 2);
+        var water = Give(sim, you, CoreItems.WaterBottle);
         var uses = new List<(ItemUse, int)>();
         sim.ItemUsed += (_, _, use, n) => uses.Add((use, n));
 
         Do(sim, drive, new UseItemAction(bars.Id));
         Do(sim, drive, new UseItemAction(water.Id));
 
-        Assert.Equal(1, you.Inventory.Count(ItemKind.EnergyBar));
+        Assert.Equal(1, you.Inventory.Count(CoreItems.EnergyBar));
         Assert.Equal(750, water.Amount);
         Assert.Equal(new[] { (ItemUse.Eat, 1), (ItemUse.Drink, 250) }, uses);
     }
@@ -165,7 +167,7 @@ public class ItemUseTests
     {
         var (sim, drive, you) = Person();
         var refusals = Refusals(sim);
-        var bandage = Give(sim, you, ItemKind.Bandage, 2);
+        var bandage = Give(sim, you, CoreItems.Bandage, 2);
         Do(sim, drive, new UseItemAction(bandage.Id));
         Assert.Contains("nothing is bleeding", refusals[^1]);
 
@@ -178,7 +180,7 @@ public class ItemUseTests
         // the bleeding stops, but the wound is still red: it needs a first-aid kit
         Assert.Equal(Severity.Red, you.Health[BodySection.LeftLeg].Severity);
         Assert.Equal(BodySection.LeftLeg, you.Health.WorstUntreated());
-        Assert.Equal(1, you.Inventory.Count(ItemKind.Bandage));
+        Assert.Equal(1, you.Inventory.Count(CoreItems.Bandage));
     }
 
     // ---------- the flashlight's batteries ----------
@@ -188,12 +190,12 @@ public class ItemUseTests
     {
         var (sim, drive, you) = Person();
         var refusals = Refusals(sim);
-        var flashlight = Give(sim, you, ItemKind.Flashlight, fitted: false);
+        var flashlight = Give(sim, you, CoreItems.Flashlight, fitted: false);
         Do(sim, drive, new ToggleLightAction());
         Assert.Contains("no batteries", refusals[^1]);
 
-        var a = Give(sim, you, ItemKind.BatteryD, 1);
-        var b = Give(sim, you, ItemKind.BatteryD, 1);
+        var a = Give(sim, you, CoreItems.BatteryD, 1);
+        var b = Give(sim, you, CoreItems.BatteryD, 1);
         Do(sim, drive, new CombineAction(a.Id, flashlight.Id));
         Do(sim, drive, new CombineAction(b.Id, flashlight.Id));
         Assert.True(flashlight.Charged);
@@ -219,20 +221,20 @@ public class ItemUseTests
     {
         var (sim, drive, you) = Person();
         var refusals = Refusals(sim);
-        var cabinet = sim.PlaceItems(ItemCatalog.ParseSpec("cabinet locked tag=lab level=2; >research-file"), new TilePos(6, 5))[0];
-        var low = sim.CreateItem(ItemKind.Keycard, tag: "lab", level: 1);
+        var cabinet = sim.PlaceItems(ItemCatalog.ParseSpec("core:cabinet locked tag=lab level=2; >core:research-file"), new TilePos(6, 5))[0];
+        var low = sim.CreateItem(CoreItems.Keycard, tag: "lab", level: 1);
         Assert.True(sim.GiveItem(you, low));
 
         Do(sim, drive, new OpenAction(cabinet.Id));
         Assert.Contains("locked", refusals[^1]);
         Assert.True(cabinet.Locked);
 
-        var other = sim.CreateItem(ItemKind.Keycard, tag: "somewhere else", level: 3);
+        var other = sim.CreateItem(CoreItems.Keycard, tag: "somewhere else", level: 3);
         Assert.True(sim.GiveItem(you, other));
         Do(sim, drive, new OpenAction(cabinet.Id));
         Assert.True(cabinet.Locked);
 
-        var right = sim.CreateItem(ItemKind.Keycard, tag: "lab", level: 2);
+        var right = sim.CreateItem(CoreItems.Keycard, tag: "lab", level: 2);
         Assert.True(sim.GiveItem(you, right));
         Do(sim, drive, new OpenAction(cabinet.Id));
         Assert.False(cabinet.Locked);
@@ -244,11 +246,11 @@ public class ItemUseTests
     {
         var (sim, drive, you) = Person();
         var refusals = Refusals(sim);
-        var crate = sim.PlaceItems(ItemCatalog.ParseSpec("crate locked; >lantern"), new TilePos(6, 5))[0];
+        var crate = sim.PlaceItems(ItemCatalog.ParseSpec("core:crate locked; >core:lantern"), new TilePos(6, 5))[0];
 
         Do(sim, drive, new PryAction(crate.Id));
         Assert.Contains("crowbar", refusals[^1]);
-        Give(sim, you, ItemKind.Crowbar);
+        Give(sim, you, CoreItems.Crowbar);
         long before = sim.CurrentTick;
         Do(sim, drive, new PryAction(crate.Id));
 
@@ -266,7 +268,7 @@ public class ItemUseTests
     public void TheLoot_IsTheSameEveryRunOfASeed_AndDiffersBetweenSeeds()
     {
         IslandWorld world = TestIslands.World(Island);
-        static List<(ItemKind, long, long, int, int)> Of(ItemLedger ledger) =>
+        static List<(ContentId, long, long, int, int)> Of(ItemLedger ledger) =>
             ledger.All.SelectMany(l => l.Item.SelfAndNested().Select(i => (i.Kind, l.X, l.Y, i.Amount, i.Id))).ToList();
 
         var first = Of(ItemPlan.Build(world, runSeed: 1));
@@ -302,14 +304,14 @@ public class ItemUseTests
         var siteNames = world.Works.Sites.Select(s => s.Name).ToHashSet();
         var everything = ItemPlan.Build(world, runSeed: 1).All.SelectMany(l => l.Item.SelfAndNested()).ToList();
 
-        var cards = everything.Where(i => i.Kind == ItemKind.Keycard).ToList();
+        var cards = everything.Where(i => i.Kind == CoreItems.Keycard).ToList();
         Assert.NotEmpty(cards);
         Assert.All(cards, c => Assert.True(c.Tag == "monorail" || c.Tag is not null && c.Level is >= 1 and <= 3, $"{c} has no facility"));
         var locked = everything.Where(i => i.Locked).ToList();
         Assert.NotEmpty(locked);
         Assert.All(locked, l => Assert.NotNull(l.Tag));
         // every armoury locker is locked at level 3
-        Assert.Contains(locked, l => l.Kind == ItemKind.Locker && l.Level == 3);
+        Assert.Contains(locked, l => l.Kind == CoreItems.Locker && l.Level == 3);
         // the monorail key lies somewhere if the island has the objective
         if (world.Works.Objectives.Any(o => o.Key == "monorail-key" && o.Room != "the main building"))
             Assert.Contains(cards, c => c.Tag == "monorail");

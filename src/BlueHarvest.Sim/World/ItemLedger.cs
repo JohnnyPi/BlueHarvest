@@ -1,4 +1,5 @@
 using BlueHarvest.Sim.Actors;
+using BlueHarvest.Content;
 
 namespace BlueHarvest.Sim.World;
 
@@ -32,11 +33,11 @@ public sealed class ItemLedger
     /// flashlight's batteries: they are made right after it). It lies nowhere until it is laid,
     /// carried or put in something.
     /// </summary>
-    public Item Create(ItemKind kind, int? amount = null, string? tag = null, int level = 0, bool fitted = true)
+    public Item Create(ContentId kind, int? amount = null, string? tag = null, int level = 0, bool fitted = true)
     {
         var def = ItemCatalog.Of(kind);
         int fill = Math.Clamp(amount ?? (def.Stacks ? 1 : def.StartAmount), def.Stacks ? 1 : 0, def.MaxAmount);
-        var item = new Item(++_lastId, kind, fill) { Tag = tag, Level = level };
+        var item = new Item(++_lastId, def, fill) { Tag = tag, Level = level };
         if (fitted && def.Comes is { } comes)
         {
             foreach (var (inner, count) in comes)

@@ -10,6 +10,8 @@ using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.World;
 using Godot;
 using Direction = BlueHarvest.Sim.World.Direction;
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Game;
 
@@ -95,34 +97,36 @@ public partial class Main
 
         if (_sim.FireAt(tile) is not null)
         {
-            var extinguisher = inventory.All.FirstOrDefault(i => i.Kind == ItemKind.FireExtinguisher);
+            var extinguisher = inventory.All.FirstOrDefault(i => i.Def.Has(ItemHandlers.Extinguish));
             if (extinguisher is not null && way is { } toward)
                 choices.Add(new MenuChoice("Put the fire out with the extinguisher", () => Submit(new ExtinguishAction(toward)),
                     extinguisher.Amount > 0 ? $"{extinguisher.Amount} of {extinguisher.Def.MaxAmount} charges" : "it's empty", extinguisher.Amount > 0));
             return;
         }
 
-        if (inventory.All.FirstOrDefault(i => i.Kind == ItemKind.JerryCan) is { } can)
+        if (inventory.All.FirstOrDefault(i => i.Def.Has(ItemHandlers.JerryCan)) is { } can)
             choices.Add(new MenuChoice(way is null ? "Pour fuel here" : "Pour a trail of fuel this way", () => Submit(new PourFuelAction(way)),
                 can.Amount >= FireRules.PourLitresPerTile ? $"{can.Amount} L in the can" : "not enough in the can", can.Amount >= FireRules.PourLitresPerTile));
 
         int burnable = _sim.BurnableAt(tile);
         if (burnable <= 0 && !_sim.FuelAt(tile))
             return;
-        if (inventory.Has(ItemKind.Flare))
+        if (inventory.FirstWith(ItemHandlers.Flare) is { } flare)
         {
             string hint = burnable >= 60 ? "tinder dry: it will go up" : burnable >= 40 ? "it should catch" : "damp: it may not take";
-            choices.Add(new MenuChoice("Set it alight with a flare", () => Submit(new IgniteAction(way)), hint));
+            choices.Add(new MenuChoice("Set it alight with a flare", () => Submit(new IgniteAction(way, flare.Kind)), hint));
         }
-        if (inventory.All.Any(i => i.Kind == ItemKind.Torch && i.Lit))
+        if (inventory.All.FirstOrDefault(i => i.Def.Has(ItemHandlers.Torch) && i.Lit) is { } torch)
         {
             string hint = burnable >= 60 ? "tinder dry: it will go up" : burnable >= 40 ? "it should catch" : "damp: it may not take";
-            choices.Add(new MenuChoice("Set it alight with the torch", () => Submit(new IgniteAction(way, ItemKind.Torch)), hint));
+            choices.Add(new MenuChoice($"Set it alight with the {torch.Def.Name}", () => Submit(new IgniteAction(way, torch.Kind)), hint));
         }
-        foreach (var (kind, tool) in new[] { (ItemKind.Lighter, "the lighter"), (ItemKind.Matches, "a match") })
+        // each kind of flame carried with some left (the lighter, the matches), in ID order
+        var flames = inventory.All.Where(i => i.Def.Has(ItemHandlers.Flame) && i.Amount > 0).Select(i => i.Def).Distinct().OrderBy(d => d.Id);
+        foreach (ItemDef flameDef in flames)
         {
-            if (!inventory.All.Any(i => i.Kind == kind && i.Amount > 0))
-                continue;
+            ContentId kind = flameDef.Id;
+            string tool = kind == CoreItems.Matches ? "a match" : $"the {flameDef.Name}";
             string hint = burnable + FireRules.LighterHeat >= FireRules.IgnitionThreshold + FireRules.IgnitionRoll ? "it should catch"
                 : burnable + FireRules.LighterHeat >= FireRules.IgnitionThreshold - FireRules.IgnitionRoll ? "it might catch"
                 : "too damp or tough for a small flame";

@@ -26,6 +26,17 @@ using Gen = BlueHarvest.Sim.World.Generation;
 // Content mode loads YAML content packs (default: content/packs above the program folder) with the content
 // library, prints every diagnostic, and exits 1 if there are errors. --runtime also requires every definition
 // to be runtime-ready (all its handlers implemented), as the game will at startup.
+// Every other mode plays: items come from content/packs (P2b), so that's loaded first, as the game does.
+if (args.Length > 0 && args[0] == "content")
+{
+    Environment.ExitCode = RunContent(args.Skip(1).ToArray());
+    return;
+}
+if (!InstallContent())
+{
+    Environment.ExitCode = 2;
+    return;
+}
 if (args.Length > 0 && args[0] == "batch")
 {
     RunBatch(args.Skip(1).ToArray());
@@ -34,11 +45,6 @@ if (args.Length > 0 && args[0] == "batch")
 if (args.Length > 0 && args[0] == "island")
 {
     RunIsland(args.Skip(1).ToArray());
-    return;
-}
-if (args.Length > 0 && args[0] == "content")
-{
-    Environment.ExitCode = RunContent(args.Skip(1).ToArray());
     return;
 }
 
@@ -336,6 +342,25 @@ static int RunContent(string[] args)
     }
     Console.WriteLine($"Result: {(result.Succeeded ? "OK" : "FAILED")}, {errors} error(s), {warnings} warning(s), {notes} note(s)");
     return result.Succeeded ? 0 : 1;
+}
+
+// Loads content/packs above the program folder and installs its items for the sim. False (with the reasons
+// printed) if there's no content/packs or it doesn't load.
+static bool InstallContent()
+{
+    string? path = FindUpDirectory(Path.Combine("content", "packs"));
+    if (path is null)
+    {
+        Console.Error.WriteLine("Could not find content/packs above the program folder: the sim's items come from it.");
+        return false;
+    }
+    BhContent.ContentLoadResult result = BlueHarvest.Sim.ContentIntegration.SimContent.LoadForPlay(new BhContent.FileSystemContentSource(path));
+    if (result.Succeeded)
+        return true;
+    foreach (BhContent.ContentDiagnostic d in result.Diagnostics.Where(d => d.Severity == BhContent.ContentSeverity.Error))
+        Console.Error.WriteLine(d);
+    Console.Error.WriteLine($"{path} didn't load; run 'content validate' for the details.");
+    return false;
 }
 
 static string? FindUpDirectory(string relativePath)

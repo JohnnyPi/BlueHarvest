@@ -1,6 +1,7 @@
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.World;
 using Xunit;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -29,7 +30,7 @@ public class ItemLightTests
     public void AHeadlamp_ShinesWhereYouFace_AndSwitchesOff()
     {
         var (sim, drive, you) = Person();
-        var lamp = sim.CreateItem(ItemKind.Headlamp);
+        var lamp = sim.CreateItem(CoreItems.Headlamp);
         Assert.True(sim.GiveItem(you, lamp));
         Assert.Equal(lamp, you.Inventory.WornOn(WearSlot.Head));
 
@@ -52,7 +53,7 @@ public class ItemLightTests
     public void ALightWithoutBatteries_WontComeOn()
     {
         var (sim, drive, you) = Person();
-        var lamp = sim.CreateItem(ItemKind.Lantern, fitted: false);
+        var lamp = sim.CreateItem(CoreItems.Lantern, fitted: false);
         Assert.True(sim.GiveItem(you, lamp));
         Do(sim, drive, new UseItemAction(lamp.Id));
         Assert.False(lamp.Lit);
@@ -63,7 +64,7 @@ public class ItemLightTests
     public void ALanternSetDown_KeepsShiningWhereItLies_AndGoesDarkInABag()
     {
         var (sim, drive, you) = Person();
-        var lantern = sim.CreateItem(ItemKind.Lantern);
+        var lantern = sim.CreateItem(CoreItems.Lantern);
         Assert.True(sim.GiveItem(you, lantern));
         Do(sim, drive, new UseItemAction(lantern.Id));
         var spot = you.Position;
@@ -80,7 +81,7 @@ public class ItemLightTests
             Do(sim, drive, new MoveAction(Direction.West));
         Do(sim, drive, new PickUpAction(lantern.Id));
         Assert.True(LitAt(sim, you.Position));
-        var pack = sim.CreateItem(ItemKind.Daypack);
+        var pack = sim.CreateItem(CoreItems.Daypack);
         Assert.True(sim.GiveItem(you, pack));
         Do(sim, drive, new PutAction(lantern.Id, pack.Id));
         Assert.True(lantern.Lit);
@@ -91,7 +92,7 @@ public class ItemLightTests
     public void ALantern_RunsItsBatteriesFlat()
     {
         var (sim, drive, you) = Person();
-        var lantern = sim.CreateItem(ItemKind.Lantern);
+        var lantern = sim.CreateItem(CoreItems.Lantern);
         Assert.True(sim.GiveItem(you, lantern));
         var died = new List<Item>();
         sim.ItemLightDied += (_, item) => died.Add(item);
@@ -106,11 +107,11 @@ public class ItemLightTests
     public void AGlowStick_CrackedFromAStack_GlowsEightHours()
     {
         var (sim, drive, you) = Person();
-        var sticks = sim.CreateItem(ItemKind.GlowStick, amount: 3);
+        var sticks = sim.CreateItem(CoreItems.GlowStick, amount: 3);
         Assert.True(sim.GiveItem(you, sticks));
         Do(sim, drive, new UseItemAction(sticks.Id));
         Assert.Equal(2, sticks.Amount);
-        var glowing = Assert.Single(you.Inventory.All, i => i.Kind == ItemKind.GlowStick && i.Lit);
+        var glowing = Assert.Single(you.Inventory.All, i => i.Kind == CoreItems.GlowStick && i.Lit);
         Assert.NotEqual(sticks, glowing);
         Assert.True(LitAt(sim, you.Position));
 
@@ -124,12 +125,12 @@ public class ItemLightTests
     public void AThrownGlowStick_LiesGlowingWhereItLands()
     {
         var (sim, drive, you) = Person();
-        var sticks = sim.CreateItem(ItemKind.GlowStick, amount: 2);
+        var sticks = sim.CreateItem(CoreItems.GlowStick, amount: 2);
         Assert.True(sim.GiveItem(you, sticks));
         var target = new TilePos(9, 5);
-        Do(sim, drive, new ThrowAction(ItemKind.GlowStick, target));
+        Do(sim, drive, new ThrowAction(CoreItems.GlowStick, target));
         Assert.Equal(1, sticks.Amount);
-        var landed = Assert.Single(sim.ItemsOnMap(), l => l.Lying.Item.Kind == ItemKind.GlowStick);
+        var landed = Assert.Single(sim.ItemsOnMap(), l => l.Lying.Item.Kind == CoreItems.GlowStick);
         Assert.True(landed.Lying.Item.Lit);
         Assert.True(LitAt(sim, landed.At));
     }
@@ -138,8 +139,8 @@ public class ItemLightTests
     public void ATorch_LitWithTheLighter_BurnsHalfAnHour_AndSetsThingsAlight()
     {
         var (sim, drive, you) = Person();
-        var torch = sim.CreateItem(ItemKind.Torch);
-        var lighter = sim.CreateItem(ItemKind.Lighter);
+        var torch = sim.CreateItem(CoreItems.Torch);
+        var lighter = sim.CreateItem(CoreItems.Lighter);
         Assert.True(sim.GiveItem(you, torch));
         Assert.True(sim.GiveItem(you, lighter));
         Do(sim, drive, new UseItemAction(torch.Id));
@@ -149,7 +150,7 @@ public class ItemLightTests
 
         var ahead = new TilePos(6, 5);
         sim.SpillFuel(ahead);
-        Do(sim, drive, new IgniteAction(Direction.East, ItemKind.Torch));
+        Do(sim, drive, new IgniteAction(Direction.East, CoreItems.Torch));
         Assert.NotNull(sim.FireAt(ahead));
         Assert.True(torch.Lit); // still burning
 

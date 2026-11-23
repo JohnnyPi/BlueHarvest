@@ -5,6 +5,7 @@ using BlueHarvest.Game.Ui;
 using BlueHarvest.Sim;
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Game;
 
@@ -30,23 +31,17 @@ public partial class Main
     {
         if (actor != _playerActor)
             return;
-        Say((item.Kind, lit) switch
-        {
-            (ItemKind.GlowStick, _) => "You bend the glow stick until it cracks: a cold green glow.",
-            (ItemKind.Torch, _) => "The rag catches. The torch spits and flares, throwing a ruddy light.",
-            (_, true) => $"You switch the {item.Def.Name} on.",
-            _ => $"You switch the {item.Def.Name} off.",
-        });
+        Say(item.Def.Has(ItemHandlers.GlowStick) ? "You bend the glow stick until it cracks: a cold green glow."
+            : item.Def.Has(ItemHandlers.Torch) ? "The rag catches. The torch spits and flares, throwing a ruddy light."
+            : lit ? $"You switch the {item.Def.Name} on."
+            : $"You switch the {item.Def.Name} off.");
     }
 
     private void OnItemLightDied(Actor? actor, Item item)
     {
-        string what = item.Kind switch
-        {
-            ItemKind.Torch => "gutters and goes out: it's burnt down",
-            ItemKind.GlowStick => "fades to nothing",
-            _ => "dims and goes dark: the batteries are flat",
-        };
+        string what = item.Def.Has(ItemHandlers.Torch) ? "gutters and goes out: it's burnt down"
+            : item.Def.Has(ItemHandlers.GlowStick) ? "fades to nothing"
+            : "dims and goes dark: the batteries are flat";
         if (actor == _playerActor)
             Say($"Your {item.Def.Name} {what}.");
     }
@@ -92,7 +87,7 @@ public partial class Main
             ItemUse.Drink => $"You drink {amount} ml from the {def.Name}.",
             ItemUse.StopBleeding => $"You bind the wound with the {def.Name}: the bleeding stops.",
             ItemUse.TakeMedicine => $"You swallow {amount} {def.Unit ?? "doses"} from the {def.Name}.",
-            ItemUse.DressWounds => def.Kind is ItemKind.Antiseptic or ItemKind.SutureKit or ItemKind.BurnGel
+            ItemUse.DressWounds => def.Has(ItemHandlers.CleanWounds)
                 ? $"You clean your wounds with the {def.Name}."
                 : $"You use the {def.Name} on your wounds.",
             ItemUse.Read => $"The {def.Name}: {def.Note ?? "nothing of use."}",
@@ -154,17 +149,17 @@ public partial class Main
         switch (use)
         {
             case ItemUse.Eat:
-                var (kcal, water, _) = Nutrition.Food(def.Kind);
+                var (kcal, water, _) = Nutrition.Food(def);
                 if (kcal <= 0)
                     return null;
                 return water > 0 ? $"{kcal} kcal, {water} ml" : $"{kcal} kcal";
             case ItemUse.Drink:
                 return $"{System.Math.Min(def.Dose, item.Amount)} ml of {item.Amount}{(item.Unsafe ? ", untreated: it may make you ill" : "")}";
-            case ItemUse.TakeMedicine when def.Kind == ItemKind.Painkillers:
+            case ItemUse.TakeMedicine when def.Has(ItemHandlers.Painkillers):
                 return "dulls pain for 4 h";
-            case ItemUse.TakeMedicine when def.Kind == ItemKind.Antibiotics:
+            case ItemUse.TakeMedicine when def.Has(ItemHandlers.Antibiotics):
                 return "fights infection for 12 h";
-            case ItemUse.DressWounds when def.Kind is ItemKind.Antiseptic or ItemKind.SutureKit or ItemKind.BurnGel:
+            case ItemUse.DressWounds when def.Has(ItemHandlers.CleanWounds):
                 return "cleans your wounds";
             case ItemUse.TreatWater:
                 return "makes untreated water safe";
@@ -188,7 +183,7 @@ public partial class Main
     {
         if (!container.Locked)
             return;
-        if (_playerActor.Inventory.Has(ItemKind.Crowbar))
+        if (_playerActor.Inventory.HasWith(ItemHandlers.Pry))
             items.Add(new MenuChoice($"Force the {container.Def.Name} open with the crowbar", () => Submit(new PryAction(container.Id)), "loud"));
     }
 

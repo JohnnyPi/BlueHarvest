@@ -13,7 +13,7 @@ namespace BlueHarvest.Game.Tools;
 /// Editor-only map tool. Put it on the root of a scene, click "Import from file" in the Inspector,
 /// paint the Heights, Cover, Roofs, Decks, Ladders, Doors and Markers layers with Godot's TileMap tools, then
 /// "Export to file". The .bhmap file is the source of truth; this scene is just a way to edit it.
-/// Export always writes map format v2; Import reads v1 and v2.
+/// Export always writes map format v3 (item markers name content IDs, core:locker); Import reads v1 to v3.
 /// </summary>
 [Tool]
 public partial class MapEditor : Node2D
@@ -105,7 +105,13 @@ public partial class MapEditor : Node2D
         MapData data;
         try
         {
+            ContentIntegration.GameContent.RequireItems(); // item markers name content IDs (P2b)
             data = MapFile.Parse(File.ReadAllText(path));
+        }
+        catch (InvalidOperationException e)
+        {
+            GD.PushError($"Could not read {MapPath}: {e.Message}");
+            return;
         }
         catch (FormatException e)
         {
@@ -294,7 +300,7 @@ public partial class MapEditor : Node2D
             string? name = MarkerNames.TryGetValue(cell, out var named) ? named : null;
             if ((MarkerKind)kind == MarkerKind.Item && string.IsNullOrWhiteSpace(name))
             {
-                GD.PushWarning($"Skipping item marker at {position}: give it a spec in Marker Names (\"locker; >flashlight\").");
+                GD.PushWarning($"Skipping item marker at {position}: give it a spec in Marker Names (\"core:locker; >core:flashlight\").");
                 continue;
             }
             list.Add(new MapMarker((MarkerKind)kind, position, name));

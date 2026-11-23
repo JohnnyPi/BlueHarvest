@@ -1,6 +1,7 @@
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.Perception;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim;
 
@@ -178,12 +179,12 @@ public sealed partial class Simulation
             case ItemUse.Eat:
                 UseUp(inventory, item, 1);
                 used = 1;
-                Nourish(actor, Nutrition.Food(def.Kind));
+                Nourish(actor, Nutrition.Food(def));
                 break;
             case ItemUse.Drink:
                 used = Math.Min(def.Dose, item.Amount);
                 item.Amount -= used;
-                Nourish(actor, Nutrition.Drink(def.Kind, used));
+                Nourish(actor, Nutrition.Drink(def, used));
                 if (item.Unsafe)
                     MaybeCatchGutInfection(actor);
                 if (item.Amount == 0)
@@ -192,9 +193,9 @@ public sealed partial class Simulation
             case ItemUse.TakeMedicine:
                 used = Math.Min(def.Dose, item.Amount);
                 item.Amount -= used;
-                if (def.Kind == ItemKind.Painkillers)
+                if (def.Has(ItemHandlers.Painkillers))
                     TakePainkillers(actor);
-                else if (def.Kind == ItemKind.Antibiotics)
+                else if (def.Has(ItemHandlers.Antibiotics))
                     TakeAntibiotics(actor);
                 break;
             case ItemUse.Inject:
@@ -237,7 +238,7 @@ public sealed partial class Simulation
                     return Refuse(actor, "you have no wounds to see to");
                 UseUp(inventory, item, 1);
                 used = 1;
-                if (def.Kind is ItemKind.Antiseptic or ItemKind.SutureKit or ItemKind.BurnGel)
+                if (def.Has(ItemHandlers.CleanWounds))
                     CleanWounds(actor);
                 break;
             }
@@ -282,7 +283,7 @@ public sealed partial class Simulation
         var container = reach.Item;
         if (!container.Locked)
             return Refuse(actor, $"the {container.Def.Name} isn't locked");
-        if (!actor.Inventory.Has(ItemKind.Crowbar))
+        if (!actor.Inventory.HasWith(ItemHandlers.Pry))
             return Refuse(actor, "you need a crowbar to force it");
         container.Locked = false;
         container.IsOpen = true;
@@ -295,7 +296,7 @@ public sealed partial class Simulation
 
     /// <summary>The flashlight that would light: the first one carried with both its batteries charged.</summary>
     private static Item? WorkingFlashlight(Actor actor) =>
-        actor.Inventory.All.FirstOrDefault(i => i.Kind == ItemKind.Flashlight && i.Charged);
+        actor.Inventory.All.FirstOrDefault(i => i.Def.Has(ItemHandlers.Flashlight) && i.Charged);
 
     /// <summary>
     /// Runs a lit flashlight's batteries down for the time since last time (1% per

@@ -4,6 +4,7 @@ using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 using Xunit;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -76,7 +77,7 @@ public class HealthTests
     [Fact]
     public void FirstAid_StopsTheBleeding_AndUsesTheKit()
     {
-        var expert = new Loadout("medic", new Skills(FirstAid: 3), new[] { (ItemKind.FirstAidKit, 1) });
+        var expert = new Loadout("medic", new Skills(FirstAid: 3), new[] { (CoreItems.FirstAidKit, 1) });
         var (sim, drive, human) = Alone(expert);
         sim.Injure(human, BodySection.RightLeg, Severity.Red, bleeding: true, "test");
 
@@ -84,7 +85,7 @@ public class HealthTests
 
         Assert.Equal(new Wound(Severity.Yellow, false, 0), human.Health[BodySection.RightLeg]);
         Assert.Null(human.Health.BleedTicksLeft(sim.CurrentTick));
-        Assert.Equal(0, human.Inventory.Count(ItemKind.FirstAidKit));
+        Assert.Equal(0, human.Inventory.Count(CoreItems.FirstAidKit));
         Assert.Equal(InjuryRules.TreatTicks(3), human.NextActTick);
     }
 

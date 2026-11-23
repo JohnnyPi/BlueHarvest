@@ -2,6 +2,7 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.World;
 using Xunit;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -73,8 +74,8 @@ public class AilmentTests
         Assert.Equal(100, you.Needs!.Wet);
 
         var (sim2, drive2, you2) = Person(weather: rain);
-        Assert.True(sim2.GiveItem(you2, sim2.CreateItem(ItemKind.Poncho)));
-        Assert.Equal(ItemKind.Poncho, you2.Inventory.WornOn(WearSlot.Body)?.Kind);
+        Assert.True(sim2.GiveItem(you2, sim2.CreateItem(CoreItems.Poncho)));
+        Assert.Equal(CoreItems.Poncho, you2.Inventory.WornOn(WearSlot.Body)?.Kind);
         Do(sim2, drive2, new WaitAction(20 * Minute));
         Assert.Equal(20, you2.Needs!.Wet);
     }
@@ -136,7 +137,7 @@ public class AilmentTests
     {
         var (sim, drive, you) = Person(WithStream());
         Assert.Equal(WaterSource.Fresh, sim.WaterSourceAt(new TilePos(3, 5)));
-        var bottle = sim.CreateItem(ItemKind.WaterBottle, amount: 0);
+        var bottle = sim.CreateItem(CoreItems.WaterBottle, amount: 0);
         Assert.True(sim.GiveItem(you, bottle));
 
         Do(sim, drive, new FillAction(bottle.Id, Direction.East));
@@ -144,7 +145,7 @@ public class AilmentTests
         Assert.True(bottle.Unsafe);
         Assert.Contains("(untreated)", bottle.Describe());
 
-        var tablets = sim.CreateItem(ItemKind.WaterTablets);
+        var tablets = sim.CreateItem(CoreItems.WaterTablets);
         Assert.True(sim.GiveItem(you, tablets));
         Do(sim, drive, new UseItemAction(tablets.Id));
         Assert.False(bottle.Unsafe);
@@ -195,7 +196,7 @@ public class AilmentTests
         Assert.Equal(1, sim.DirtyWounds(you));
         Assert.True(sim.NeedStage(you, NeedKind.Sickness) >= 2);
 
-        var pills = sim.CreateItem(ItemKind.Antibiotics);
+        var pills = sim.CreateItem(CoreItems.Antibiotics);
         Assert.True(sim.GiveItem(you, pills));
         Do(sim, drive, new UseItemAction(pills.Id));
         Endure(sim, drive, you, 18);
@@ -208,7 +209,7 @@ public class AilmentTests
     {
         var (sim, drive, you) = Person();
         sim.Injure(you, BodySection.LeftLeg, Severity.Red, bleeding: false, "a test");
-        var antiseptic = sim.CreateItem(ItemKind.Antiseptic);
+        var antiseptic = sim.CreateItem(CoreItems.Antiseptic);
         Assert.True(sim.GiveItem(you, antiseptic));
         Do(sim, drive, new UseItemAction(antiseptic.Id));
         Assert.Equal(0, sim.UncleanedWounds(you));

@@ -21,9 +21,9 @@ public class MapFileTests
         "light 3 0\n" +
         "end\n";
 
-    /// <summary>The same map as written now: decimeter heights, and the doorway listed.</summary>
+    /// <summary>The same map as written now (version 3): decimeter heights, and the doorway listed.</summary>
     private const string Small =
-        "bhmap 2\n" +
+        "bhmap 3\n" +
         "size 4 2\n" +
         "heights\n" +
         "0 0 50 80\n" +
@@ -39,9 +39,9 @@ public class MapFileTests
         "light 3 0\n" +
         "end\n";
 
-    /// <summary>A v2 file using every section.</summary>
+    /// <summary>A v3 file using every section (v2 and v3 differ only in how item markers name items).</summary>
     private const string Full =
-        "bhmap 2\n" +
+        "bhmap 3\n" +
         "size 5 2\n" +
         "ambient 6\n" +
         "heights\n" +
@@ -104,6 +104,13 @@ public class MapFileTests
     }
 
     [Fact]
+    public void AVersion2File_ReadsAsVersion3_AndIsWrittenAs3()
+    {
+        string v2 = Full.Replace("bhmap 3\n", "bhmap 2\n");
+        Assert.Equal(Full, MapFile.Serialize(MapFile.Parse(v2)));
+    }
+
+    [Fact]
     public void V2_ReadsDecimetersRoofsDoorsAndVehicles()
     {
         var data = MapFile.Parse(Full);
@@ -152,7 +159,7 @@ public class MapFileTests
     [InlineData("npc 1 1\n", "dragon 1 1\n")]         // unknown marker kind
     [InlineData("npc 1 1\n", "npc 9 1\n")]            // marker outside the map
     [InlineData("end\n", "")]                         // missing end
-    [InlineData("bhmap 2\n", "bhmap 3\n")]            // unsupported version
+    [InlineData("bhmap 3\n", "bhmap 4\n")]            // unsupported version
     [InlineData("2 1 open\n", "2 1 ajar\n")]          // unknown door state
     [InlineData("2 1 open\n", "1 1 open\n")]          // door not on a doorway
     [InlineData("doors\n", "dooors\n")]              // unknown section
@@ -171,9 +178,9 @@ public class MapFileTests
         Assert.Throws<FormatException>(() => MapFile.Parse(Full.Replace(find, replace)));
     }
 
-    /// <summary>A small v2 map with a raised platform (decks), a ladder and a support post.</summary>
+    /// <summary>A small v3 map with a raised platform (decks), a ladder and a support post.</summary>
     private const string WithPlatform =
-        "bhmap 2\n" +
+        "bhmap 3\n" +
         "size 4 2\n" +
         "heights\n" +
         "0 0 0 0\n" +

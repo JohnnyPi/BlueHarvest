@@ -3,10 +3,10 @@ using BlueHarvest.Content;
 namespace BlueHarvest.Sim.ContentIntegration;
 
 /// <summary>
-/// The item mechanics the sim has today, as handler keys that item definitions name (P2a). Each one is already
-/// implemented: the code that does it still checks the item kind until P2b, which switches those checks to these
-/// keys. A <c>use.*</c> key is what using the item on its own does (<c>Recipes.UseOf</c>); the others are the
-/// kind-specific code elsewhere, named where it lives.
+/// The item mechanics the sim has, as handler keys that item definitions name (P2a). Since P2b the code checks for
+/// the key, never for a particular item (<c>ItemDef.Has</c>, <c>Inventory.HasWith</c>), so any item that names a key
+/// gets its mechanic. A <c>use.*</c> key is what using the item on its own does (<c>Recipes.UseOf</c>); the others
+/// are the mechanics elsewhere, named where they live.
 /// </summary>
 public static class ItemHandlers
 {

@@ -2,6 +2,7 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Power;
 using BlueHarvest.Sim.World;
 using Xunit;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -157,7 +158,7 @@ public class ItemSystemsTests
     public void InTheSim_TheCanFills_AndEmptiesIntoTheGenerator_AndPartsAreUsedUp()
     {
         var (sim, c, drive, you) = AtTheCompound(new TilePos(10, 5)); // at the tanks
-        var can = sim.CreateItem(ItemKind.JerryCan, amount: 0);
+        var can = sim.CreateItem(CoreItems.JerryCan, amount: 0);
         Assert.True(sim.GiveItem(you, can));
         Assert.Contains(sim.PowerChoices(you, c.Fuel.Id), x => x.Op == PowerOp.FillCan && x.Enabled);
 
@@ -173,10 +174,10 @@ public class ItemSystemsTests
         Assert.Equal(7000, c.Generator.FuelCentilitres);
 
         PowerGrid.SetGenerator(c.Generator, GeneratorState.Seized, 7000);
-        Assert.True(sim.GiveItem(you, sim.CreateItem(ItemKind.SpareParts)));
+        Assert.True(sim.GiveItem(you, sim.CreateItem(CoreItems.SpareParts)));
         Do(sim, drive, new OperateAction(c.Generator.Id, PowerOp.Repair));
         Assert.Equal(GeneratorState.NeedsRepair, c.Generator.State);
-        Assert.False(you.Inventory.Has(ItemKind.SpareParts));
+        Assert.False(you.Inventory.Has(CoreItems.SpareParts));
     }
 
     /// <summary>A wall along row 10 with a security door at (10,10), the compound's power on and its locks engaged.</summary>
@@ -208,11 +209,11 @@ public class ItemSystemsTests
         Do(sim, drive, new MoveAction(Direction.North));
         Assert.Equal(DoorState.Locked, sim.Map.Structures.DoorAt(door)); // no card
 
-        Assert.True(sim.GiveItem(you, sim.CreateItem(ItemKind.Keycard, tag: "another compound", level: 3)));
+        Assert.True(sim.GiveItem(you, sim.CreateItem(CoreItems.Keycard, tag: "another compound", level: 3)));
         Do(sim, drive, new MoveAction(Direction.North));
         Assert.Equal(DoorState.Locked, sim.Map.Structures.DoorAt(door)); // someone else's card
 
-        Assert.True(sim.GiveItem(you, sim.CreateItem(ItemKind.Keycard, tag: "test compound", level: 2)));
+        Assert.True(sim.GiveItem(you, sim.CreateItem(CoreItems.Keycard, tag: "test compound", level: 2)));
         var used = new List<Item>();
         sim.KeycardUsed += (_, card, _) => used.Add(card);
         Do(sim, drive, new MoveAction(Direction.North));
@@ -226,7 +227,7 @@ public class ItemSystemsTests
     public void ALevelTwoCard_DoesntOpenALevelThreeDoor()
     {
         var (sim, drive, you, door) = AtASecurityDoor(level: 3);
-        Assert.True(sim.GiveItem(you, sim.CreateItem(ItemKind.Keycard, tag: "test compound", level: 2)));
+        Assert.True(sim.GiveItem(you, sim.CreateItem(CoreItems.Keycard, tag: "test compound", level: 2)));
         Do(sim, drive, new MoveAction(Direction.North));
         Assert.Equal(DoorState.Locked, sim.Map.Structures.DoorAt(door));
     }
@@ -276,14 +277,14 @@ public class ItemSystemsTests
     public void ALighter_LightsFuel_ButNotALawn_AndUsesItself()
     {
         var (sim, drive, you) = OnGrass();
-        var lighter = sim.CreateItem(ItemKind.Lighter);
+        var lighter = sim.CreateItem(CoreItems.Lighter);
         Assert.True(sim.GiveItem(you, lighter));
         Assert.Equal(CoverType.Grass, sim.Cover[new TilePos(6, 5)]);
 
-        Do(sim, drive, new IgniteAction(Direction.East, ItemKind.Lighter));
+        Do(sim, drive, new IgniteAction(Direction.East, CoreItems.Lighter));
         Assert.Null(sim.FireAt(new TilePos(6, 5))); // 30 + 40 is nowhere near
         sim.SpillFuel(new TilePos(6, 5));
-        Do(sim, drive, new IgniteAction(Direction.East, ItemKind.Lighter));
+        Do(sim, drive, new IgniteAction(Direction.East, CoreItems.Lighter));
 
         Assert.NotNull(sim.FireAt(new TilePos(6, 5)));
         Assert.Equal(38, lighter.Amount);
@@ -294,7 +295,7 @@ public class ItemSystemsTests
     public void AnExtinguisher_PutsOutItsCone_AndTheGroundWontCatchForAWhile()
     {
         var (sim, drive, you) = OnGrass();
-        var extinguisher = sim.CreateItem(ItemKind.FireExtinguisher);
+        var extinguisher = sim.CreateItem(CoreItems.FireExtinguisher);
         Assert.True(sim.GiveItem(you, extinguisher));
         var cone = Simulation.ExtinguisherCone(you.Position, Direction.East);
         Assert.Equal(new[] { new TilePos(6, 5), new TilePos(6, 4), new TilePos(6, 6), new TilePos(7, 5) }, cone);
@@ -321,7 +322,7 @@ public class ItemSystemsTests
     {
         var trail = Enumerable.Range(6, 4).Select(x => new TilePos(x, 5)).ToList();
         var (sim, drive, you) = OnGrass(floorBut: trail.Append(new TilePos(10, 5)).ToList());
-        var can = sim.CreateItem(ItemKind.JerryCan, amount: 12);
+        var can = sim.CreateItem(CoreItems.JerryCan, amount: 12);
         Assert.True(sim.GiveItem(you, can));
 
         Do(sim, drive, new PourFuelAction(Direction.East));

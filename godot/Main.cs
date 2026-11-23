@@ -15,6 +15,7 @@ using BlueHarvest.Sim.World;
 using BlueHarvest.Sim.World.Generation;
 using Godot;
 using Direction = BlueHarvest.Sim.World.Direction;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Game;
 
@@ -418,7 +419,7 @@ public partial class Main : Node2D
         switch (key)
         {
             case Key.F:
-                if (!inventory.Has(ItemKind.Flare))
+                if (!inventory.HasWith(ItemHandlers.Flare))
                 {
                     Say("You have no flares left.");
                     return true;
@@ -429,7 +430,7 @@ public partial class Main : Node2D
                 SetPrompt("Aim the flare: click a tile, or move the cursor and press Enter. Esc cancels.");
                 return true;
             case Key.R:
-                if (!inventory.Has(ItemKind.Rope))
+                if (!inventory.HasWith(ItemHandlers.Rope))
                 {
                     Say("You have no rope.");
                     return true;
@@ -499,7 +500,7 @@ public partial class Main : Node2D
         else if (!key.Echo && key.Keycode is Key.Enter or Key.KpEnter or Key.F)
         {
             EndMode();
-            Submit(new ThrowAction(ItemKind.Flare, _cursor));
+            Submit(new ThrowAction(FlareToThrow(), _cursor));
         }
     }
 
@@ -586,6 +587,8 @@ public partial class Main : Node2D
 
     private void LoadSimulation()
     {
+        // the items come from the content packs (P2b): without them there's nothing to play, not even the demo
+        ContentIntegration.GameContent.RequireItems();
         if (Island.IslandLaunch.Walk && Island.IslandLaunch.World is { } world && Island.IslandLaunch.Chunker is { } chunker)
         {
             try

@@ -5,6 +5,7 @@ using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 using Xunit;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -192,7 +193,7 @@ public class NpcTests
         Assert.False(pete.IsDead);
         Assert.False(pete.Health[BodySection.Torso].Bleeding);
         Assert.Equal(new[] { (doctor, pete) }, treated);
-        Assert.Equal(1, doctor.Inventory.Count(ItemKind.FirstAidKit));
+        Assert.Equal(1, doctor.Inventory.Count(CoreItems.FirstAidKit));
     }
 
     [Fact]
@@ -327,7 +328,7 @@ public class NpcTests
         Assert.True(far.Health[BodySection.LeftLeg].Bleeding);
         Assert.Equal(Severity.Yellow, near.Health[BodySection.LeftLeg].Severity);
         Assert.False(near.Health[BodySection.LeftLeg].Bleeding);
-        Assert.Equal(1, you.Inventory.Count(ItemKind.FirstAidKit));
+        Assert.Equal(1, you.Inventory.Count(CoreItems.FirstAidKit));
         Assert.Equal(Severity.Green, you.Health[BodySection.LeftLeg].Severity);
     }
 

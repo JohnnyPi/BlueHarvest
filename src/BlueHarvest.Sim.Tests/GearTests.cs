@@ -6,6 +6,7 @@ using BlueHarvest.Sim.Lighting;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 using Xunit;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -14,7 +15,7 @@ public class GearTests
 {
     private static readonly Loadout Expert = new("expert",
         new Skills(Climbing: 3, Rappelling: 3, Throwing: 3),
-        new[] { (ItemKind.Flare, 2), (ItemKind.Flashlight, 1), (ItemKind.Rope, 1) });
+        new[] { (CoreItems.Flare, 2), (CoreItems.Flashlight, 1), (CoreItems.Rope, 1) });
 
     /// <summary>A human the test drives at <paramref name="at"/>, on a 30×30 map (night unless given).</summary>
     private static (Simulation Sim, PlayerController Drive, Actor Human) Person(WorldMap? map = null, TilePos? at = null,
@@ -42,10 +43,10 @@ public class GearTests
         sim.ItemThrown += (_, _, at) => landed.Add(at);
         int before = sim.Light.LevelAt(new TilePos(10, 5));
 
-        Do(sim, drive, new ThrowAction(ItemKind.Flare, new TilePos(10, 5)));
+        Do(sim, drive, new ThrowAction(CoreItems.Flare, new TilePos(10, 5)));
 
         Assert.Equal(new[] { new TilePos(10, 5) }, landed); // expert at 5 tiles: no scatter
-        Assert.Equal(1, human.Inventory.Count(ItemKind.Flare));
+        Assert.Equal(1, human.Inventory.Count(CoreItems.Flare));
         Assert.True(sim.Light.LevelAt(new TilePos(10, 5)) > before + 50);
         Assert.Contains(sim.RecentNoises, n => n.Kind == NoiseKinds.Flare && n.ActorId is null);
 
@@ -63,7 +64,7 @@ public class GearTests
         sim.ItemThrown += (_, _, at) => landed.Add(at);
         int range = GearRules.ThrowRange(human.Skills.Throwing, human.Health); // 15 for an expert
 
-        Do(sim, drive, new ThrowAction(ItemKind.Flare, new TilePos(29, 5)));
+        Do(sim, drive, new ThrowAction(CoreItems.Flare, new TilePos(29, 5)));
 
         var at = Assert.Single(landed);
         Assert.InRange(at.X - 5, range - GearRules.Scatter(range, 3), range + GearRules.Scatter(range, 3));
@@ -91,7 +92,7 @@ public class GearTests
         // Off to its side (dx 13, dy -2 from its eyes), outside its 120° view: it never sees the throw.
         var (sim, brain, drive, _) = RexAndThrower(new TilePos(33, 24));
 
-        Do(sim, drive, new ThrowAction(ItemKind.Flare, new TilePos(20, 15)));
+        Do(sim, drive, new ThrowAction(CoreItems.Flare, new TilePos(20, 15)));
         sim.RunUntil(sim.CurrentTick + 100);
 
         Assert.Equal(new ContactKey(ContactSource.Light, 0), brain.Focus?.Key);
@@ -105,7 +106,7 @@ public class GearTests
         // and prey outranks a light.
         var (sim, brain, drive, human) = RexAndThrower(new TilePos(30, 12));
 
-        Do(sim, drive, new ThrowAction(ItemKind.Flare, new TilePos(20, 15)));
+        Do(sim, drive, new ThrowAction(CoreItems.Flare, new TilePos(20, 15)));
         sim.RunUntil(sim.CurrentTick + 100);
 
         Assert.Equal(ContactKey.ForActor(human.Id), brain.Focus?.Key);
@@ -150,7 +151,7 @@ public class GearTests
         Do(sim, drive, new RappelAction(Direction.East));
 
         Assert.Equal(new TilePos(5, 5), human.Position);
-        Assert.Equal(0, human.Inventory.Count(ItemKind.Rope));
+        Assert.Equal(0, human.Inventory.Count(CoreItems.Rope));
         Assert.Equal(new RopeSpot(new TilePos(4, 5), new TilePos(5, 5)), Assert.Single(sim.Ropes));
         Assert.All(Enum.GetValues<BodySection>(), s => Assert.Equal(Severity.Green, human.Health[s].Severity));
         Assert.Equal(GearRules.RappelTicks(80, 3), human.NextActTick);

@@ -2,6 +2,8 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim;
 
@@ -75,25 +77,15 @@ public partial class Simulation
             if (d <= 5) fire = 1;
         }
         var inventory = actor.Inventory;
-        bool poncho = inventory.WornOn(WearSlot.Body)?.Kind == ItemKind.Poncho;
+        bool poncho = inventory.WornOn(WearSlot.Body)?.Def.Has(ItemHandlers.RainCover) == true;
         int clothes = 0;
         foreach (WearSlot slot in new[] { WearSlot.Body, WearSlot.Hands, WearSlot.Feet, WearSlot.Head })
         {
             if (inventory.WornOn(slot) is { } worn)
-                clothes += WarmthOf(worn.Kind);
+                clothes += worn.Def.Warmth; // its content's warmth
         }
         return new Whereabouts(sheltered, wading, fire, poncho, clothes);
     }
-
-    /// <summary>The warmth a kind gives when worn, added up over what's worn (the YAML's <c>warmth</c>, checked in P2a).</summary>
-    public static int WarmthOf(ItemKind kind) => kind switch
-    {
-        ItemKind.Poncho => 10,
-        ItemKind.TacticalVest => 20,
-        ItemKind.WorkGloves => 5,
-        ItemKind.Boots => 5,
-        _ => 0,
-    };
 
     /// <summary>How warm it feels to someone now, in tenths of a degree (the air for those without needs).</summary>
     public int FeelsLike(Actor actor) =>
@@ -245,7 +237,7 @@ public partial class Simulation
     {
         if (actor.Inventory.Find(itemId) is not { } item)
             return Refuse(actor, "you don't have that");
-        if (item.Kind is not (ItemKind.WaterBottle or ItemKind.Canteen))
+        if (!item.Def.Has(ItemHandlers.Refill))
             return Refuse(actor, $"you can't carry water in the {item.Def.Name}");
         TilePos at = direction is { } d ? actor.Position.Offset(d) : actor.Position;
         if (WaterRefusal(at) is { } why)

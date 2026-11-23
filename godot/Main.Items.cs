@@ -7,6 +7,8 @@ using BlueHarvest.Sim;
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.World;
 using Godot;
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Game;
 
@@ -196,6 +198,12 @@ public partial class Main
             facts.Add(("Right-click to take or open", HudTheme.Muted));
     }
 
+    /// <summary>
+    /// The flare the player would throw: the first one carried. With none, the core flare, so that the sim says
+    /// there are no flares left.
+    /// </summary>
+    private ContentId FlareToThrow() => _playerActor.Inventory.FirstWith(ItemHandlers.Flare)?.Kind ?? CoreItems.Flare;
+
     /// <summary>The sidebar's inventory: hands, pockets, what's worn and in it, and the weight.</summary>
     private string InventoryText()
     {
@@ -208,12 +216,12 @@ public partial class Main
         var lines = new List<string>();
         var keys = new List<string>
         {
-            $"{KeyCap("T")} kit {inventory.Count(ItemKind.FirstAidKit)}",
-            $"{KeyCap("F")} flare {inventory.Count(ItemKind.Flare)}",
+            $"{KeyCap("T")} kit {inventory.CountWith(ItemHandlers.FirstAid)}",
+            $"{KeyCap("F")} flare {inventory.CountWith(ItemHandlers.Flare)}",
         };
-        if (inventory.Has(ItemKind.Flashlight))
+        if (inventory.HasWith(ItemHandlers.Flashlight))
             keys.Add($"{KeyCap("X")} light {(lightOn ? $"[color={HudTheme.Hex(HudTheme.Amber)}]on[/color]" : "off")}");
-        if (inventory.Has(ItemKind.Rope))
+        if (inventory.HasWith(ItemHandlers.Rope))
             keys.Add($"{KeyCap("R")} rope");
         keys.Add($"{KeyCap("I")} items");
         lines.Add(string.Join("  ", keys));

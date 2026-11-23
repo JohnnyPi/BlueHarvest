@@ -5,6 +5,7 @@ using BlueHarvest.Sim.Lighting;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.Power;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim;
 
@@ -369,7 +370,7 @@ public sealed partial class Simulation
     }
 
     /// <summary>The jerry can an actor would use: the first one carried.</summary>
-    private static Item? JerryCanOf(Actor actor) => actor.Inventory.All.FirstOrDefault(i => i.Kind == ItemKind.JerryCan);
+    private static Item? JerryCanOf(Actor actor) => actor.Inventory.All.FirstOrDefault(i => i.Def.Has(ItemHandlers.JerryCan));
 
     /// <summary>What an actor carries that matters to the power equipment: a tool kit, spare parts, a jerry can, the monorail key.</summary>
     public OperatorKit KitOf(Actor actor)
@@ -377,11 +378,11 @@ public sealed partial class Simulation
         var inventory = actor.Inventory;
         var can = JerryCanOf(actor);
         return new OperatorKit(
-            ToolKit: inventory.Has(ItemKind.ToolKit),
-            SpareParts: inventory.Count(ItemKind.SpareParts),
+            ToolKit: inventory.HasWith(ItemHandlers.ToolKit),
+            SpareParts: inventory.CountWith(ItemHandlers.SpareParts),
             CanLitres: can?.Amount ?? 0,
             CanCapacity: can?.Def.MaxAmount ?? 0,
-            MonorailKey: inventory.Has(ItemKind.Keycard, "monorail"));
+            MonorailKey: inventory.HasWith(ItemHandlers.Keycard, "monorail"));
     }
 
     /// <summary>What an actor could do at a device now, with what they carry (for the menu).</summary>
@@ -397,7 +398,7 @@ public sealed partial class Simulation
         if (Power is null || door.Kind != DoorKind.SecurityLock)
             return null;
         string site = Power.Sites[door.SiteId].Name;
-        return actor.Inventory.All.FirstOrDefault(i => i.Kind == ItemKind.Keycard && i.Tag == site && i.Level >= door.Level);
+        return actor.Inventory.All.FirstOrDefault(i => i.Def.Has(ItemHandlers.Keycard) && i.Tag == site && i.Level >= door.Level);
     }
 
     /// <summary>
@@ -435,7 +436,7 @@ public sealed partial class Simulation
         if (result.CanLitres != 0 && JerryCanOf(actor) is { } can)
             can.Amount = Math.Clamp(can.Amount + result.CanLitres, 0, can.Def.MaxAmount);
         for (int i = 0; i < result.PartsUsed; i++)
-            actor.Inventory.Use(ItemKind.SpareParts);
+            actor.Inventory.UseWith(ItemHandlers.SpareParts);
         if (result.Loudness > 0)
             EmitNoise(actor.Position, result.Loudness, result.NoiseKind, actor.Id);
         if (result.Done && op == PowerOp.Ride && Power.Devices[arg] is Transport to)

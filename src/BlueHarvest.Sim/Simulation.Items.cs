@@ -2,6 +2,8 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim;
 
@@ -52,7 +54,7 @@ public sealed partial class Simulation
     // ---------- setup ----------
 
     /// <summary>Makes an item (setup, tests, loot), fitted with what it comes with unless not <paramref name="fitted"/>. It lies nowhere until laid, given or stowed.</summary>
-    public Item CreateItem(ItemKind kind, int? amount = null, string? tag = null, int level = 0, bool fitted = true) =>
+    public Item CreateItem(ContentId kind, int? amount = null, string? tag = null, int level = 0, bool fitted = true) =>
         _items.Create(kind, amount, tag, level, fitted);
 
     /// <summary>Lays an item on a tile of the map (on its deck if <paramref name="onDeck"/>).</summary>
@@ -302,7 +304,7 @@ public sealed partial class Simulation
         if (!container.IsOpen && container.Locked)
         {
             if (KeyFor(actor, container) is not { } key)
-                return Refuse(actor, actor.Inventory.Has(ItemKind.Crowbar)
+                return Refuse(actor, actor.Inventory.HasWith(ItemHandlers.Pry)
                     ? $"the {container.Def.Name} is locked (you could force it)" : $"the {container.Def.Name} is locked");
             container.Locked = false;
             extra = ItemRules.UnlockTicks;
@@ -320,7 +322,7 @@ public sealed partial class Simulation
     private void LetGoOf(Actor actor, Item item)
     {
         if (actor.CarriedLight is { } light && _lights[light].On
-            && item.SelfAndNested().Any(i => i.Kind == ItemKind.Flashlight) && !actor.Inventory.Has(ItemKind.Flashlight))
+            && item.SelfAndNested().Any(i => i.Def.Has(ItemHandlers.Flashlight)) && !actor.Inventory.HasWith(ItemHandlers.Flashlight))
             SetLightOn(light, false);
     }
 
@@ -354,7 +356,7 @@ public sealed partial class Simulation
 
     private static void AddItem(StateHasher hasher, Item item)
     {
-        hasher.Add(item.Id).Add((int)item.Kind).Add(item.Amount).Add(item.IsOpen ? 1 : 0).Add(item.Locked ? 1 : 0)
+        hasher.Add(item.Id).Add(item.Kind.Value).Add(item.Amount).Add(item.IsOpen ? 1 : 0).Add(item.Locked ? 1 : 0)
             .Add(item.Level).Add(item.Tag?.Length ?? -1).Add(item.Contents.Count).Add(item.Unsafe ? 1 : 0)
             .Add(item.Lit ? 1 : 0).Add(item.LitUntilTick);
         foreach (var inner in item.Contents)

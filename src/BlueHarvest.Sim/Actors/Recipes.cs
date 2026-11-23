@@ -1,3 +1,6 @@
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
+
 namespace BlueHarvest.Sim.Actors;
 
 /// <summary>How two items go together. Append only.</summary>
@@ -11,8 +14,8 @@ public enum CombineKind : byte
     Make,
 }
 
-/// <summary>Two kinds that make a third, using up <see cref="UsesOfA"/> of the first and <see cref="UsesOfB"/> of the second.</summary>
-public sealed record Recipe(ItemKind A, ItemKind B, ItemKind Makes, int Ticks, int UsesOfA = 1, int UsesOfB = 1);
+/// <summary>Two items that make a third, using up <see cref="UsesOfA"/> of the first and <see cref="UsesOfB"/> of the second.</summary>
+public sealed record Recipe(ContentId A, ContentId B, ContentId Makes, int Ticks, int UsesOfA = 1, int UsesOfB = 1);
 
 /// <summary>A way two carried items go together: what goes <see cref="Into"/> what, or the recipe that makes something new.</summary>
 public readonly record struct Combination(CombineKind Kind, Item Into, Item From, Recipe? Recipe = null);
@@ -51,13 +54,13 @@ public static class Recipes
     /// <summary>Things you can make from two others.</summary>
     public static readonly IReadOnlyList<Recipe> All =
     [
-        new(ItemKind.Stick, ItemKind.DuctTape, ItemKind.Splint, Ticks: 1500, UsesOfB: 2),
-        new(ItemKind.Stick, ItemKind.Rag, ItemKind.Torch, Ticks: 1000),
-        new(ItemKind.Rag, ItemKind.Antiseptic, ItemKind.Bandage, Ticks: 600),
+        new(CoreItems.Stick, CoreItems.DuctTape, CoreItems.Splint, Ticks: 1500, UsesOfB: 2),
+        new(CoreItems.Stick, CoreItems.Rag, CoreItems.Torch, Ticks: 1000),
+        new(CoreItems.Rag, CoreItems.Antiseptic, CoreItems.Bandage, Ticks: 600),
     ];
 
-    /// <summary>The recipe for two kinds, either way round, or null.</summary>
-    public static Recipe? Find(ItemKind a, ItemKind b) =>
+    /// <summary>The recipe for two items, either way round, or null.</summary>
+    public static Recipe? Find(ContentId a, ContentId b) =>
         All.FirstOrDefault(r => r.A == a && r.B == b || r.A == b && r.B == a);
 
     /// <summary>
@@ -81,23 +84,35 @@ public static class Recipes
         return null;
     }
 
-    /// <summary>What using a kind does, or null if it isn't used on its own (the first-aid kit has its own key).</summary>
-    public static ItemUse? UseOf(ItemDef def) => def.Kind switch
+    /// <summary>
+    /// What using an item does: the way of using that its <c>use.*</c> handler names (<see cref="ItemHandlers.UseKeys"/>),
+    /// or null if it has none (it isn't used on its own: the first-aid kit has its own key).
+    /// </summary>
+    public static ItemUse? UseOf(ItemDef def)
     {
-        ItemKind.Bandage or ItemKind.Tourniquet => ItemUse.StopBleeding,
-        ItemKind.Painkillers or ItemKind.Antibiotics => ItemUse.TakeMedicine,
-        ItemKind.Antiseptic or ItemKind.SutureKit or ItemKind.BurnGel or ItemKind.Splint => ItemUse.DressWounds,
-        ItemKind.EpiPen => ItemUse.Inject,
-        ItemKind.Headlamp or ItemKind.Lantern => ItemUse.SwitchLight,
-        ItemKind.GlowStick => ItemUse.Crack,
-        ItemKind.Torch => ItemUse.LightTorch,
-        ItemKind.Compass => ItemUse.TakeBearing,
-        ItemKind.Radio => ItemUse.Listen,
-        ItemKind.WaterTablets => ItemUse.TreatWater,
-        ItemKind.FirstAidKit => null,
-        _ when def.Is(ItemCategory.Document) && def.Is(ItemCategory.Usable) => ItemUse.Read,
-        _ when def.Is(ItemCategory.Potable) && !def.Stacks => ItemUse.Drink,
-        _ when def.Is(ItemCategory.Edible) => ItemUse.Eat,
-        _ => null,
-    };
+        foreach (var (key, use) in Uses)
+            if (def.Has(key))
+                return use;
+        return null;
+    }
+
+    /// <summary>Each use handler and the way of using it names: two keys take medicine, and two see to wounds.</summary>
+    private static readonly (string Key, ItemUse Use)[] Uses =
+    [
+        (ItemHandlers.Eat, ItemUse.Eat),
+        (ItemHandlers.Drink, ItemUse.Drink),
+        (ItemHandlers.Read, ItemUse.Read),
+        (ItemHandlers.StopBleeding, ItemUse.StopBleeding),
+        (ItemHandlers.Painkillers, ItemUse.TakeMedicine),
+        (ItemHandlers.Antibiotics, ItemUse.TakeMedicine),
+        (ItemHandlers.CleanWounds, ItemUse.DressWounds),
+        (ItemHandlers.DressWounds, ItemUse.DressWounds),
+        (ItemHandlers.Adrenaline, ItemUse.Inject),
+        (ItemHandlers.SwitchLight, ItemUse.SwitchLight),
+        (ItemHandlers.Crack, ItemUse.Crack),
+        (ItemHandlers.LightTorch, ItemUse.LightTorch),
+        (ItemHandlers.Bearing, ItemUse.TakeBearing),
+        (ItemHandlers.Listen, ItemUse.Listen),
+        (ItemHandlers.TreatWater, ItemUse.TreatWater),
+    ];
 }

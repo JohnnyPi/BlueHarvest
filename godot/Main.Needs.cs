@@ -5,6 +5,7 @@ using BlueHarvest.Sim;
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.World;
 using Direction = BlueHarvest.Sim.World.Direction;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Game;
 
@@ -177,7 +178,7 @@ public partial class Main
             salt ? "seawater: it would only make you thirstier" : "untreated: it may make you ill", !salt));
         foreach (var item in _playerActor.Inventory.All)
         {
-            if (item.Kind is not (ItemKind.WaterBottle or ItemKind.Canteen))
+            if (!item.Def.Has(ItemHandlers.Refill))
                 continue;
             int id = item.Id;
             choices.Add(new MenuChoice($"Fill the {item.Def.Name} here", () => Submit(new FillAction(id, way)),

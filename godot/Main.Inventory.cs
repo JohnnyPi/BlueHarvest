@@ -5,6 +5,8 @@ using BlueHarvest.Game.Ui;
 using BlueHarvest.Sim;
 using BlueHarvest.Sim.Actors;
 using Godot;
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Game;
 
@@ -98,7 +100,7 @@ public partial class Main
         var choices = new List<MenuChoice>();
 
         // use it
-        if (item.Kind == ItemKind.Flashlight)
+        if (def.Has(ItemHandlers.Flashlight))
         {
             bool on = _playerActor.CarriedLight is { } light && _sim.Lights[light].On;
             choices.Add(new MenuChoice(on ? "Switch the flashlight off" : "Switch the flashlight on", () => Submit(new ToggleLightAction()), "X"));
@@ -109,7 +111,7 @@ public partial class Main
         }
 
         // with each other thing carried
-        var seen = new HashSet<(ItemKind, ItemKind, int)>();
+        var seen = new HashSet<(ContentId, ContentId, int)>();
         foreach (var other in inventory.All)
         {
             if (other == item || Recipes.Of(item, other) is not { } c || !seen.Add((c.From.Kind, c.Into.Kind, c.Into.Id)))
@@ -168,7 +170,7 @@ public partial class Main
             case ItemUse.LightTorch:
             {
                 var inventory = _playerActor.Inventory;
-                bool flame = inventory.All.Any(i => i.Kind is ItemKind.Lighter or ItemKind.Matches && i.Amount > 0 || i.Kind == ItemKind.Torch && i.Lit);
+                bool flame = inventory.All.Any(i => i.Def.Has(ItemHandlers.Flame) && i.Amount > 0 || i.Def.Has(ItemHandlers.Torch) && i.Lit);
                 string? why = item.Lit ? "burning" : item.Spent ? "burnt out" : flame ? null : "nothing to light it with";
                 return new MenuChoice("Light the torch", () => Submit(new UseItemAction(item.Id)), why ?? "30 min of light", why is null);
             }

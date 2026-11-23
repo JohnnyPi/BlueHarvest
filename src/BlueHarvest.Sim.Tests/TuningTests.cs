@@ -3,6 +3,7 @@ using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.Testing;
 using BlueHarvest.Sim.World;
 using Xunit;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -34,12 +35,12 @@ public class FlareBotTests
 
         sim.RunUntil(EscapeBot.FlareHoldTicks - 100);
         Assert.Equal(0, sim.FenceBreachTick);
-        Assert.Equal(3, you.Inventory.Count(ItemKind.Flare));
+        Assert.Equal(3, you.Inventory.Count(CoreItems.Flare));
         Assert.Equal(new TilePos(10, 21), you.Position);
         Assert.Equal("keeping still until the Rex looks away", bot.Status);
 
         sim.RunUntil(EscapeBot.FlareHoldTicks + 200);
-        Assert.Equal(2, you.Inventory.Count(ItemKind.Flare));
+        Assert.Equal(2, you.Inventory.Count(CoreItems.Flare));
     }
 
     [Fact]
@@ -49,14 +50,14 @@ public class FlareBotTests
         Assert.False(EscapeBot.SeenBy(sim, rex, you), "the test needs the bot out of the Rex's view");
 
         sim.RunUntil(GearRules.ThrowTicks + 50);
-        Assert.Equal(2, you.Inventory.Count(ItemKind.Flare));
+        Assert.Equal(2, you.Inventory.Count(CoreItems.Flare));
         Assert.Equal(new TilePos(10, 3), you.Position);
         Assert.Equal("keeping still while the Rex turns to the flare", bot.Status);
 
         sim.RunUntil(GearRules.ThrowTicks + EscapeBot.FlareSettleTicks + 300);
         Assert.NotEqual(new TilePos(10, 3), you.Position);
         Assert.Equal($"heading for the {EscapePlans.JungleExit}", bot.Status);
-        Assert.Equal(2, you.Inventory.Count(ItemKind.Flare));
+        Assert.Equal(2, you.Inventory.Count(CoreItems.Flare));
     }
 }
 

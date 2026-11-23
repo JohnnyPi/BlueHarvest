@@ -2,6 +2,7 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Navigation;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Testing;
 
@@ -123,7 +124,7 @@ public sealed class EscapeBot : IActorController
 
     public ActorAction? Decide(Actor self, Simulation sim)
     {
-        if (self.Health.BleedingWounds > 0 && self.Inventory.Has(ItemKind.FirstAidKit)
+        if (self.Health.BleedingWounds > 0 && self.Inventory.HasWith(ItemHandlers.FirstAid)
             && self.Health.CanTreat && _treatTries < MaxTreatTries)
         {
             _treatTries++;
@@ -255,7 +256,7 @@ public sealed class EscapeBot : IActorController
     {
         if (_throws == 1 && sim.CurrentTick - _lastThrowTick < FlareSettleTicks)
             return Hold("keeping still while the Rex turns to the flare");
-        if (!self.Inventory.Has(ItemKind.Flare) || sim.CurrentTick - _lastThrowTick < FlareRethrowTicks)
+        if (self.Inventory.FirstWith(ItemHandlers.Flare) is not { } flare || sim.CurrentTick - _lastThrowTick < FlareRethrowTicks)
             return null;
         int range = GearRules.ThrowRange(self.Skills.Throwing, self.Health);
         if (range <= 0)
@@ -277,7 +278,7 @@ public sealed class EscapeBot : IActorController
         _lastThrowTick = sim.CurrentTick;
         _throws++;
         Status = "throwing a flare away from the route";
-        return new ThrowAction(ItemKind.Flare, LureTarget(sim, self.Position, exit?.Position ?? self.Position, range));
+        return new ThrowAction(flare.Kind, LureTarget(sim, self.Position, exit?.Position ?? self.Position, range));
     }
 
     /// <summary>

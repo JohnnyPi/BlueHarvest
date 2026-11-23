@@ -3,6 +3,7 @@ using BlueHarvest.Sim.Ai;
 using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.World;
 using Xunit;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -217,8 +218,8 @@ public class CreatureNeedsTests
     public void AThirstySurvivor_DrinksFromTheirOwnBottle_AndEats()
     {
         var (sim, person) = Survivor(new NeedsStart(HungerKcal: 2000, ThirstMl: 1000, AwakeMinutes: 60));
-        var bottle = sim.CreateItem(ItemKind.WaterBottle);
-        var bars = sim.CreateItem(ItemKind.EnergyBar, amount: 3);
+        var bottle = sim.CreateItem(CoreItems.WaterBottle);
+        var bars = sim.CreateItem(CoreItems.EnergyBar, amount: 3);
         Assert.True(sim.GiveItem(person, bottle));
         Assert.True(sim.GiveItem(person, bars));
         sim.RunUntil(sim.CurrentTick + 5 * Minute);
@@ -233,8 +234,8 @@ public class CreatureNeedsTests
     {
         var (sim, person) = Survivor(new NeedsStart(HungerKcal: 0, ThirstMl: 0, AwakeMinutes: 60));
         sim.Injure(person, BodySection.LeftLeg, Severity.Red, bleeding: true, "a test");
-        Assert.True(sim.GiveItem(person, sim.CreateItem(ItemKind.Bandage)));
-        Assert.True(sim.GiveItem(person, sim.CreateItem(ItemKind.Painkillers)));
+        Assert.True(sim.GiveItem(person, sim.CreateItem(CoreItems.Bandage)));
+        Assert.True(sim.GiveItem(person, sim.CreateItem(CoreItems.Painkillers)));
         sim.RunUntil(sim.CurrentTick + 3 * Minute);
         Assert.Equal(0, person.Health.BleedingWounds);
         Assert.True(person.Needs!.OnPainkillers(sim.CurrentTick));

@@ -1,3 +1,5 @@
+using BlueHarvest.Content;
+
 namespace BlueHarvest.Sim.Actors;
 
 /// <summary>Where an item would go if picked up: a slot, or into a carried container; or why it can't.</summary>
@@ -13,8 +15,8 @@ public readonly record struct Placement(CarrySlot Slot, Item? Into, string? Refu
 /// (<see cref="ItemRules.PocketMl"/> of small things), and worn (a pack on the back, a pouch on the
 /// belt), with containers holding the rest. Weight counts everything, contents and all.
 /// <para>
-/// The old count API (<see cref="Count"/>, <see cref="Has(ItemKind)"/>, <see cref="Use"/>) works
-/// across all of it, so flares, kits, the flashlight and the rope behave as they always did.
+/// The count API (<see cref="Count"/>, <see cref="Has(ContentId)"/>, <see cref="Use"/>, and by handler
+/// <see cref="CountWith"/>, <see cref="HasWith(string)"/>, <see cref="UseWith"/>) works across all of it.
 /// </para>
 /// </summary>
 public sealed class Inventory
@@ -59,21 +61,44 @@ public sealed class Inventory
 
     // ---------- the count API ----------
 
-    /// <summary>How many of a kind are carried: the sum of stacks for stacking kinds, the number of items otherwise.</summary>
-    public int Count(ItemKind kind) => All.Where(i => i.Kind == kind).Sum(i => i.Def.Stacks ? i.Amount : 1);
+    /// <summary>How many of an item are carried: the sum of stacks for stacking items, the number of items otherwise.</summary>
+    public int Count(ContentId kind) => CountWhere(i => i.Kind == kind);
 
-    public bool Has(ItemKind kind) => All.Any(i => i.Kind == kind && (!i.Def.Stacks || i.Amount > 0));
+    public bool Has(ContentId kind) => All.Any(i => i.Kind == kind && Usable(i));
 
-    /// <summary>Whether a key of this kind with this tag is carried (a keycard for a facility).</summary>
-    public bool Has(ItemKind kind, string tag) => All.Any(i => i.Kind == kind && i.Tag == tag);
+    /// <summary>Whether a key of this kind with this tag is carried.</summary>
+    public bool Has(ContentId kind, string tag) => All.Any(i => i.Kind == kind && i.Tag == tag);
 
     /// <summary>
-    /// Uses up one of a kind: one from the first stack of it carried, or the item itself if it doesn't
-    /// stack (the rope). False if there was none.
+    /// Uses up one of an item: one from the first stack of it carried, or the item itself if it doesn't
+    /// stack. False if there was none.
     /// </summary>
-    internal bool Use(ItemKind kind)
+    internal bool Use(ContentId kind) => UseFirst(i => i.Kind == kind);
+
+    // The same by mechanic: what the sim checks, so that any item with the handler serves (ItemHandlers).
+
+    /// <summary>How many things with this handler are carried, counted as <see cref="Count"/> does.</summary>
+    public int CountWith(string handler) => CountWhere(i => i.Def.Has(handler));
+
+    /// <summary>Whether something with this handler is carried (a stack of it with some left).</summary>
+    public bool HasWith(string handler) => All.Any(i => i.Def.Has(handler) && Usable(i));
+
+    /// <summary>Whether something with this handler and this tag is carried (a keycard for a facility).</summary>
+    public bool HasWith(string handler, string tag) => All.Any(i => i.Def.Has(handler) && i.Tag == tag);
+
+    /// <summary>The first carried thing with this handler (a stack of it with some left), or null.</summary>
+    public Item? FirstWith(string handler) => All.FirstOrDefault(i => i.Def.Has(handler) && Usable(i));
+
+    /// <summary>Uses up one of the first thing with this handler, as <see cref="Use"/> does. False if there was none.</summary>
+    internal bool UseWith(string handler) => UseFirst(i => i.Def.Has(handler));
+
+    private static bool Usable(Item item) => !item.Def.Stacks || item.Amount > 0;
+
+    private int CountWhere(Func<Item, bool> match) => All.Where(match).Sum(i => i.Def.Stacks ? i.Amount : 1);
+
+    private bool UseFirst(Func<Item, bool> match)
     {
-        var item = All.FirstOrDefault(i => i.Kind == kind && (!i.Def.Stacks || i.Amount > 0));
+        var item = All.FirstOrDefault(i => match(i) && Usable(i));
         if (item is null)
             return false;
         if (item.Def.Stacks && item.Amount > 1)

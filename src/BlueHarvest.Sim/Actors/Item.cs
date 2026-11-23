@@ -1,3 +1,6 @@
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
+
 namespace BlueHarvest.Sim.Actors;
 
 /// <summary>
@@ -67,7 +70,7 @@ public enum CarrySlot : byte { RightHand, LeftHand, BothHands, Pocket, Worn }
 /// <paramref name="Accepts"/> (any category if None). <paramref name="Closes"/> if it has a door or
 /// lid that must be opened before you can see in or reach in (lockers, crates, fridges); bags and
 /// trays don't. Opening it makes <paramref name="OpenLoudness"/> of noise and takes
-/// <paramref name="OpenTicks"/>. <paramref name="Only"/>, if given, is the only kinds it takes: a
+/// <paramref name="OpenTicks"/>. <paramref name="Only"/>, if given, is the only items it takes: a
 /// flashlight's battery slot, a pistol's magazine well.
 /// </summary>
 public sealed record ContainerSpec(
@@ -78,10 +81,11 @@ public sealed record ContainerSpec(
     bool Closes = false,
     int OpenLoudness = 0,
     int OpenTicks = 0,
-    IReadOnlyList<ItemKind>? Only = null);
+    IReadOnlyList<ContentId>? Only = null);
 
 /// <summary>
-/// What a kind of item is: data, like Species. Weight in grams, volume in millilitres, all integers.
+/// What a kind of item is: data, like Species, built from its content definition (<see cref="ItemCatalog"/>).
+/// Weight in grams, volume in millilitres, all integers. <paramref name="Id"/> is its content ID (<c>core:flashlight</c>).
 /// <para>
 /// <paramref name="Stacks"/>: <c>Amount</c> is a count of identical things (3 flares), up to
 /// <paramref name="MaxAmount"/>; weight and volume are per thing. Otherwise <c>Amount</c> is how
@@ -90,15 +94,18 @@ public sealed record ContainerSpec(
 /// <paramref name="MilligramsPerUnit"/> to the weight and nothing to the volume.
 /// </para>
 /// <para>
-/// <paramref name="Fills"/>: the stacking kind its fill is made of (a magazine fills with 9 mm
+/// <paramref name="Fills"/>: the stacking item its fill is made of (a magazine fills with 9 mm
 /// rounds); loading moves rounds from a stack into it. <paramref name="Comes"/>: what a new one
 /// comes fitted with (a flashlight's two D batteries), unless made empty. <paramref name="Dose"/>:
 /// how much one use takes (250 ml of water, 2 pills); <paramref name="UseTicks"/>: how long.
 /// </para>
+/// <para>
+/// <see cref="Handlers"/> are the mechanics it has (<see cref="ItemHandlers"/>): the sim checks for a handler, not
+/// for a particular item, so any item that names <c>light.flashlight</c> works as a flashlight.
+/// </para>
 /// </summary>
 public sealed record ItemDef(
-    ItemKind Kind,
-    string Id,
+    ContentId Id,
     string Name,
     string Plural,
     char Glyph,
@@ -114,12 +121,27 @@ public sealed record ItemDef(
     WearSlot Wear = WearSlot.None,
     ContainerSpec? Holds = null,
     string? Note = null,
-    ItemKind? Fills = null,
-    IReadOnlyList<(ItemKind Kind, int Count)>? Comes = null,
+    ContentId? Fills = null,
+    IReadOnlyList<(ContentId Kind, int Count)>? Comes = null,
     int Dose = 1,
     int UseTicks = 0)
 {
+    /// <summary>The handler keys it names (<see cref="ItemHandlers"/>).</summary>
+    public IReadOnlySet<string> Handlers { get; init; } = new HashSet<string>();
+
+    /// <summary>What one eaten gives: kcal, ml of water, minutes of tiredness taken off. All 0 for what isn't food.</summary>
+    public (int Kcal, int WaterMl, int AlertMinutes) Food { get; init; }
+
+    /// <summary>What drinking from it gives, by the ml; null for plain water (1 ml of water per ml).</summary>
+    public ItemDrink? Drink { get; init; }
+
+    /// <summary>Warmth it gives when worn (points, added up over what's worn).</summary>
+    public int Warmth { get; init; }
+
     public bool Is(ItemCategory category) => (Categories & category) != 0;
+
+    /// <summary>Whether it has this mechanic (<see cref="ItemHandlers"/>).</summary>
+    public bool Has(string handler) => Handlers.Contains(handler);
 
     /// <summary>"a flashlight", "an energy bar".</summary>
     public string WithArticle => (Name.Length > 0 && "aeiou".Contains(char.ToLowerInvariant(Name[0])) ? "an " : "a ") + Name;
@@ -133,19 +155,20 @@ public sealed class Item
 {
     private List<Item>? _contents;
 
-    internal Item(int id, ItemKind kind, int amount)
+    internal Item(int id, ItemDef def, int amount)
     {
         Id = id;
-        Kind = kind;
+        Def = def;
         Amount = amount;
     }
 
     /// <summary>Unique in the run; given out in the order items are made, so the same every run of a seed.</summary>
     public int Id { get; }
 
-    public ItemKind Kind { get; }
+    /// <summary>Its content ID (<c>core:flashlight</c>).</summary>
+    public ContentId Kind => Def.Id;
 
-    public ItemDef Def => ItemCatalog.Of(Kind);
+    public ItemDef Def { get; }
 
     /// <summary>How many (stacking kinds) or how full (the rest), in the def's terms.</summary>
     public int Amount { get; internal set; }
@@ -326,8 +349,8 @@ public sealed class Item
 
     /// <summary>A light's state for its description: " (on)", " (glowing)", " (burning)", " (spent)", " (burnt out)", or nothing.</summary>
     private string LightState() =>
-        Lit ? Kind switch { ItemKind.Torch => " (burning)", ItemKind.GlowStick => " (glowing)", _ => " (on)" }
-        : Spent ? Kind == ItemKind.Torch ? " (burnt out)" : " (spent)"
+        Lit ? Def.Has(ItemHandlers.Torch) ? " (burning)" : Def.Has(ItemHandlers.GlowStick) ? " (glowing)" : " (on)"
+        : Spent ? Def.Has(ItemHandlers.Torch) ? " (burnt out)" : " (spent)"
         : "";
 
     /// <summary>What's fitted in a slot container, for its description: " (2 D batteries, 87%)", " (empty)".</summary>

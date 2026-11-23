@@ -2,6 +2,7 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Sim.World.Generation;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim;
 
@@ -83,7 +84,7 @@ public sealed partial class Simulation
     /// <summary>Picking up a park map charts its sheet (step 25b-2).</summary>
     private void ChartParkMap(Actor actor, Item item)
     {
-        if (item.Kind != ItemKind.ParkMap || _mapWorld is null || !_knowledge.TryGetValue(actor.Id, out MapKnowledge? k)
+        if (!item.Def.Has(ItemHandlers.ParkMap) || _mapWorld is null || !_knowledge.TryGetValue(actor.Id, out MapKnowledge? k)
             || !ParkMaps.TryParse(item.Tag, _mapWorld.Works, out int area, out int sheet))
             return;
         bool fresh = k.Chart(area, sheet);
@@ -97,7 +98,7 @@ public sealed partial class Simulation
     /// </summary>
     private void ReadParkMap(Actor actor, Item item)
     {
-        if (item.Kind != ItemKind.ParkMap || _mapWorld is null || !_knowledge.TryGetValue(actor.Id, out MapKnowledge? k)
+        if (!item.Def.Has(ItemHandlers.ParkMap) || _mapWorld is null || !_knowledge.TryGetValue(actor.Id, out MapKnowledge? k)
             || !ParkMaps.TryParse(item.Tag, _mapWorld.Works, out int area, out int sheet) || !k.MarkRead(item.Id))
             return;
         k.Chart(area, sheet); // a map read is a map in hand

@@ -1,5 +1,6 @@
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Core;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.World.Generation;
 
@@ -17,13 +18,14 @@ public static class ItemPlan
     /// <summary>
     /// One row of the loot table: in rooms with these names (a name ending '*' matches as a prefix),
     /// at facilities of these kinds (any if null), this percent of the time, these items. A spec
-    /// starting '>' goes inside the room's last container (on the floor if it has none).
+    /// starting '>' goes inside the room's last container (on the floor if it has none). The table is the core
+    /// pack's, so its IDs are bare, as in the pack's own YAML (P11 moves it there).
     /// </summary>
     private sealed record Loot(string[] Rooms, int Percent, string Spec, string[]? Sites = null)
     {
         public bool Inside { get; } = Spec.StartsWith('>');
 
-        public IReadOnlyList<ItemSpec> Items { get; } = ItemCatalog.ParseSpec(Spec.TrimStart('>'));
+        public IReadOnlyList<ItemSpec> Items { get; } = ItemCatalog.ParseSpec(Spec.TrimStart('>'), "core");
 
         public bool Matches(string room, string siteKind) =>
             (Sites is null || Sites.Contains(siteKind))
@@ -170,7 +172,7 @@ public static class ItemPlan
         new(Clinics, 40, ">suture-kit"),
         new(Clinics, 40, ">antibiotics"),
         new(Clinics, 50, ">antiseptic"),
-        new(Clinics, 30, ">epipen"),
+        new(Clinics, 30, ">epi-pen"),
         new(Clinics, 30, ">burn-gel"),
         new(Clinics, 60, ">bandage x4"),
         new(Clinics, 50, "cabinet"),
@@ -322,7 +324,7 @@ public static class ItemPlan
                     {
                         foreach (Item item in Make(ledger, spec, site, seed, label, row))
                         {
-                            if (item.Kind == ItemKind.ParkMap && area >= 0 && areas.SheetOrder(area) is { Count: > 0 } order)
+                            if (item.Def.Has(ItemHandlers.ParkMap) && area >= 0 && areas.SheetOrder(area) is { Count: > 0 } order)
                             {
                                 int nth = mapsIn.GetValueOrDefault(area);
                                 mapsIn[area] = nth + 1;
@@ -344,13 +346,13 @@ public static class ItemPlan
                 if (index == 0 && rooms.Count >= ExtinguisherRooms && Roll(seed, label, -1) < ExtinguisherPercent)
                 {
                     var (x, y) = floor.Take(againstWall: true);
-                    ledger.Lay(ledger.Create(ItemKind.FireExtinguisher), x, y, onDeck: false);
+                    ledger.Lay(ledger.Create(CoreItems.FireExtinguisher), x, y, onDeck: false);
                 }
 
                 if (key is not null && key.Site == site && label == $"{key.Site} · {key.Room}")
                 {
                     var (x, y) = floor.Take(againstWall: false);
-                    ledger.Lay(ledger.Create(ItemKind.Keycard, tag: "monorail", level: 1), x, y, onDeck: false);
+                    ledger.Lay(ledger.Create(CoreItems.Keycard, tag: "monorail", level: 1), x, y, onDeck: false);
                     key = null; // one key
                 }
             }

@@ -6,6 +6,7 @@ using BlueHarvest.Sim.Power;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Sim.World.Generation;
 using Xunit;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim.Tests;
 
@@ -367,7 +368,7 @@ public class PowerUseSimulationTests
         var ended = new List<Actor>();
         sim.RideEnded += ended.Add;
         var you = sim.AddActor("You", '@', new TilePos(4, 4), Species.Human, new Once(new OperateAction(from.Id, PowerOp.Ride, to.Id)));
-        Assert.True(sim.GiveItem(you, sim.CreateItem(ItemKind.Keycard, tag: "monorail", level: 1))); // the monorail's access key (step 21)
+        Assert.True(sim.GiveItem(you, sim.CreateItem(CoreItems.Keycard, tag: "monorail", level: 1))); // the monorail's access key (step 21)
         long start = sim.CurrentTick;
         sim.RunUntil(start + 1);
         Assert.True(you.PendingRide.HasValue);

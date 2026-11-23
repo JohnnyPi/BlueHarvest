@@ -4,6 +4,8 @@ using BlueHarvest.Sim.Lighting;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.Power;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Sim;
 
@@ -231,18 +233,22 @@ public sealed partial class Simulation
 
     /// <summary>
     /// Lights a fire with a flare held to a tile next to you (or your own): it uses up a flare, which
-    /// then burns there like a thrown one.
+    /// then burns there like a thrown one. A <paramref name="source"/> that isn't a flare is a flame or a torch.
     /// </summary>
-    private int Ignite(Actor actor, Direction? direction, ItemKind source = ItemKind.Flare)
+    private int Ignite(Actor actor, Direction? direction, ContentId? source)
     {
-        if (source != ItemKind.Flare)
-            return IgniteWithFlame(actor, direction, source);
-        if (!actor.Inventory.Has(ItemKind.Flare))
+        if (source is { } other && ItemCatalog.Find(other)?.Has(ItemHandlers.Flare) != true)
+            return IgniteWithFlame(actor, direction, other);
+        bool flareLeft = source is { } chosen ? actor.Inventory.Has(chosen) : actor.Inventory.HasWith(ItemHandlers.Flare);
+        if (!flareLeft)
             return Bump(actor, "no flares left");
         TilePos tile = direction is { } d ? actor.Position.Offset(d) : actor.Position;
         if (!Map.InBounds(tile) || Map.CoverAt(tile).BlocksMovement && Cover[tile] != CoverType.Equipment && Cover[tile] != CoverType.Support)
             return Bump(actor, "nothing there to set alight");
-        actor.Inventory.Use(ItemKind.Flare);
+        if (source is { } flare)
+            actor.Inventory.Use(flare);
+        else
+            actor.Inventory.UseWith(ItemHandlers.Flare);
         if (direction is { } facing)
             actor.Facing = facing;
         actor.LastMovedTick = CurrentTick;
@@ -260,15 +266,16 @@ public sealed partial class Simulation
     /// Lights a tile next to you (or your own) with a lighter or a match: one use, a small flame
     /// (<see cref="FireRules.LighterHeat"/>), nothing left burning if it doesn't catch.
     /// </summary>
-    private int IgniteWithFlame(Actor actor, Direction? direction, ItemKind source)
+    private int IgniteWithFlame(Actor actor, Direction? direction, ContentId source)
     {
-        if (source is not (ItemKind.Lighter or ItemKind.Matches or ItemKind.Torch))
-            return Refuse(actor, $"you can't light anything with {ItemCatalog.Of(source).WithArticle}");
-        bool torch = source == ItemKind.Torch;
+        var def = ItemCatalog.Find(source);
+        if (def is null || !def.Has(ItemHandlers.Flame) && !def.Has(ItemHandlers.Torch))
+            return Refuse(actor, $"you can't light anything with {def?.WithArticle ?? "that"}");
+        bool torch = def.Has(ItemHandlers.Torch);
         var flame = actor.Inventory.All.FirstOrDefault(i => i.Kind == source && (torch ? i.Lit : i.Amount > 0));
         if (flame is null)
             return Refuse(actor, torch ? "you have no burning torch"
-                : actor.Inventory.Has(source) ? $"the {ItemCatalog.Of(source).Name} is used up" : $"you have no {ItemCatalog.Of(source).Name}");
+                : actor.Inventory.Has(source) ? $"the {def.Name} is used up" : $"you have no {def.Name}");
         TilePos tile = direction is { } d ? actor.Position.Offset(d) : actor.Position;
         if (!Map.InBounds(tile) || Map.CoverAt(tile).BlocksMovement && Cover[tile] != CoverType.Equipment && Cover[tile] != CoverType.Support)
             return Refuse(actor, "nothing there to set alight");
@@ -297,9 +304,9 @@ public sealed partial class Simulation
     /// </summary>
     private int Extinguish(Actor actor, Direction direction)
     {
-        var extinguisher = actor.Inventory.All.FirstOrDefault(i => i.Kind == ItemKind.FireExtinguisher && i.Amount > 0);
+        var extinguisher = actor.Inventory.All.FirstOrDefault(i => i.Def.Has(ItemHandlers.Extinguish) && i.Amount > 0);
         if (extinguisher is null)
-            return Refuse(actor, actor.Inventory.Has(ItemKind.FireExtinguisher) ? "the extinguisher is empty" : "you have no fire extinguisher");
+            return Refuse(actor, actor.Inventory.HasWith(ItemHandlers.Extinguish) ? "the extinguisher is empty" : "you have no fire extinguisher");
         extinguisher.Amount--;
         actor.Facing = direction;
         actor.LastMovedTick = CurrentTick;
@@ -337,9 +344,9 @@ public sealed partial class Simulation
     /// </summary>
     private int PourFuel(Actor actor, Direction? direction)
     {
-        var can = actor.Inventory.All.FirstOrDefault(i => i.Kind == ItemKind.JerryCan && i.Amount >= FireRules.PourLitresPerTile);
+        var can = actor.Inventory.All.FirstOrDefault(i => i.Def.Has(ItemHandlers.JerryCan) && i.Amount >= FireRules.PourLitresPerTile);
         if (can is null)
-            return Refuse(actor, actor.Inventory.Has(ItemKind.JerryCan) ? "there's not enough fuel in the can" : "you have no jerry can");
+            return Refuse(actor, actor.Inventory.HasWith(ItemHandlers.JerryCan) ? "there's not enough fuel in the can" : "you have no jerry can");
         var tiles = new List<TilePos>();
         if (direction is not { } d)
         {

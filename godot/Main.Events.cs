@@ -7,6 +7,8 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Content;
+using BlueHarvest.Sim.ContentIntegration;
 
 namespace BlueHarvest.Game;
 
@@ -229,10 +231,10 @@ public partial class Main
         });
     }
 
-    private void OnItemThrown(Actor actor, ItemKind item, TilePos landed)
+    private void OnItemThrown(Actor actor, ContentId item, TilePos landed)
     {
         if (actor == _playerActor)
-            Say(item == ItemKind.GlowStick
+            Say(ItemCatalog.Find(item)?.Has(ItemHandlers.GlowStick) == true
                 ? "The glow stick tumbles away and lies glowing softly where it lands."
                 : $"The flare lands at {landed}, hissing and spitting red light.");
     }
