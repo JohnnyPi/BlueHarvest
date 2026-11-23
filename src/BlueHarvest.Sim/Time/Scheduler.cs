@@ -11,6 +11,24 @@ public sealed class Scheduler
 
     public int Count => _queue.Count;
 
+    /// <summary>Every turn waiting, with its tick and place in line, and the next place in line (for a snapshot).</summary>
+    internal (IReadOnlyList<(int ActorId, long Tick, long Sequence)> Queue, long NextSequence) Capture() =>
+        (_queue.UnorderedItems.Select(e => (e.Element, e.Priority.Tick, e.Priority.Sequence))
+            .OrderBy(e => e.Tick).ThenBy(e => e.Sequence).ToList(), _nextSequence);
+
+    /// <summary>Puts back a captured line exactly (a loaded snapshot).</summary>
+    internal void Restore(IEnumerable<(int ActorId, long Tick, long Sequence)> queue, long nextSequence)
+    {
+        _queue.Clear();
+        foreach (var (actorId, tick, sequence) in queue)
+        {
+            if (sequence >= nextSequence)
+                throw new ArgumentException($"Turn {sequence} is past the next place in line, {nextSequence}.", nameof(queue));
+            _queue.Enqueue(actorId, (tick, sequence));
+        }
+        _nextSequence = nextSequence;
+    }
+
     public void Schedule(int actorId, long tick) => _queue.Enqueue(actorId, (tick, _nextSequence++));
 
     public bool TryPeek(out int actorId, out long tick)

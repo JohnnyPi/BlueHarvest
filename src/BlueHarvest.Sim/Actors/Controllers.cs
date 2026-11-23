@@ -14,11 +14,14 @@ public interface IActorController
 }
 
 /// <summary>Placeholder AI: wanders, mostly keeping its heading, and sometimes holds still.</summary>
-public sealed class RandomWalker : IActorController
+public sealed partial class RandomWalker : IActorController
 {
     private readonly Rng _rng;
 
     public RandomWalker(Rng rng) => _rng = rng;
+
+    /// <summary>The walker's random stream (a snapshot saves where it has got to).</summary>
+    internal Rng Stream => _rng;
 
     public ActorAction? Decide(Actor self, Simulation sim)
     {

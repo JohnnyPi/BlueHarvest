@@ -58,7 +58,7 @@ public enum Mood : byte
 /// treat water, drink, eat), sleep when worn out or in their sleeping hours with nothing to do (but
 /// not under a follow order), and lag behind when tired.
 /// </summary>
-public sealed class HumanBrain : IActorController, IWindowShiftListener
+public sealed partial class HumanBrain : IActorController, IWindowShiftListener
 {
     /// <summary>Threats this far away (tiles) add nothing to fear.</summary>
     public const int FearRange = 40;

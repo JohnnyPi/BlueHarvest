@@ -3,8 +3,10 @@ using System.Text;
 using System.Text.Json.Nodes;
 using BlueHarvest.Content;
 using BlueHarvest.Sim.Actors;
+using BlueHarvest.Sim.Ai;
 using BlueHarvest.Sim.ContentIntegration;
 using BlueHarvest.Sim.Events;
+using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.Snapshots;
 using BlueHarvest.Sim.Tests.ContentLibrary;
 using BlueHarvest.Sim.World;
@@ -13,7 +15,7 @@ using Xunit;
 
 namespace BlueHarvest.Sim.Tests;
 
-/// <summary>P3b-1: an island expedition saved as a snapshot and put back.</summary>
+/// <summary>P3b: an island expedition saved as a snapshot and put back, and played on exactly as if it had never stopped.</summary>
 public class ExpeditionSnapshotTests
 {
     private static readonly Lazy<FeatureIndex> Features = new(() => FeatureIndex.Build(TestIslands.World("Default")));
@@ -56,6 +58,115 @@ public class ExpeditionSnapshotTests
         using (var gzip = new GZipStream(output, CompressionLevel.Fastest, leaveOpen: true))
             gzip.Write(Encoding.UTF8.GetBytes(doc.ToJsonString()));
         return output.ToArray();
+    }
+
+    /// <summary>
+    /// Plays the survivor by a script until a tick (or, once they're gone, lets the world run on to it). The script
+    /// depends only on the turn number and where the survivor is, so two games in the same state play the same.
+    /// </summary>
+    private static void Play(Simulation sim, PlayerController drive, Actor you, long until, Func<int, Actor, ActorAction> script)
+    {
+        int turn = 0;
+        while (sim.CurrentTick < until)
+        {
+            if (you.IsGone)
+            {
+                sim.RunUntil(until);
+                return;
+            }
+            drive.Pending = script(turn++, you);
+            if (sim.RunUntilInputNeeded() is StepResult.PlayerDied or StepResult.PlayerEscaped)
+            {
+                sim.RunUntil(until);
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The landing with company: a person and a Rex with minds of their own, a raptor walking at random by the west
+    /// edge (left behind when the window moves east), and a body. Everyone has needs.
+    /// </summary>
+    private static (Simulation Sim, PlayerController Drive, Actor Survivor, Actor Npc) Gathered()
+    {
+        var (sim, drive, you) = Land();
+        TilePos at = you.Position;
+        Actor npc = sim.AddActor("Marta", 'h', new TilePos(at.X + 2, at.Y), Species.Human,
+            new HumanBrain(Traits.Steady, AiProfile.Human, sim.Rng.Fork("ai:marta")), loadout: Loadout.Ranger);
+        Actor rex = sim.AddActor("Rex", 'T', new TilePos(at.X, at.Y + 25), Species.Rex,
+            new CreatureBrain(AiProfile.Rex, sim.Rng.Fork("ai:rex")), Direction.North);
+        Actor raptor = sim.AddActor("Raptor", 'R', new TilePos(3, at.Y), Species.Raptor, new RandomWalker(sim.Rng.Fork("ai:raptor")));
+        Actor body = sim.AddActor("Lost", 'h', new TilePos(at.X - 3, at.Y + 1), Species.Human, new HoldStillController());
+        sim.Injure(body, BodySection.Head, Severity.Red, bleeding: true, "a fall");
+        sim.Injure(body, BodySection.Head, Severity.Red, bleeding: true, "a fall");
+        Assert.True(body.IsDead);
+        foreach (Actor a in new[] { you, npc, rex, raptor })
+            sim.UseVariedNeeds(a);
+        sim.RunUntilInputNeeded();
+        return (sim, drive, you, npc);
+    }
+
+    /// <summary>Before the save: a light, a thrown flare, a fire, a shout, an order; then the window moves east.</summary>
+    private static ActorAction Before(int turn, Actor you, Actor npc) => turn switch
+    {
+        0 => new ToggleLightAction(),
+        1 => new ThrowAction(CoreItems.Flare, new TilePos(you.Position.X + 5, you.Position.Y + 3)),
+        2 => new OrderAction(npc.Id, NpcOrder.Follow),
+        3 => new IgniteAction(Direction.East),
+        4 => new ScreamAction(),
+        _ => (turn % 3) switch
+        {
+            0 => new MoveAction(Direction.South),
+            1 => new MoveAction(Direction.East, Sprint: turn % 2 == 0),
+            _ => new WaitAction(150),
+        },
+    };
+
+    /// <summary>After the save: walking about, waiting, a light switched off and on.</summary>
+    private static ActorAction After(int turn, Actor you) => (turn % 7) switch
+    {
+        0 => new MoveAction(Direction.East),
+        1 => new MoveAction(Direction.South, Sprint: true),
+        2 => new WaitAction(300),
+        3 => new MoveAction(Direction.West),
+        4 => new ToggleLightAction(),
+        5 => new MoveAction(Direction.North),
+        _ => new WaitAction(100),
+    };
+
+    [Fact]
+    public void SavedAndPutBack_TenGameMinutesPlayExactlyAsTenWithoutStopping()
+    {
+        var (sim, drive, you, npc) = Gathered();
+        IslandWindow window = sim.Session.Island!;
+        Play(sim, drive, you, sim.CurrentTick + 1500, (t, a) => Before(t, a, npc));
+        // the window moves east: the raptor by the west edge is left behind
+        (int dx, int dy) = window.Recenter(new TilePos(you.Position.X + IslandChunker.ChunkSize, you.Position.Y));
+        sim.ShiftWindow(dx, dy);
+        Play(sim, drive, you, sim.CurrentTick + 500, (t, a) => Before(t + 5, a, npc));
+        Assert.Contains(sim.Actors, a => a.LeftBehind);
+        Assert.Contains(sim.Actors, a => a.IsDead);
+        Assert.Contains(sim.Actors, a => a.Controller is CreatureBrain);
+
+        byte[] saved = ExpeditionSnapshot.Save(sim.Session);
+        string atSave = ExpeditionSnapshot.ToJson(sim.Session);
+        long end = sim.CurrentTick + 10 * WorldClock.TicksPerGameMinute;
+        ulong revisionAtSave = sim.Session.WorldRevision;
+        Play(sim, drive, you, end, After);
+
+        var replay = new PlayerController();
+        Simulation again = PutBack(saved, replay);
+        Assert.Equal(atSave, ExpeditionSnapshot.ToJson(again.Session));
+        Actor back = again.Actors.Single(a => a.Controller == replay);
+        Play(again, replay, back, end, After);
+
+        Assert.Equal(sim.CurrentTick, again.CurrentTick);
+        Assert.Equal(sim.ComputeStateHash(), again.ComputeStateHash());
+        Assert.Equal(ExpeditionSnapshot.ToJson(sim.Session), ExpeditionSnapshot.ToJson(again.Session));
+        Assert.Equal(sim.Session.LastEventId, again.Session.LastEventId);
+        // and the ten minutes weren't idle
+        Assert.True(sim.Session.WorldRevision > revisionAtSave + 50, "the world barely moved");
+        Assert.NotEqual(atSave, ExpeditionSnapshot.ToJson(sim.Session));
     }
 
     [Fact]

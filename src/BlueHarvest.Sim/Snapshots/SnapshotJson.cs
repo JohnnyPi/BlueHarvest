@@ -1,8 +1,10 @@
 using System.Buffers.Binary;
 using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using BlueHarvest.Content;
 using BlueHarvest.Sim.Actors;
+using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Sim.World.Generation;
 
@@ -65,6 +67,71 @@ internal static class SnapshotJson
         return (Val<long>(a[0], $"'{key}'[0]"), Val<long>(a[1], $"'{key}'[1]"));
     }
 
+    // ---------- places, in island metres (contracts §7) ----------
+
+    /// <summary>A window tile as island metres.</summary>
+    public static JsonArray Tile(Simulation sim, TilePos p)
+    {
+        (long x, long y) = sim.ToIsland(p);
+        return Pair(x, y);
+    }
+
+    public static JsonArray? OptTile(Simulation sim, TilePos? p) => p is { } t ? Tile(sim, t) : null;
+
+    /// <summary>Island metres back to the window tile (the window is where it was when saved).</summary>
+    public static TilePos ReadTile(Simulation sim, JsonNode? node, string what)
+    {
+        JsonArray a = Arr(node, what);
+        if (a.Count != 2)
+            throw Bad($"{what} isn't a place (x, y)");
+        long x = Val<long>(a[0], what), y = Val<long>(a[1], what);
+        TilePos p = sim.FromIsland(x, y);
+        if (sim.ToIsland(p) != (x, y))
+            throw Bad($"{what} ({x}, {y}) is too far from the window");
+        return p;
+    }
+
+    public static TilePos? ReadOptTile(Simulation sim, JsonNode? node, string what) =>
+        node is null ? null : ReadTile(sim, node, what);
+
+    public static JsonArray Tiles(Simulation sim, IEnumerable<TilePos> tiles) =>
+        new(tiles.Select(t => (JsonNode?)Tile(sim, t)).ToArray());
+
+    public static List<TilePos> ReadTiles(Simulation sim, JsonNode? node, string what) =>
+        Arr(node, what).Select(t => ReadTile(sim, t, what)).ToList();
+
+    // ---------- random streams ----------
+
+    public static JsonArray RngState(Rng rng)
+    {
+        var (s0, s1, s2, s3) = rng.State;
+        return new JsonArray(s0, s1, s2, s3);
+    }
+
+    public static void ReadRng(Rng rng, JsonNode? node, string what)
+    {
+        JsonArray a = Arr(node, what);
+        if (a.Count != 4)
+            throw Bad($"{what} isn't four words");
+        var state = (Val<ulong>(a[0], what), Val<ulong>(a[1], what), Val<ulong>(a[2], what), Val<ulong>(a[3], what));
+        if (state is (0, 0, 0, 0))
+            throw Bad($"{what} is all zero");
+        rng.State = state;
+    }
+
+    /// <summary>Reads a value the serializer wrote (a record of settings: skills, traits, profiles).</summary>
+    public static T Settings<T>(JsonNode? node, string what) where T : class
+    {
+        try
+        {
+            return Obj(node, what).Deserialize<T>() ?? throw Bad($"{what} is empty");
+        }
+        catch (JsonException e)
+        {
+            throw Bad($"{what} doesn't read ({e.Message})");
+        }
+    }
+
     public static SnapshotRefusedException Bad(string why) => new($"This save is damaged or not a snapshot: {why}.");
 
     // ---------- items ----------
@@ -103,6 +170,8 @@ internal static class SnapshotJson
             o["lit"] = true;
         if (item.LitUntilTick != 0)
             o["litUntil"] = item.LitUntilTick;
+        if (item.DrainedTick != 0)
+            o["drained"] = item.DrainedTick;
         if (item.Contents.Count > 0)
             o["contents"] = new JsonArray(item.Contents.Select(i => (JsonNode?)WriteItem(i)).ToArray());
         return o;
@@ -129,6 +198,7 @@ internal static class SnapshotJson
             Unsafe = Opt(o, "unsafe", false),
             Lit = Opt(o, "lit", false),
             LitUntilTick = Opt(o, "litUntil", 0L),
+            DrainedTick = Opt(o, "drained", 0L),
         };
         if (o["contents"] is { } contents)
         {

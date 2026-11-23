@@ -10,7 +10,7 @@ namespace BlueHarvest.Sim.Ai;
 /// A creature's memory of contacts, built only from what its senses delivered (Percepts) and what
 /// its own jaws felt. Nothing here reads the true state of the world.
 /// </summary>
-public sealed class ContactMemory
+public sealed partial class ContactMemory
 {
     private readonly List<Contact> _contacts = new();
 

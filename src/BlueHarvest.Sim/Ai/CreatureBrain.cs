@@ -48,7 +48,7 @@ public enum Activity : byte
 /// the nearest fresh water it knows of (its territory: the map within <see cref="WaterSearchRadius"/>);
 /// in its sleeping hours, or worn out, it sleeps. Without needs it behaves exactly as before.
 /// </summary>
-public sealed class CreatureBrain : IActorController, IWindowShiftListener
+public sealed partial class CreatureBrain : IActorController, IWindowShiftListener
 {
     private readonly RandomWalker _wander;
     private GoToController? _goTo;

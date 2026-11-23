@@ -294,6 +294,44 @@ public sealed class IslandWindow
         Changes.Remove(cx, cy);
     }
 
+    /// <summary>
+    /// Puts the window's map back as a snapshot saved it: every chunk in the window as the generator made it, then
+    /// that chunk's saved changes. What the run laid over the island since the window was built (doors set by the
+    /// power, the tide) is undone; the snapshot then puts back the tide and the rest itself.
+    /// </summary>
+    internal void Reapply(ChunkChanges saved)
+    {
+        for (int chunkY = 0; chunkY < ChunksAcross; chunkY++)
+        {
+            for (int chunkX = 0; chunkX < ChunksAcross; chunkX++)
+            {
+                int left = chunkX * Chunk, top = chunkY * Chunk;
+                StructureMap now = Map.Structures, was = _pristine.Structures;
+                for (int j = 0; j < Chunk; j++)
+                {
+                    for (int i = 0; i < Chunk; i++)
+                    {
+                        var p = new TilePos(left + i, top + j);
+                        Map.Cover[p] = _pristine.Cover[p];
+                        now.SetRoof(p, was.RoofDm(p));
+                        now.SetDoor(p, was.DoorAt(p));
+                        now.SetDeck(p, was.DeckDm(p));
+                        now.SetLadder(p, was.HasLadder(p));
+                    }
+                }
+                foreach (TileChange change in saved.For(OriginX / Chunk + chunkX, OriginY / Chunk + chunkY))
+                {
+                    var p = new TilePos(left + change.Index % Chunk, top + change.Index / Chunk);
+                    Map.Cover[p] = change.Cover;
+                    now.SetRoof(p, change.RoofDm);
+                    now.SetDoor(p, change.Door);
+                    now.SetDeck(p, change.DeckDm);
+                    now.SetLadder(p, change.Ladder);
+                }
+            }
+        }
+    }
+
     /// <summary>The tiles of one of the window's chunks that are no longer as the generator made them.</summary>
     private List<TileChange> ChangedTiles(int chunkX, int chunkY)
     {

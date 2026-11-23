@@ -8,7 +8,7 @@ namespace BlueHarvest.Sim.Navigation;
 /// plan gets old. Waits when there and backs off for a while when no path exists.
 /// A building block for the AI; on its own it knows where the goal is without perceiving it.
 /// </summary>
-public sealed class GoToController : IActorController
+public sealed partial class GoToController : IActorController
 {
     private const int ReplanAfterSteps = 20;
     private const int GoalDriftTiles = 2;

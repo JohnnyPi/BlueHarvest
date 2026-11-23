@@ -15,19 +15,18 @@ namespace BlueHarvest.Sim.Snapshots;
 /// regenerates the island from its parameters, then lays the snapshot over it (contracts §8). A save from another
 /// format, generator version or set of packs is refused, never regenerated or substituted.
 /// <para>
-/// <b>What's in it (P3b-1):</b> the header and pack lock; the island (its parameters, how the run started, where the
-/// window is, every changed tile); the session's counters (revision, last event ID, processed requests); the clock;
-/// the weather; every item, lying or carried, with what's in it; and each actor's place, kit and island map.
-/// <b>Still to come (P3b-2):</b> health, needs, the AI's memories, the random streams, the scheduler, power, lights,
-/// fire, water, noise and scent, and bodies and the left behind. Until then a put-back game starts those afresh.
+/// <b>What's in it:</b> the header and pack lock; the island (its parameters, how the run started, where the window
+/// is, every changed tile); the session's counters (revision, last event ID, processed requests); the clock; the
+/// weather; every item, lying or carried, with what's in it; and the simulation's own state
+/// (<see cref="Simulation.CaptureState"/>): every actor with body, health, needs, kit, mind and island map, the turn
+/// order, the random streams, lights, fire, power, water, vehicles, platforms and every trace on the ground. Put
+/// back and played on, a game goes exactly as it would have without stopping (P3b-2).
 /// </para>
 /// </summary>
 public static class ExpeditionSnapshot
 {
     /// <summary>The format this build writes and reads.</summary>
     public const string Format = "blueharvest.expedition/1";
-
-    private static readonly Species[] KnownSpecies = [Species.Human, Species.Raptor, Species.Rex];
 
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
@@ -76,10 +75,6 @@ public static class ExpeditionSnapshot
                 ["item"] = WriteItem(w.Item),
             });
         }
-
-        var actors = new JsonArray();
-        foreach (Actor actor in sim.Actors)
-            actors.Add(WriteActor(sim, actor));
 
         (long washBase, long washSince) = sim.WeatherWash;
         WeatherSettings weather = sim.Weather.Settings;
@@ -135,37 +130,8 @@ public static class ExpeditionSnapshot
                 ["made"] = sim.Items.Made,
                 ["lying"] = lying,
             },
-            ["actors"] = actors,
+            ["state"] = sim.CaptureState(),
         };
-    }
-
-    private static JsonObject WriteActor(Simulation sim, Actor actor)
-    {
-        if (actor.IsGone)
-            throw new NotSupportedException($"{actor.Name} is dead, gone or left behind; saving those comes with P3b-2.");
-        if (actor.Controller is not PlayerController)
-            throw new NotSupportedException($"{actor.Name} isn't the player; saving other actors comes with P3b-2.");
-        (long x, long y) = sim.ToIsland(actor.Position);
-        var o = new JsonObject
-        {
-            ["id"] = actor.Id,
-            ["name"] = actor.Name,
-            ["glyph"] = actor.Glyph.ToString(),
-            ["species"] = actor.Species.Name,
-            ["player"] = true,
-            ["at"] = Pair(x, y),
-            ["deck"] = actor.OnDeck,
-            ["facing"] = Name(actor.Facing),
-            ["skills"] = JsonSerializer.SerializeToNode(actor.Skills),
-            ["carried"] = new JsonArray(actor.Inventory.Carried
-                .Select(c => (JsonNode?)new JsonObject { ["slot"] = Name(c.Slot), ["item"] = WriteItem(c.Item) }).ToArray()),
-        };
-        if (sim.Knowledge(actor) is { } known)
-        {
-            o["knowledge"] = WriteKnowledge(known);
-            o["lastSight"] = sim.LastSight(actor) is { } last ? new JsonArray(last.X, last.Y, last.Range) : null;
-        }
-        return o;
     }
 
     // ---------- reading ----------
@@ -282,68 +248,23 @@ public static class ExpeditionSnapshot
                 ledger.Lay(entry.Item, entry.X, entry.Y, entry.Deck);
             IslandExpedition.LayOver(sim, world, window, launch.RunSeed, ledger);
 
+            // the map as it was saved, undoing what laying the run over it changed (doors the power set, the tide)
+            window.Reapply(ReadChanges(Arr(island, "changes")));
+
             // the weather as it was, scent clock and all
             JsonObject weather = Obj(doc, "weather");
             sim.RestoreWeather(new WeatherSettings(Val<int>(weather, "rain"), EnumOf<Direction>(weather, "windFrom"),
                     Val<int>(weather, "windSpeed"), Val<int>(weather, "fog"), Val<bool>(weather, "storm"), Val<int>(weather, "cloud")),
                 Val<long>(weather, "washBase"), Val<long>(weather, "washSince"), Val<bool>(weather, "follow"));
 
-            // the actors, in order, so each gets back its ID
-            foreach (JsonNode? node in Arr(doc, "actors"))
-                ReadActor(sim, Obj(node, "an actor"), world, player, features, seen, made);
+            // everything else: the actors and their minds, the turns, the streams, lights, fire, power, water, traces
+            sim.RestoreState(Obj(doc, "state"), player, world, features, seen, made);
 
             // and the session's counters last, over anything the rebuilding counted
             JsonObject counters = Obj(doc, "session");
             session.RestoreCounters(Val<ulong>(counters, "revision"), Val<ulong>(counters, "lastEventId"),
                 Arr(counters, "processed").Select(p => Val<string>(p, "a processed request")).ToList());
             return sim;
-        }
-    }
-
-    private static void ReadActor(Simulation sim, JsonObject o, IslandWorld world, IActorController player,
-        FeatureIndex? features, HashSet<int> seen, int made)
-    {
-        int id = Val<int>(o, "id");
-        if (id != sim.Actors.Count)
-            throw Bad($"actor {id} is out of order");
-        if (!Val<bool>(o, "player"))
-            throw new SnapshotRefusedException("This save has actors besides the survivor, which this build can't put back yet (P3b-2).");
-        string speciesName = Val<string>(o, "species");
-        Species species = KnownSpecies.FirstOrDefault(s => s.Name == speciesName)
-            ?? throw Bad($"there's no species '{speciesName}'");
-        string glyph = Val<string>(o, "glyph");
-        if (glyph.Length != 1)
-            throw Bad($"actor {id}'s glyph isn't one character");
-        (long x, long y) = ReadPair(o, "at");
-        Actor actor = sim.AddActor(Val<string>(o, "name"), glyph[0], sim.FromIsland(x, y), species, player,
-            EnumOf<Direction>(o, "facing"), Val<bool>(o, "deck"), Loadout.Empty);
-        if (actor.Id != id)
-            throw Bad($"actor {id} came back as {actor.Id}");
-        try
-        {
-            actor.Skills = Obj(o, "skills").Deserialize<Skills>() ?? throw Bad($"actor {id}'s skills are empty");
-        }
-        catch (JsonException e)
-        {
-            throw Bad($"actor {id}'s skills don't read ({e.Message})");
-        }
-        foreach (JsonNode? node in Arr(o, "carried"))
-        {
-            JsonObject c = Obj(node, "a carried item");
-            actor.Inventory.Add(ReadItem(c["item"], sim.Catalog, seen, made), new Placement(EnumOf<CarrySlot>(c, "slot"), null, null));
-        }
-        if (o["knowledge"] is { } knowledge)
-        {
-            sim.UseMapKnowledge(actor, world, features, ReadKnowledge(Obj(knowledge, "a survivor's map"), world));
-            (long X, long Y, double Range)? last = null;
-            if (o["lastSight"] is { } sight)
-            {
-                JsonArray place = Arr(sight, "where the survivor last looked from");
-                if (place.Count != 3)
-                    throw Bad("'lastSight' isn't (x, y, range)");
-                last = (Val<long>(place[0], "lastSight x"), Val<long>(place[1], "lastSight y"), Val<double>(place[2], "lastSight range"));
-            }
-            sim.RestoreLastSight(actor, last);
         }
     }
 }

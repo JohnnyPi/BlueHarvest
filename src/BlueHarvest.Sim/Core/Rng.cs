@@ -23,6 +23,18 @@ public sealed class Rng
     /// <summary>The seed this generator started from.</summary>
     public ulong Seed { get; }
 
+    /// <summary>Where the stream has got to: its four words (a snapshot saves them, and puts them back).</summary>
+    internal (ulong S0, ulong S1, ulong S2, ulong S3) State
+    {
+        get => (_s0, _s1, _s2, _s3);
+        set
+        {
+            if (value is (0, 0, 0, 0))
+                throw new ArgumentException("A xoshiro state can't be all zero.", nameof(value));
+            (_s0, _s1, _s2, _s3) = value;
+        }
+    }
+
     /// <summary>
     /// Creates an independent stream for one system ("ai:rex", "weather").
     /// Derived from the seed and the name only, so forking never disturbs this
