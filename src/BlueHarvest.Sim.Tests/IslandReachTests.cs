@@ -31,7 +31,7 @@ public class IslandReachTests
     private static readonly Dictionary<string, string> Pinned = new()
     {
         ["Default"] = "8,28,0,0,0,0,0,922.335711,1.147902",
-        ["Seed12"] = "8,28,0,0,0,0,0,770.256661,1.062727",
+        ["Seed12"] = "8,28,0,0,0,0,0,772.858298,1.062727",
         ["SmallNoCliffs"] = "8,28,0,0,0,0,0,395.148648,1.01727",
         ["CoolWet"] = "8,28,0,0,0,0,0,560.053636,1",
     };

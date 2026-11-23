@@ -69,6 +69,10 @@ public sealed class AuthoredRuin
     public string? Approach { get; init; }
     public (double X, double Y)? Landing { get; init; }
     public double CausewayM { get; init; }
+    /// <summary>Its name's index in the works' labels (−1 for RUIN-07, the Court, and for one not placed): the chunks name its tiles (P4d).</summary>
+    public int Label { get; set; } = -1;
+    /// <summary>RUIN-06's causeway label, when it has a causeway; −1 otherwise.</summary>
+    public int CausewayLabel { get; set; } = -1;
 }
 
 /// <summary>A ley line through the Court, bent toward its sites (D-10): Xs/Ys run from one frame edge to the other.</summary>
@@ -706,6 +710,7 @@ public sealed partial class IslandWorks
                     int i = Idx(x, y);
                     if (!OnMain(i) || slopeD[i] >= 18 || PaddockCell[i] >= 0) continue;
                     if (pts.Exists(q => GenMath.Hyp(q.X - x, q.Y - y) < 1500 * s)) continue;
+                    if (AuthoredRuins.Exists(q => q.Placed && GenMath.Hyp(q.X - x, q.Y - y) < rS + 300)) continue; // the ruins' 300 m clearance (A9)
                     double v = -slopeD[i] / 18.0 + 0.3 * GenHash.Hash2(js, i, k) / 4294967296.0;
                     if (v > bs && !TooClose(x, y, rS, "survey", 0)) { bs = v; found = true; bx = GenMath.Round(x); by = GenMath.Round(y); }
                 }

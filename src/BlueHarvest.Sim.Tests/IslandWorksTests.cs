@@ -23,7 +23,7 @@ public class IslandWorksTests
             0x15CBBBD35DD13530UL, 0xD8B66F9DF38E59C1UL, 0x97179EB24FB0721CUL, 0xE13E59E1E4324F31UL, 0x9798A99E4D565AA3UL,
             0x290CCE13D24E635FUL, 7, 4, 2, 0),
         ["Seed12"] = new(28, 5, 32, 405, 1024,
-            0x6A195AB97CF8903DUL, 0x3979D427178E8E03UL, 0xD91F8E13F7CAE137UL, 0x610A25B3877732B5UL, 0x9766A0F0DC79D748UL,
+            0x655F4AEFB41AC4D9UL, 0x3979D427178E8E03UL, 0xD91F8E13F7CAE137UL, 0x3143ACB1B8BADF50UL, 0x8D9FAA0848325A12UL,
             0x0DA03A6A208E5DDEUL, 7, 4, 5, 0),
         ["SmallNoCliffs"] = new(28, 5, 32, 405, 1019,
             0x3342BC2552B732CDUL, 0xBBDBAA9D13FB864EUL, 0x7FBD4BB7B365E69EUL, 0xCE98CEC954AD9E18UL, 0x6B3CECCD2368791EUL,
@@ -253,8 +253,8 @@ public class IslandWorksTests
             double d = Math.Sqrt((q.X - home.X) * (q.X - home.X) + (q.Y - home.Y) * (q.Y - home.Y));
             Assert.InRange(d, 1500 * s, 6000 * s);
             Assert.Equal(-1, w.PaddockCell[q.Cell]);
-            // survey posts come after the ruins and don't keep this distance (anomaly A9, as the lab does: Seed12's RUIN-03)
-            Assert.All(w.Sites.Where(t => t.Kind != "survey"),
+            // every site keeps the ruins' 300 m clearance, survey posts too (placed after the ruins; A9, fixed in P4d)
+            Assert.All(w.Sites,
                 t => Assert.True(Math.Sqrt((t.X - q.X) * (t.X - q.X) + (t.Y - q.Y) * (t.Y - q.Y)) >= t.R + 300, $"{q.Id} too close to {t.Name}"));
         }
         // every placement that failed says why; on these islands only RUIN-05 on the cliff-less one can fail

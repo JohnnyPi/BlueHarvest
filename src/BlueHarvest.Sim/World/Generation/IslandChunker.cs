@@ -32,6 +32,11 @@ public sealed class IslandChunk
     public required short[] River { get; init; }
     /// <summary>That river's usual surface beside the tile, m; NaN where <see cref="River"/> is −1.</summary>
     public required float[] RiverLevel { get; init; }
+    /// <summary>
+    /// The ley line under each tile (P4d): 0 for none, else 1 + its index in the site program's lines (the nearest within
+    /// <see cref="IslandChunker.LeyHalf"/> m, the lower number on a tie). Hidden: nothing draws it until a line is researched.
+    /// </summary>
+    public required byte[] Ley { get; init; }
 }
 
 /// <summary>
@@ -128,7 +133,7 @@ public sealed class IslandChunker
         public bool Runway;
     }
 
-    private enum ItemKind : byte { Way, Fence, Pylon, Rail, Site, Pier, Ruin, Wreck, Cave }
+    private enum ItemKind : byte { Way, Fence, Pylon, Rail, Site, Pier, Ruin, Wreck, Cave, AuthoredRuin, Causeway }
 
     private sealed class Item
     {
@@ -144,7 +149,20 @@ public sealed class IslandChunker
         public double L; // pier length
         public Ruin? Ruin;
         public Wreck? Wreck;
+        public AuthoredRuin? Authored;
+        public double Ux, Uy; // an authored ruin's frame: its axis (downhill, or RUIN-06's toward its landing)
+        public int Label = -1; // a causeway's
     }
+
+    /// <summary>One segment of a ley line, for the hidden ley field; <see cref="N"/> is 1 + the line's index.</summary>
+    private sealed class LeySeg
+    {
+        public double Ax, Ay, Bx, By;
+        public byte N;
+    }
+
+    /// <summary>A tile is on a ley line within this many metres of it (P4d).</summary>
+    public const double LeyHalf = 16;
 
     private readonly IslandWorld _world;
     private readonly int _nx, _ny;
@@ -154,6 +172,7 @@ public sealed class IslandChunker
     private readonly Dictionary<long, List<(int River, int K)>> _riverBins = new();
     private readonly Dictionary<long, List<Item>> _bins = new();
     private readonly Dictionary<long, List<Prim>> _primBins = new();
+    private readonly Dictionary<long, List<LeySeg>> _leyBins = new();
     private readonly double[][] _riverXs, _riverYs, _riverQs, _riverHs;
 
     public IslandChunker(IslandWorld world)
@@ -348,6 +367,177 @@ public sealed class IslandChunker
             foreach ((double mx, double my) in c.Mouths) Put(mx - 5, my - 5, mx + 5, my + 5, new Item { Kind = ItemKind.Cave, X = mx, Y = my, R = 3.5 });
             foreach ((double mx, double my) in c.Skylights) Put(mx - 4, my - 4, mx + 4, my + 4, new Item { Kind = ItemKind.Cave, X = mx, Y = my, R = 2.5, Sky = true });
         }
+        // the six authored ruins' perimeters (P4d), each in its own frame: downhill, or for RUIN-06 toward its landing
+        foreach (AuthoredRuin q in w.AuthoredRuins)
+        {
+            if (!q.Placed || q.Id == "RUIN-07") continue;
+            double ux, uy;
+            if (q.Landing is { } toward)
+            {
+                ux = toward.X - q.X; uy = toward.Y - q.Y;
+            }
+            else
+            {
+                double gx = q.X / _cell - 0.5, gy = q.Y / _cell - 0.5;
+                ux = Bicubic(_height, _nx, _ny, gx - 0.5, gy) - Bicubic(_height, _nx, _ny, gx + 0.5, gy);
+                uy = Bicubic(_height, _nx, _ny, gx, gy - 0.5) - Bicubic(_height, _nx, _ny, gx, gy + 0.5);
+            }
+            double al = GenMath.Hyp(ux, uy);
+            if (al > 1e-9) { ux /= al; uy /= al; }
+            else { ux = 1; uy = 0; }
+            Put(q.X - q.R - 20, q.Y - q.R - 20, q.X + q.R + 20, q.Y + q.R + 20, new Item { Kind = ItemKind.AuthoredRuin, Authored = q, Ux = ux, Uy = uy });
+            if (q.Approach == "causeway" && q.Landing is { } landing)
+                Seg(landing.X, landing.Y, q.X, q.Y, 4, new Item { Kind = ItemKind.Causeway, Ax = landing.X, Ay = landing.Y, Bx = q.X, By = q.Y, Label = q.CausewayLabel });
+        }
+        // the ley lines (P4d): a hidden field in the chunks, each segment binned along its length within the frame
+        IndexLeyLines(w);
+    }
+
+    private void IndexLeyLines(IslandWorks w)
+    {
+        double pad = LeyHalf + 2 * Bin / 4, fw = _world.Shape.Anchors.W, fh = _world.Shape.Anchors.H;
+        for (int n = 0; n < w.Program.Lines.Count; n++)
+        {
+            LeyLineRoute line = w.Program.Lines[n];
+            for (int k = 0; k + 1 < line.Xs.Length; k++)
+            {
+                var seg = new LeySeg { Ax = line.Xs[k], Ay = line.Ys[k], Bx = line.Xs[k + 1], By = line.Ys[k + 1], N = (byte)(n + 1) };
+                double len = GenMath.Hyp(seg.Bx - seg.Ax, seg.By - seg.Ay);
+                int steps = Math.Max(1, (int)Math.Ceiling(len / (Bin / 2)));
+                for (int m = 0; m <= steps; m++)
+                {
+                    double px = seg.Ax + (seg.Bx - seg.Ax) * m / steps, py = seg.Ay + (seg.By - seg.Ay) * m / steps;
+                    if (px < -Bin || py < -Bin || px > fw + Bin || py > fh + Bin) continue;
+                    for (long by = Floor((py - pad) / Bin); by <= Floor((py + pad) / Bin); by++)
+                    {
+                        for (long bx = Floor((px - pad) / Bin); bx <= Floor((px + pad) / Bin); bx++)
+                        {
+                            long key = bx * 4096 + by;
+                            if (!_leyBins.TryGetValue(key, out var list)) _leyBins[key] = list = [];
+                            if (list.Count == 0 || !ReferenceEquals(list[^1], seg)) list.Add(seg);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>The ley line under a tile's centre: 0 for none, else the nearest line's number within <see cref="LeyHalf"/> m.</summary>
+    private byte LeyAt(double x, double y)
+    {
+        if (!_leyBins.TryGetValue(Floor(x / Bin) * 4096 + Floor(y / Bin), out List<LeySeg>? segs)) return 0;
+        double bd = LeyHalf;
+        byte ln = 0;
+        foreach (LeySeg g in segs)
+        {
+            double d = SegDist(x, y, g.Ax, g.Ay, g.Bx, g.By, out _);
+            if (d < bd || (d == bd && g.N < ln)) { bd = d; ln = g.N; }
+        }
+        return ln;
+    }
+
+    /// <summary>
+    /// An authored ruin's perimeter at a point (P4d): worn masonry after its entry in the ruins bible, walls weathering to
+    /// rubble where the cover hash is low. False for untouched ground; otherwise the mark (0 keeps the ground's own cover),
+    /// a height change, and for RUIN-06 the height its stones stand to above the reef flat (0 for the others). P11c builds
+    /// the working ruins inside.
+    /// </summary>
+    private static bool AuthoredShape(Item it, double x, double y, double gap, out byte m, out double dz, out double rise)
+    {
+        AuthoredRuin q = it.Authored!;
+        double R = q.R, dx = x - q.X, dy = y - q.Y, u = dx * it.Ux + dy * it.Uy, v = -dx * it.Uy + dy * it.Ux, d = GenMath.Hyp(dx, dy);
+        byte wall = gap > 0.25 ? MkRuin : MkRubble;
+        bool Ring(double r, double half) => Math.Abs(d - r) < half;
+        bool Opening(double r, double phi, double width)
+        {
+            double da = Math.Abs(GenMath.Atan2(v, u) - phi) % (2 * Math.PI);
+            if (da > Math.PI) da = 2 * Math.PI - da;
+            return da * r < width / 2;
+        }
+        m = 0; dz = 0; rise = 0;
+        switch (q.Id)
+        {
+            case "RUIN-01": // the Unhatched Court: three nest rings with staggered gaps, six nest bowls, the keeper's terrace uphill
+            {
+                if (u < -R - 3 && u > -R - 13 && Math.Abs(v) < 10) { m = MkFloor; return true; }
+                if (d > R + 1) return false;
+                ReadOnlySpan<double> radii = [R, 0.66 * R, 0.33 * R];
+                ReadOnlySpan<double> phis = [0, Math.PI, Math.PI / 2];
+                for (int n = 0; n < 3; n++)
+                {
+                    if (!Ring(radii[n], 0.6)) continue;
+                    if (!Opening(radii[n], phis[n], 8)) m = wall;
+                    return true;
+                }
+                for (int n = 0; n < 6; n++)
+                {
+                    double a = n * Math.PI / 3 + Math.PI / 6, dn = GenMath.Hyp(u - 0.5 * R * GenMath.Cos(a), v - 0.5 * R * GenMath.Sin(a));
+                    if (dn < 7)
+                    {
+                        if (dn < 4) m = MkMud;
+                        dz = -1.5 * (1 - (dn / 7) * (dn / 7));
+                        return true;
+                    }
+                }
+                return false;
+            }
+            case "RUIN-02": // the House of Borrowed Breath: a walled shelter across the ravine, seven rooms, a forecourt downhill
+            {
+                double hu = 12, hv = 0.9 * R;
+                if (Math.Abs(u) <= hu + 0.5 && Math.Abs(v) <= hv + 0.5)
+                {
+                    if (Math.Abs(u) > hu - 0.6) { if (!(Math.Abs(Math.Abs(v) - 24) < 2)) m = wall; return true; }
+                    if (Math.Abs(v) > hv - 0.6) { m = wall; return true; }
+                    if (Math.Abs((((v % 24) + 24) % 24) - 12) < 0.6 && Math.Abs(u) > 2.5) { m = wall; return true; }
+                    m = gap < 0.2 ? MkRubble : MkFloor;
+                    return true;
+                }
+                if (u > hu && Ring(0.5 * R, 0.6)) { if (!Opening(0.5 * R, 0, 6)) m = wall; return true; }
+                return false;
+            }
+            case "RUIN-03": // the Garden of Unchosen Seasons: food terraces across the slope, a channel down it, the walled garden
+            {
+                if (d > R) return false;
+                if (Math.Abs(v) < 1.2) { m = MkShallow; dz = -0.4; return true; }
+                double sq = Math.Max(Math.Abs(u), Math.Abs(v));
+                if (sq < 14.5) { if (sq > 13.5 && !(Math.Abs(v) > 13.5 && Math.Abs(u) < 3)) m = wall; return true; }
+                if ((((u % 8) + 8) % 8) < 0.8 && Math.Abs(v) > 3 && gap > 0.15) { m = wall; return true; }
+                return false;
+            }
+            case "RUIN-04": // the Stair of the Second Horizon: a walled stair up the ridge, three landings, the lodge at the foot
+            {
+                ReadOnlySpan<double> landings = [0.85 * R, 0, -0.85 * R];
+                foreach (double c in landings)
+                {
+                    double sq = Math.Max(Math.Abs(u - c), Math.Abs(v));
+                    if (sq < 8.5) { m = sq > 7.5 && Math.Abs(v) >= 3 ? wall : MkFloor; return true; }
+                }
+                if (Math.Abs(u) <= 0.85 * R && Math.Abs(v) < 3.8)
+                {
+                    m = Math.Abs(v) >= 3 ? wall : (((u % 4) + 4) % 4) < 0.7 ? MkRubble : MkFloor;
+                    return true;
+                }
+                return false;
+            }
+            case "RUIN-05": // the Cathedral of the Missing Note: listening steps in arcs above the sea, an aisle, the platform
+            {
+                if (d > R + 0.6 || u > 6) return false;
+                if (d < 10 || Math.Abs(v) < 2) { m = MkFloor; return true; }
+                for (int n = 0; n < 5; n++) if (Ring(0.3 * R + n * 0.14 * R, 0.5)) { m = wall; return true; }
+                if (Ring(R, 0.6)) { m = wall; return true; }
+                return false;
+            }
+            case "RUIN-06": // the Tidemark Archive: an arch ring on the reef flat, an inner wall, the archive platform; all open to the shore
+            {
+                if (d > R + 1.2) return false;
+                double sa = GenMath.Round(GenMath.Atan2(v, u) / (Math.PI / 18)) * (Math.PI / 18);
+                if (GenMath.Hyp(u - GenMath.Cos(sa) * R, v - GenMath.Sin(sa) * R) < 1.1) { m = wall; rise = 1.6; return true; }
+                if (d < 13.2) { m = d < 12 || (Math.Abs(v) < 1.5 && u > 0) ? MkFloor : wall; rise = 1.6; return true; }
+                if (Ring(0.45 * R, 0.6)) { if (Opening(0.45 * R, 0, 6)) return false; m = wall; rise = 1.6; return true; }
+                return false;
+            }
+        }
+        return false;
     }
 
     private static double SegDist(double x, double y, double ax, double ay, double bx, double by, out double t)
@@ -406,7 +596,8 @@ public sealed class IslandChunker
 
     private static readonly byte MkRoad = Mk(Cover.Road), MkBridge = Mk(Cover.Bridge), MkRunway = Mk(Cover.Runway), MkYard = Mk(Cover.Yard), MkWall = Mk(Cover.Wall),
         MkFloor = Mk(Cover.Floor), MkDoor = Mk(Cover.Door), MkFence = Mk(Cover.Fence), MkPylon = Mk(Cover.Pylon), MkRuin = Mk(Cover.Ruin), MkRubble = Mk(Cover.Rubble),
-        MkWreck = Mk(Cover.Wreck), MkCave = Mk(Cover.Cave), MkPier = Mk(Cover.Pier), MkBigWall = Mk(Cover.BigWall), MkRail = Mk(Cover.Rail), MkMast = Mk(Cover.Mast);
+        MkWreck = Mk(Cover.Wreck), MkCave = Mk(Cover.Cave), MkPier = Mk(Cover.Pier), MkBigWall = Mk(Cover.BigWall), MkRail = Mk(Cover.Rail), MkMast = Mk(Cover.Mast),
+        MkMud = Mk(Cover.Mud), MkShallow = Mk(Cover.Shallow);
 
     /// <summary>
     /// Builds the chunk whose first tile is at (ccx · 64, ccy · 64) metres. size is normally 64;
@@ -526,6 +717,7 @@ public sealed class IslandChunker
         var outFlowY = new sbyte[size * size];
         var outRiver = new short[size * size];
         var outRiverLevel = new float[size * size];
+        var ley = new byte[size * size];
         double seaT = _world.Params.SeaTemp;
         for (int j = 0; j < size; j++)
         {
@@ -606,10 +798,11 @@ public sealed class IslandChunker
                 if (kind[k] != 0) tBiome[o2] = kind[k] == 1 ? (byte)Biome.Ocean : (byte)Biome.Lake;
                 if (mark[k] != 0) c = (Cover)(mark[k] - 1);
                 cover[o2] = (byte)c; label[o2] = lab[k];
+                ley[o2] = LeyAt(x, y);
             }
         }
         return new IslandChunk { Size = size, X0 = ccx * ChunkSize, Y0 = ccy * ChunkSize, Height = outH, Cover = cover, Water = lvl, Shade = shade, Biome = tBiome, Label = label, FlowX = outFlowX, FlowY = outFlowY,
-            River = outRiver, RiverLevel = outRiverLevel };
+            River = outRiver, RiverLevel = outRiverLevel, Ley = ley };
     }
 
     /// <summary>Applies the works to one tile; returns the tile's new height.</summary>
@@ -843,6 +1036,35 @@ public sealed class IslandChunker
                     }
                     break;
                 }
+                case ItemKind.AuthoredRuin:
+                {
+                    byte mk = mark[k];
+                    if (mk == MkRoad || mk == MkBridge || mk == MkRunway || mk == MkRail || mk == MkPier) continue; // ways run through
+                    AuthoredRuin q = it.Authored!;
+                    if (!AuthoredShape(it, x, y, GenHash.Hash2(_nCover, ix, iy) / 4294967296.0, out byte m, out double dz, out double rise))
+                    {
+                        if (GenMath.Hyp(x - q.X, y - q.Y) <= q.R) lab[k] = (short)q.Label; // named all through
+                        continue;
+                    }
+                    if (rise != 0)
+                    {
+                        if (kind[k] != 0 && kind[k] != 1) continue;
+                        kind[k] = 0; water[k] = float.NaN; z = Math.Max(z, rise);
+                        levelled[k] = 1; // stones stand whole: no terrace steps
+                    }
+                    else if (kind[k] != 0) continue;
+                    z += dz;
+                    if (m != 0) mark[k] = m;
+                    lab[k] = (short)q.Label;
+                    break;
+                }
+                case ItemKind.Causeway:
+                    if (SegDist(x, y, it.Ax, it.Ay, it.Bx, it.By, out _) < 2)
+                    {
+                        if (kind[k] == 1) { kind[k] = 0; water[k] = float.NaN; }
+                        z = Math.Max(z, 1.6); mark[k] = MkPier; lab[k] = (short)it.Label;
+                    }
+                    break;
             }
         }
         return z;

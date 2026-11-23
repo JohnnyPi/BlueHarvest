@@ -171,6 +171,29 @@ public sealed partial class IslandWorks
     public double PowerKm { get; private set; }
     /// <summary>Names of buildings, rooms and features; primitives refer to them by index.</summary>
     public List<string> Labels { get; } = [];
+
+    /// <summary>
+    /// Where the authored ruins' names begin in <see cref="Labels"/>: they're added last of all (P4d), so every label before
+    /// them is the same as before, and the transit stage's labels are the first <see cref="RuinLabelStart"/>.
+    /// </summary>
+    public int RuinLabelStart { get; private set; }
+
+    /// <summary>The authored ruins' names, last of all so no earlier label moves (P4d): the chunks draw their perimeters.</summary>
+    private void LabelAuthoredRuins()
+    {
+        RuinLabelStart = Labels.Count;
+        foreach (AuthoredRuin q in AuthoredRuins)
+        {
+            if (!q.Placed || q.Id == "RUIN-07") continue;
+            Labels.Add(q.Name);
+            q.Label = Labels.Count - 1;
+            if (q.Approach == "causeway")
+            {
+                Labels.Add(q.Name + " · Causeway");
+                q.CausewayLabel = Labels.Count - 1;
+            }
+        }
+    }
     public PrimList Prims { get; } = new();
     public List<Road> Roads { get; } = [];
     /// <summary>Road on each cell: 0 none, 1 track, 2 main road.</summary>
@@ -223,6 +246,7 @@ public sealed partial class IslandWorks
         works.ScatterWrecks();
         works.PlaceRuins();
         works.MapWildlife();
+        works.LabelAuthoredRuins();
         // Central Administration's third way in: the lift from the Court's monorail station
         if (works.Program.Adm is { } adm && works.Monorail is { Stations.Count: > 0 } mono)
             adm.Ports.Add(new AdmPort("monorail lift", mono.Stations[0].X, mono.Stations[0].Y, mono.Stations[0].Z));

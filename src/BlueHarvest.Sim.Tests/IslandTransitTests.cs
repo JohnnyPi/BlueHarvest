@@ -19,7 +19,7 @@ public class IslandTransitTests
         ["Default"] = new(1, 3, 4, 378, 943,
             0x6508374AFCC44764UL, 0x37E3C245F42A4A83UL, 0xD0C5EB116F22B575UL, 0xB301EA2198D0630FUL, 0xA8EFAE773E8ECC38UL, 0xDD40B49FE75CF0F4UL),
         ["Seed12"] = new(1, 4, 4, 426, 1071,
-            0xADE551567DD2D913UL, 0x3FFC2CDC5FDF426AUL, 0x5BB6B75E2D98BC6DUL, 0x79619430822C9CB8UL, 0x97BF93017587DB55UL, 0xA59211DC1C5E06C3UL),
+            0xBE53A533F0F77AFEUL, 0x3FFC2CDC5FDF426AUL, 0x5BB6B75E2D98BC6DUL, 0x79619430822C9CB8UL, 0x1F6927CF213E0A71UL, 0x9E7CAB42D3E1B619UL),
         ["SmallNoCliffs"] = new(1, 4, 4, 426, 1059,
             0x79B4FB44B1F168B5UL, 0xED9950036F9BDC11UL, 0x91B51C3DE5CF3D73UL, 0x72798B2F0121278AUL, 0x3E4EC70B4BC044F5UL, 0x70028310F2921208UL),
         ["CoolWet"] = new(1, 4, 4, 394, 977,
@@ -56,7 +56,7 @@ public class IslandTransitTests
         Assert.Equal(e.Lifts, w.Lifts.Count);
         Assert.Equal(e.TramStops, w.Tram?.Stops.Count ?? 0);
         Assert.Equal(e.Stations, w.Monorail?.Stations.Count ?? 0);
-        Assert.Equal(e.Labels, w.Labels.Count);
+        Assert.Equal(e.Labels, w.RuinLabelStart); // the transit stage's labels: the authored ruins' come after (P4d)
         Assert.Equal(e.Prims, w.Prims.Count);
     }
 
@@ -131,8 +131,8 @@ public class IslandTransitTests
     public void AllLabelsAndPrims_MatchReference(string name)
     {
         IslandWorks w = TestIslands.Works(name);
-        var h = new GenHasher().I(w.Labels.Count);
-        foreach (string s in w.Labels) h.S(s);
+        var h = new GenHasher().I(w.RuinLabelStart);
+        foreach (string s in w.Labels.Take(w.RuinLabelStart)) h.S(s);
         h.I(w.Prims.Count);
         foreach (Prim q in w.Prims.InOrder()) IslandWorksTests.HashPrim(h, q);
         Assert.Equal(Golden[name].AllPrimsGroup, h.Value);

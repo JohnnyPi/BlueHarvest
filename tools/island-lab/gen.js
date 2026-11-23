@@ -1355,6 +1355,7 @@ var IslandGen = (function () {
             if (dc < 3000 * s || dc > 12000 * s || x < 0 || y < 0 || x >= A.W || y >= A.H) continue;
             const i = idx(x, y); if (!onMain(i) || slopeD[i] >= 18 || padCell[i] >= 0) continue;
             if (pts.some(q => D.hyp(q[0] - x, q[1] - y) < 1500 * s)) continue;
+            if (P2.ruins.some(q => q.placed && D.hyp(q.x - x, q.y - y) < rS + 300)) continue; // the ruins' 300 m clearance (A9)
             const v = -slopeD[i] / 18 + 0.3 * hash2(js, i, k) / 4294967296;
             if (v > bs && !tooClose(x, y, rS, 'survey')) { bs = v; best = [D.round(x), D.round(y)]; }
           }
@@ -2005,6 +2006,12 @@ var IslandGen = (function () {
     lap('wildlife');
     if (p.stopAfter === 'works') return { stop: { caves, wrecks, ruins, fauna } };
 
+    // the authored ruins' names, last of all so no earlier label moves (P4d): their perimeters are drawn in the chunks
+    if (P2) for (const q of P2.ruins) {
+      if (!q.placed || q.id === 'RUIN-07') continue;
+      labels.push(q.name); q.label = labels.length - 1;
+      if (q.approach === 'causeway') { labels.push(q.name + ' · Causeway'); q.causewayLabel = labels.length - 1; }
+    }
     // the walking grid, kept for facilityAreas (step 25b-2)
     const walkGrid = { cnx, cny, cs, ch, pass, spd, wade, onRoad, targets };
     const out = { sites, paddocks, roads, power, caves, wrecks, ruins, leylines, walk, walkTransit, transit, objectives, labels, prims, fauna, roadKm, mainKm, bridges, tunnels, powerKm, walkGrid, roadCell, tunnelCell };
@@ -2718,7 +2725,111 @@ var IslandGen = (function () {
       for (const m of c.mouths) put(m[0] - 5, m[1] - 5, m[0] + 5, m[1] + 5, { t: 'cave', x: m[0], y: m[1], r: 3.5 });
       for (const m of c.skylights) put(m[0] - 4, m[1] - 4, m[0] + 4, m[1] + 4, { t: 'cave', x: m[0], y: m[1], r: 2.5, sky: true });
     }
+    // the six authored ruins' perimeters (P4d), each in its own frame: downhill, or for RUIN-06 toward its landing
+    for (const q of W.authoredRuins || []) {
+      if (!q.placed || q.id === 'RUIN-07') continue;
+      let ax, ay;
+      if (q.landing) { ax = q.landing[0] - q.x; ay = q.landing[1] - q.y; }
+      else {
+        const { nx, ny, cell } = world, gx = q.x / cell - 0.5, gy = q.y / cell - 0.5;
+        ax = bicubic(world.height, nx, ny, gx - 0.5, gy) - bicubic(world.height, nx, ny, gx + 0.5, gy);
+        ay = bicubic(world.height, nx, ny, gx, gy - 0.5) - bicubic(world.height, nx, ny, gx, gy + 0.5);
+      }
+      const al = D.hyp(ax, ay);
+      if (al > 1e-9) { ax /= al; ay /= al; } else { ax = 1; ay = 0; }
+      put(q.x - q.r - 20, q.y - q.r - 20, q.x + q.r + 20, q.y + q.r + 20, { t: 'aruin', q, ax, ay });
+      if (q.approach === 'causeway' && q.landing)
+        seg(q.landing[0], q.landing[1], q.x, q.y, 4, { t: 'causeway', ax: q.landing[0], ay: q.landing[1], bx: q.x, by: q.y, label: q.causewayLabel });
+    }
+    // the ley lines (P4d): a hidden field in the chunks, each segment binned along its length within the frame
+    const lbins = new Map(), pad = LEY_HALF + 2 * BIN / 4;
+    (W.leyLines || []).forEach((line, n) => {
+      for (let k = 0; k + 1 < line.xs.length; k++) {
+        const item = { t: 'ley', ax: line.xs[k], ay: line.ys[k], bx: line.xs[k + 1], by: line.ys[k + 1], n: n + 1 };
+        const L = D.hyp(item.bx - item.ax, item.by - item.ay), steps = Math.max(1, Math.ceil(L / (BIN / 2)));
+        for (let m = 0; m <= steps; m++) {
+          const px = item.ax + (item.bx - item.ax) * m / steps, py = item.ay + (item.by - item.ay) * m / steps;
+          if (px < -BIN || py < -BIN || px > world.W + BIN || py > world.H + BIN) continue;
+          for (let by = Math.floor((py - pad) / BIN); by <= Math.floor((py + pad) / BIN); by++)
+            for (let bx = Math.floor((px - pad) / BIN); bx <= Math.floor((px + pad) / BIN); bx++) {
+              const key = bx * 4096 + by; let LL = lbins.get(key); if (!LL) lbins.set(key, LL = []);
+              if (LL[LL.length - 1] !== item) LL.push(item);
+            }
+        }
+      }
+    });
+    bins.ley = lbins;
     return bins;
+  }
+  // A tile is on a ley line within this many metres of it (P4d).
+  const LEY_HALF = 16;
+  // An authored ruin's perimeter at a point (P4d): worn masonry after its bible entry, walls weathering to rubble where
+  // the cover hash is low. Returns null for untouched ground, else the mark (0 keeps the ground's own cover), a height
+  // change, and for RUIN-06 the height its stones stand to above the reef flat. P11c builds the working ruins inside.
+  function authoredShape(it, x, y, gap) {
+    const q = it.q, R = q.r, dx = x - q.x, dy = y - q.y, u = dx * it.ax + dy * it.ay, v = -dx * it.ay + dy * it.ax, d = D.hyp(dx, dy);
+    const wall = gap > 0.25 ? MK.ruin : MK.rubble;
+    const ring = (r, half) => Math.abs(d - r) < half;
+    const opening = (r, phi, w) => { let da = Math.abs(D.atan2(v, u) - phi) % (2 * Math.PI); if (da > Math.PI) da = 2 * Math.PI - da; return da * r < w / 2; };
+    switch (q.id) {
+      case 'RUIN-01': { // the Unhatched Court: three nest rings with staggered gaps, six nest bowls, the keeper's terrace uphill
+        if (u < -R - 3 && u > -R - 13 && Math.abs(v) < 10) return { m: MK.floor, dz: 0 };
+        if (d > R + 1) return null;
+        const rings = [[R, 0], [0.66 * R, Math.PI], [0.33 * R, Math.PI / 2]];
+        for (const [r, phi] of rings) if (ring(r, 0.6)) return opening(r, phi, 8) ? { m: 0, dz: 0 } : { m: wall, dz: 0 };
+        for (let n = 0; n < 6; n++) {
+          const a = n * Math.PI / 3 + Math.PI / 6, dn = D.hyp(u - 0.5 * R * D.cos(a), v - 0.5 * R * D.sin(a));
+          if (dn < 7) return { m: dn < 4 ? MK.mud : 0, dz: -1.5 * (1 - (dn / 7) * (dn / 7)) };
+        }
+        return null;
+      }
+      case 'RUIN-02': { // the House of Borrowed Breath: a walled shelter across the ravine, seven rooms, a forecourt downhill
+        const hu = 12, hv = 0.9 * R;
+        if (Math.abs(u) <= hu + 0.5 && Math.abs(v) <= hv + 0.5) {
+          if (Math.abs(u) > hu - 0.6) return Math.abs(Math.abs(v) - 24) < 2 ? { m: 0, dz: 0 } : { m: wall, dz: 0 };
+          if (Math.abs(v) > hv - 0.6) return { m: wall, dz: 0 };
+          if (Math.abs((((v % 24) + 24) % 24) - 12) < 0.6 && Math.abs(u) > 2.5) return { m: wall, dz: 0 };
+          return { m: gap < 0.2 ? MK.rubble : MK.floor, dz: 0 };
+        }
+        if (u > hu && ring(0.5 * R, 0.6)) return opening(0.5 * R, 0, 6) ? { m: 0, dz: 0 } : { m: wall, dz: 0 };
+        return null;
+      }
+      case 'RUIN-03': { // the Garden of Unchosen Seasons: food terraces across the slope, a channel down it, the walled garden
+        if (d > R) return null;
+        if (Math.abs(v) < 1.2) return { m: MK.shallow, dz: -0.4 };
+        const m = Math.max(Math.abs(u), Math.abs(v));
+        if (m < 14.5) return m > 13.5 && !(Math.abs(v) > 13.5 && Math.abs(u) < 3) ? { m: wall, dz: 0 } : { m: 0, dz: 0 };
+        if ((((u % 8) + 8) % 8) < 0.8 && Math.abs(v) > 3 && gap > 0.15) return { m: wall, dz: 0 };
+        return null;
+      }
+      case 'RUIN-04': { // the Stair of the Second Horizon: a walled stair up the ridge, three landings, the lodge at the foot
+        for (const c of [0.85 * R, 0, -0.85 * R]) {
+          const m = Math.max(Math.abs(u - c), Math.abs(v));
+          if (m < 8.5) return m > 7.5 && Math.abs(v) >= 3 ? { m: wall, dz: 0 } : { m: MK.floor, dz: 0 };
+        }
+        if (Math.abs(u) <= 0.85 * R && Math.abs(v) < 3.8) {
+          if (Math.abs(v) >= 3) return { m: wall, dz: 0 };
+          return { m: (((u % 4) + 4) % 4) < 0.7 ? MK.rubble : MK.floor, dz: 0 };
+        }
+        return null;
+      }
+      case 'RUIN-05': { // the Cathedral of the Missing Note: listening steps in arcs above the sea, an aisle, the platform
+        if (d > R + 0.6 || u > 6) return null;
+        if (d < 10 || Math.abs(v) < 2) return { m: MK.floor, dz: 0 };
+        for (let n = 0; n < 5; n++) if (ring(0.3 * R + n * 0.14 * R, 0.5)) return { m: wall, dz: 0 };
+        if (ring(R, 0.6)) return { m: wall, dz: 0 };
+        return null;
+      }
+      case 'RUIN-06': { // the Tidemark Archive: an arch ring on the reef flat, an inner wall, the archive platform; all open to the shore
+        if (d > R + 1.2) return null;
+        const sa = D.round(D.atan2(v, u) / (Math.PI / 18)) * (Math.PI / 18);
+        if (D.hyp(u - D.cos(sa) * R, v - D.sin(sa) * R) < 1.1) return { m: wall, dz: 0, rise: 1.6 };
+        if (d < 13.2) return d < 12 || (Math.abs(v) < 1.5 && u > 0) ? { m: MK.floor, dz: 0, rise: 1.6 } : { m: wall, dz: 0, rise: 1.6 };
+        if (ring(0.45 * R, 0.6)) return opening(0.45 * R, 0, 6) ? null : { m: wall, dz: 0, rise: 1.6 };
+        return null;
+      }
+    }
+    return null;
   }
   function segDist(x, y, ax, ay, bx, by, out) {
     const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy || 1;
@@ -2883,6 +2994,17 @@ var IslandGen = (function () {
             } else if (it.t === 'cave') {
               const d = D.hyp(x - it.x, y - it.y);
               if (d < it.r && kind[k] === 0) { mark[k] = MK.cave; if (it.sky) z -= 4 * (1 - d / it.r); }
+            } else if (it.t === 'aruin') {
+              const mk = mark[k];
+              if (mk === MK.road || mk === MK.bridge || mk === MK.runway || mk === MK.rail || mk === MK.pier) continue; // ways run through
+              const r = authoredShape(it, x, y, hash2(nz.cover, Math.floor(x), Math.floor(y)) / 4294967296);
+              if (!r) { if (D.hyp(x - it.q.x, y - it.q.y) <= it.q.r) lab[k] = it.q.label; continue; } // named all through
+              if (r.rise) { if (kind[k] !== 0 && kind[k] !== 1) continue; kind[k] = 0; water[k] = NaN; z = Math.max(z, r.rise); levelled[k] = 1; } // stones stand whole: no terrace steps
+              else if (kind[k] !== 0) continue;
+              z += r.dz; if (r.m) mark[k] = r.m; lab[k] = it.q.label;
+            } else if (it.t === 'causeway') {
+              const d = segDist(x, y, it.ax, it.ay, it.bx, it.by, so);
+              if (d < 2) { if (kind[k] === 1) { kind[k] = 0; water[k] = NaN; } z = Math.max(z, 1.6); mark[k] = MK.pier; lab[k] = it.label; }
             }
           }
         }
@@ -2896,6 +3018,7 @@ var IslandGen = (function () {
       slope[k] = D.hyp((h[k + 1] - h[k - 1]) / 2, (h[k + M] - h[k - M]) / 2);
     }
     const label = new Int16Array(size * size), outH = new Float32Array(size * size), cover = new Uint8Array(size * size), lvl = new Float32Array(size * size), shade = new Float32Array(size * size), tBiome = new Uint8Array(size * size);
+    const ley = new Uint8Array(size * size);
     const seaT = world.params.seaTemp;
     for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
       const k = (j + 1) * M + (i + 1), o2 = j * size + i, x = x0 + i + 1.5, y = y0 + j + 1.5, gx = x / cell - 0.5, gy = y / cell - 0.5;
@@ -2948,8 +3071,12 @@ var IslandGen = (function () {
       if (kind[k] !== 0) tBiome[o2] = kind[k] === 3 ? B.lake : kind[k] === 2 ? B.lake : B.ocean;
       if (mark[k]) c = MKC[mark[k]];
       cover[o2] = c; label[o2] = lab[k];
+      if (WB) { // the ley line under the tile, if any: the nearest within LEY_HALF m, the lower number on a tie
+        const LL = WB.ley.get(Math.floor(x / BIN) * 4096 + Math.floor(y / BIN));
+        if (LL) { let bd = LEY_HALF, ln = 0; for (const it of LL) { const d = segDist(x, y, it.ax, it.ay, it.bx, it.by, so); if (d < bd || (d === bd && it.n < ln)) { bd = d; ln = it.n; } } ley[o2] = ln; }
+      }
     }
-    return { size, x0: ccx * CHUNK, y0: ccy * CHUNK, height: outH, cover, water: lvl, shade, biome: tBiome, label };
+    return { size, x0: ccx * CHUNK, y0: ccy * CHUNK, height: outH, cover, water: lvl, shade, biome: tBiome, label, ley };
   }
 
   // ---------- facility areas (step 25b-2): BlueHarvest.Sim.World.Generation.FacilityAreas ----------

@@ -26,7 +26,7 @@ const CASES = [
 function chunkHash(c) {
   const h = hasher().int(c.size).int(c.x0).int(c.y0).dbls(c.height).ints(c.cover);
   h.int(c.water.length); for (let i = 0; i < c.water.length; i++) { const v = c.water[i]; if (v !== v) h.int(-7); else h.dbl(v); }
-  return h.dbls(c.shade).ints(c.biome).ints(c.label).hex();
+  return h.dbls(c.shade).ints(c.biome).ints(c.label).ints(c.ley).hex(); // ley: the hidden ley-line field (P4d)
 }
 for (const [name, params] of CASES) {
   const w = G.generate(params), bins = G.indexRivers(w), W = w.works, T = W.transit, picks = [], seen = new Set();
@@ -41,6 +41,7 @@ for (const [name, params] of CASES) {
   if (w.lakes.length) at(w.lakes[0].cx, w.lakes[0].cy);
   if (w.reefFlat) at(w.reefFlat.x, w.reefFlat.y); // the P4b anchors: the reef flat's shore cell, and the floodplain's centre
   if (w.floodplain) at(w.floodplain.x, w.floodplain.y);
+  for (const q of W.authoredRuins || []) if (q.placed && q.id !== 'RUIN-07') at(q.x, q.y); // their perimeters (P4d)
   if (name === 'Default') {
     for (const c of W.caves.slice(0, 2)) { at(c.mouths[0][0], c.mouths[0][1]); if (c.skylights.length) at(c.skylights[0][0], c.skylights[0][1]); }
     at(W.caves[W.caves.length - 1].xs[0], W.caves[W.caves.length - 1].ys[0]);

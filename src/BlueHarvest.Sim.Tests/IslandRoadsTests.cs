@@ -15,7 +15,7 @@ public class IslandRoadsTests
     private static readonly Dictionary<string, Expected> Golden = new()
     {
         ["Default"] = new(29, 2, 1, "swnsweswseeessnseewsnesee", 0xAA555E49FF51036FUL, 0xEC07543A2C978381UL),
-        ["Seed12"] = new(33, 5, 5, "snnsweenwnnnsswsssnweewsnwnn", 0xD748484D7A0061F4UL, 0xB3A97B406A5EB6B9UL),
+        ["Seed12"] = new(33, 4, 5, "snnsweenwnnnsswsssnweewsswnw", 0x651E7BA2F18F1784UL, 0x47D55328DD20416DUL),
         ["SmallNoCliffs"] = new(35, 6, 2, "nwwnsnsnssesnnwnswnswwnwnwne", 0x6CA117A4425F7468UL, 0xF08C362E98173360UL),
         ["CoolWet"] = new(33, 8, 2, "weesnessnnnewsswsnsnswnwns", 0x23984779D6B07F89UL, 0x6018816B42B43399UL),
     };
