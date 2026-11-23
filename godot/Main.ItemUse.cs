@@ -171,7 +171,7 @@ public partial class Main
     }
 
     /// <summary>The menu's words for two carried items going together.</summary>
-    private static string CombineLabel(Combination c) => c.Kind switch
+    private string CombineLabel(Combination c) => c.Kind switch
     {
         CombineKind.Load => $"Load {c.From.Def.Plural} into the {c.Into.Def.Name}",
         CombineKind.Fit => $"Fit {c.From.Describe()} into the {c.Into.Def.Name}",

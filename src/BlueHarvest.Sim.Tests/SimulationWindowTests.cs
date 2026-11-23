@@ -11,7 +11,7 @@ namespace BlueHarvest.Sim.Tests;
 /// </summary>
 public class SimulationWindowTests
 {
-    private static Simulation Field(int size = 20) => new(new WorldMap(size, size), seed: 1);
+    private static Simulation Field(int size = 20) => new(TestContent.NewSession(), new WorldMap(size, size), seed: 1);
 
     /// <summary>Scrolls the map and tells the simulation, as IslandWindow.Follow does.</summary>
     private static void Shift(Simulation sim, int dx, int dy)

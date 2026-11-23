@@ -143,7 +143,7 @@ public class SkyTests
 
 public class SimulationClockTests
 {
-    private static Simulation Field() => new(new WorldMap(12, 12), seed: 5);
+    private static Simulation Field() => new(TestContent.NewSession(), new WorldMap(12, 12), seed: 5);
 
     [Fact]
     public void WithoutAClock_LightIsTheLevelSet()

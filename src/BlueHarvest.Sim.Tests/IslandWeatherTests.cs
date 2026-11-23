@@ -212,7 +212,7 @@ public class FollowWeatherTests
             new((int)(gameMinute % 100), Direction.East, 5, (int)(x % 100));
     }
 
-    private static Simulation Field() => new(new WorldMap(20, 20), seed: 3);
+    private static Simulation Field() => new(TestContent.NewSession(), new WorldMap(20, 20), seed: 3);
 
     [Fact]
     public void TheWeather_IsLookedUpEveryGameMinute()
