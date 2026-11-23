@@ -1,0 +1,20 @@
+# ItemKind.WaterTablets (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: water-tablets
+name: "tube of water tablets"
+plural: "tubes of water tablets"
+glyph: "✚"
+description: "One makes a litre of water safe."
+categories: [usable]
+size: pocket
+mass_g: 20
+volume_ml: 40
+stacking: unique
+fill:
+  capacity: 20
+  start: 20
+  unit: "tablets"
+  mg_per_unit: 500
+use_ticks: 200
+handlers: [use.treat_water]

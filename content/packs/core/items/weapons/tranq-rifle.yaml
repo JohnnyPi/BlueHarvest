@@ -1,0 +1,19 @@
+# ItemKind.TranqRifle (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: tranq-rifle
+name: "tranquilliser rifle"
+plural: "tranquilliser rifles"
+glyph: ")"
+description: "One dart at a time. Enough for a raptor; a Rex would need several."
+categories: [weapon]
+size: two_handed
+mass_g: 3000
+volume_ml: 10000
+stacking: unique
+fill:
+  capacity: 1
+  start: 0
+  unit: "dart"
+  mg_per_unit: 30000
+  filled_by: tranq-dart

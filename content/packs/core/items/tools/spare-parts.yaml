@@ -1,0 +1,15 @@
+# ItemKind.SpareParts (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: spare-parts
+name: "set of spare parts"
+plural: "sets of spare parts"
+glyph: "("
+description: "Gaskets, a starter relay, injector seals: what a seized generator needs."
+categories: [part]
+size: hand
+mass_g: 5000
+volume_ml: 4000
+stack_limit: 3
+stacking: stack
+handlers: [repair.spare_parts]

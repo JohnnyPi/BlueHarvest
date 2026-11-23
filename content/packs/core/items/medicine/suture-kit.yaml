@@ -1,0 +1,19 @@
+# ItemKind.SutureKit (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: suture-kit
+name: "suture kit"
+plural: "suture kits"
+glyph: "✚"
+categories: [medical, usable]
+size: pocket
+mass_g: 60
+volume_ml: 200
+stacking: unique
+fill:
+  capacity: 5
+  start: 5
+  unit: "uses"
+  mg_per_unit: 8000
+use_ticks: 1500
+handlers: [use.clean_wounds]

@@ -1,0 +1,19 @@
+# ItemKind.Antibiotics (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: antibiotics
+name: "bottle of antibiotics"
+plural: "bottles of antibiotics"
+glyph: "✚"
+categories: [medical, usable, edible]
+size: pocket
+mass_g: 30
+volume_ml: 50
+stacking: unique
+fill:
+  capacity: 14
+  start: 14
+  unit: "pills"
+  mg_per_unit: 500
+use_ticks: 200
+handlers: [use.antibiotics]

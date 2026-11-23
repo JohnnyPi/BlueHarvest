@@ -1,0 +1,22 @@
+# ItemKind.Thermos (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: thermos
+name: "thermos of coffee"
+plural: "thermoses of coffee"
+glyph: "☕"
+description: "Cold, ten years on."
+categories: [potable]
+size: hand
+mass_g: 400
+volume_ml: 700
+stacking: unique
+fill:
+  capacity: 500
+  start: 500
+  unit: "ml"
+  mg_per_unit: 1000
+dose: 250
+use_ticks: 300
+drink: {per_ml: 250, kcal: 0, water_ml: 250, alert_minutes: 120}
+handlers: [use.drink]

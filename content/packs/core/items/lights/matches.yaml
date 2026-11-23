@@ -1,0 +1,18 @@
+# ItemKind.Matches (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: matches
+name: "box of matches"
+plural: "boxes of matches"
+glyph: "("
+categories: [tool, fuel]
+size: pocket
+mass_g: 10
+volume_ml: 30
+stacking: unique
+fill:
+  capacity: 40
+  start: 40
+  unit: "matches"
+  mg_per_unit: 100
+handlers: [fire.flame]

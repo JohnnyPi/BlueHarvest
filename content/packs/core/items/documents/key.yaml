@@ -1,0 +1,12 @@
+# ItemKind.Key (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: key
+name: "key"
+plural: "keys"
+glyph: "-"
+categories: [key]
+size: pocket
+mass_g: 15
+volume_ml: 5
+stacking: unique

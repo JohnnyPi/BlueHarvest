@@ -1,0 +1,13 @@
+# ItemKind.Stick (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: stick
+name: "stout stick"
+plural: "stout sticks"
+glyph: "("
+categories: [part]
+size: hand
+mass_g: 600
+volume_ml: 1500
+stack_limit: 4
+stacking: stack

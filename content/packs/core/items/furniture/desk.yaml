@@ -1,0 +1,18 @@
+# ItemKind.Desk (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: desk
+name: "desk"
+plural: "desks"
+glyph: "▣"
+categories: [fixture, container]
+size: fixed
+mass_g: 40000
+volume_ml: 600000
+stacking: unique
+holds:
+  capacity_ml: 30000
+  max_item_ml: 8000
+  closes: true
+  open_loudness: 6
+  open_ticks: 80

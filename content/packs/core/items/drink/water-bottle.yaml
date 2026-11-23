@@ -1,0 +1,20 @@
+# ItemKind.WaterBottle (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: water-bottle
+name: "water bottle"
+plural: "water bottles"
+glyph: "☕"
+categories: [potable]
+size: hand
+mass_g: 40
+volume_ml: 1100
+stacking: unique
+fill:
+  capacity: 1000
+  start: 1000
+  unit: "ml"
+  mg_per_unit: 1000
+dose: 250
+use_ticks: 300
+handlers: [use.drink, water.refill]

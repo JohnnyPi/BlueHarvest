@@ -1,0 +1,15 @@
+# ItemKind.Flare (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: flare
+name: "flare"
+plural: "flares"
+glyph: "!"
+description: "Burns red for 90 s where it lands."
+categories: [light, throwable, usable]
+size: pocket
+mass_g: 200
+volume_ml: 300
+stack_limit: 12
+stacking: stack
+handlers: [light.flare]

@@ -1,0 +1,13 @@
+# ItemKind.CircuitBoard (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: circuit-board
+name: "circuit board"
+plural: "circuit boards"
+glyph: "("
+categories: [part]
+size: pocket
+mass_g: 150
+volume_ml: 200
+stack_limit: 5
+stacking: stack

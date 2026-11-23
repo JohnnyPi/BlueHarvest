@@ -1,0 +1,18 @@
+# ItemKind.Shotgun (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: shotgun
+name: "pump shotgun"
+plural: "pump shotguns"
+glyph: ")"
+categories: [weapon]
+size: two_handed
+mass_g: 3200
+volume_ml: 9000
+stacking: unique
+fill:
+  capacity: 6
+  start: 0
+  unit: "shells"
+  mg_per_unit: 40000
+  filled_by: shells-12

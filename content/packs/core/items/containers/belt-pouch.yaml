@@ -1,0 +1,16 @@
+# ItemKind.BeltPouch (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: belt-pouch
+name: "belt pouch"
+plural: "belt pouches"
+glyph: "("
+categories: [wearable, container]
+size: pocket
+mass_g: 150
+volume_ml: 300
+stacking: unique
+wear: waist
+holds:
+  capacity_ml: 1500
+  max_item_ml: 600

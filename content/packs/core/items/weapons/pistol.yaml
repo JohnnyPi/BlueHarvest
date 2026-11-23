@@ -1,0 +1,16 @@
+# ItemKind.Pistol (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: pistol
+name: "9 mm pistol"
+plural: "9 mm pistols"
+glyph: ")"
+categories: [weapon, container]
+size: hand
+mass_g: 800
+volume_ml: 600
+stacking: unique
+holds:
+  capacity_ml: 200
+  max_items: 1
+  only: [magazine-9mm]

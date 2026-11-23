@@ -1,0 +1,16 @@
+# ItemKind.EnergyBar (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: energy-bar
+name: "energy bar"
+plural: "energy bars"
+glyph: "♨"
+categories: [edible]
+size: pocket
+mass_g: 60
+volume_ml: 80
+stack_limit: 12
+stacking: stack
+use_ticks: 400
+food: {kcal: 250, water_ml: 0, alert_minutes: 0}
+handlers: [use.eat]

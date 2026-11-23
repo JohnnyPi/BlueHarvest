@@ -1,0 +1,13 @@
+# ItemKind.TranqDart (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: tranq-dart
+name: "tranquilliser dart"
+plural: "tranquilliser darts"
+glyph: "•"
+categories: [ammo]
+size: pocket
+mass_g: 30
+volume_ml: 30
+stack_limit: 10
+stacking: stack

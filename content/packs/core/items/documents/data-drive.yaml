@@ -1,0 +1,13 @@
+# ItemKind.DataDrive (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: data-drive
+name: "data drive"
+plural: "data drives"
+glyph: "?"
+description: "Encrypted. Someone will pay for what's on it."
+categories: [document]
+size: pocket
+mass_g: 30
+volume_ml: 20
+stacking: unique

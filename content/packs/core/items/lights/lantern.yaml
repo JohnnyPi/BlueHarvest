@@ -1,0 +1,20 @@
+# ItemKind.Lantern (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: lantern
+name: "lantern"
+plural: "lanterns"
+glyph: "!"
+categories: [light, container]
+size: hand
+mass_g: 900
+volume_ml: 3000
+stacking: unique
+holds:
+  capacity_ml: 240
+  max_items: 4
+  only: [battery-d]
+comes_with:
+  - item: battery-d
+    quantity: 4
+handlers: [use.switch_light, light.lantern]

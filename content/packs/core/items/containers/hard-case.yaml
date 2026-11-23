@@ -1,0 +1,15 @@
+# ItemKind.HardCase (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: hard-case
+name: "hard case"
+plural: "hard cases"
+glyph: "("
+categories: [container]
+size: hand
+mass_g: 1500
+volume_ml: 9000
+stacking: unique
+holds:
+  capacity_ml: 7000
+  max_item_ml: 5000

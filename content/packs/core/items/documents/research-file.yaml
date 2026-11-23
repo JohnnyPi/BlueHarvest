@@ -1,0 +1,15 @@
+# ItemKind.ResearchFile (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: research-file
+name: "research file"
+plural: "research files"
+glyph: "?"
+description: "Sequencing results, half of each page blacked out. The project codes don't match anything on the park plan."
+categories: [document, usable]
+size: hand
+mass_g: 500
+volume_ml: 1500
+stacking: unique
+use_ticks: 1000
+handlers: [use.read]

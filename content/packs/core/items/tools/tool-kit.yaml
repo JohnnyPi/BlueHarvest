@@ -1,0 +1,14 @@
+# ItemKind.ToolKit (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: tool-kit
+name: "tool kit"
+plural: "tool kits"
+glyph: "("
+description: "Spanners, drivers, a meter: repairs go better and faster."
+categories: [tool]
+size: hand
+mass_g: 4000
+volume_ml: 6000
+stacking: unique
+handlers: [repair.tool_kit]

@@ -1,0 +1,16 @@
+# ItemKind.Coconut (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: coconut
+name: "coconut"
+plural: "coconuts"
+glyph: "♨"
+categories: [edible, potable]
+size: hand
+mass_g: 1200
+volume_ml: 1500
+stack_limit: 3
+stacking: stack
+use_ticks: 1500
+food: {kcal: 350, water_ml: 300, alert_minutes: 0}
+handlers: [use.eat]

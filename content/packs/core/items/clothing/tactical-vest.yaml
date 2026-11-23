@@ -1,0 +1,17 @@
+# ItemKind.TacticalVest (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: tactical-vest
+name: "tactical vest"
+plural: "tactical vests"
+glyph: "["
+categories: [wearable, container]
+size: hand
+mass_g: 1500
+volume_ml: 4000
+stacking: unique
+wear: body
+holds:
+  capacity_ml: 4000
+  max_item_ml: 600
+warmth: 20

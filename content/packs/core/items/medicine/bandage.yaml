@@ -1,0 +1,15 @@
+# ItemKind.Bandage (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: bandage
+name: "bandage"
+plural: "bandages"
+glyph: "✚"
+categories: [medical, usable]
+size: pocket
+mass_g: 30
+volume_ml: 60
+stack_limit: 10
+stacking: stack
+use_ticks: 600
+handlers: [use.stop_bleeding]

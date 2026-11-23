@@ -1,0 +1,16 @@
+# ItemKind.CannedPeaches (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: canned-peaches
+name: "can of peaches"
+plural: "cans of peaches"
+glyph: "♨"
+categories: [edible]
+size: pocket
+mass_g: 450
+volume_ml: 450
+stack_limit: 6
+stacking: stack
+use_ticks: 800
+food: {kcal: 300, water_ml: 300, alert_minutes: 0}
+handlers: [use.eat]

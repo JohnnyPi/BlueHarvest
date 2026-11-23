@@ -1,0 +1,16 @@
+# ItemKind.DriedFruit (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: dried-fruit
+name: "bag of dried fruit"
+plural: "bags of dried fruit"
+glyph: "♨"
+categories: [edible]
+size: pocket
+mass_g: 150
+volume_ml: 250
+stack_limit: 6
+stacking: stack
+use_ticks: 500
+food: {kcal: 350, water_ml: 0, alert_minutes: 0}
+handlers: [use.eat]

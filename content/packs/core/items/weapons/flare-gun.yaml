@@ -1,0 +1,18 @@
+# ItemKind.FlareGun (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: flare-gun
+name: "flare gun"
+plural: "flare guns"
+glyph: ")"
+categories: [weapon, light]
+size: hand
+mass_g: 500
+volume_ml: 600
+stacking: unique
+fill:
+  capacity: 1
+  start: 0
+  unit: "shell"
+  mg_per_unit: 60000
+  filled_by: flare-shell

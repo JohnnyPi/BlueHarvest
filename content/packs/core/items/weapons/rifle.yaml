@@ -1,0 +1,18 @@
+# ItemKind.Rifle (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: rifle
+name: "bolt-action rifle"
+plural: "bolt-action rifles"
+glyph: ")"
+categories: [weapon]
+size: two_handed
+mass_g: 3800
+volume_ml: 10000
+stacking: unique
+fill:
+  capacity: 5
+  start: 0
+  unit: "rounds"
+  mg_per_unit: 25000
+  filled_by: rounds-308

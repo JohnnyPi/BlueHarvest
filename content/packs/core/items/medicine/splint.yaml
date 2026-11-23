@@ -1,0 +1,15 @@
+# ItemKind.Splint (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: splint
+name: "splint"
+plural: "splints"
+glyph: "✚"
+categories: [medical, usable]
+size: hand
+mass_g: 300
+volume_ml: 1200
+stack_limit: 3
+stacking: stack
+use_ticks: 1500
+handlers: [use.dress_wounds]

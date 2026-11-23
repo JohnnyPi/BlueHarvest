@@ -1,0 +1,20 @@
+# ItemKind.Canteen (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: canteen
+name: "canteen"
+plural: "canteens"
+glyph: "☕"
+categories: [potable]
+size: hand
+mass_g: 300
+volume_ml: 1700
+stacking: unique
+fill:
+  capacity: 1500
+  start: 1500
+  unit: "ml"
+  mg_per_unit: 1000
+dose: 250
+use_ticks: 300
+handlers: [use.drink, water.refill]

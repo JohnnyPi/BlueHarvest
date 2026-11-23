@@ -1,0 +1,16 @@
+# ItemKind.Daypack (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: daypack
+name: "daypack"
+plural: "daypacks"
+glyph: "["
+categories: [wearable, container]
+size: hand
+mass_g: 1000
+volume_ml: 2500
+stacking: unique
+wear: back
+holds:
+  capacity_ml: 25000
+  max_item_ml: 12000

@@ -1,0 +1,18 @@
+# ItemKind.MedicineCabinet (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: medicine-cabinet
+name: "medicine cabinet"
+plural: "medicine cabinets"
+glyph: "▣"
+categories: [fixture, container]
+size: fixed
+mass_g: 6000
+volume_ml: 40000
+stacking: unique
+holds:
+  capacity_ml: 8000
+  max_item_ml: 2000
+  closes: true
+  open_loudness: 4
+  open_ticks: 40

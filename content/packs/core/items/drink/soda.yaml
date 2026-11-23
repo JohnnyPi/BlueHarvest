@@ -1,0 +1,21 @@
+# ItemKind.Soda (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: soda
+name: "can of soda"
+plural: "cans of soda"
+glyph: "☕"
+categories: [potable]
+size: pocket
+mass_g: 15
+volume_ml: 350
+stacking: unique
+fill:
+  capacity: 330
+  start: 330
+  unit: "ml"
+  mg_per_unit: 1000
+dose: 330
+use_ticks: 300
+drink: {per_ml: 330, kcal: 140, water_ml: 297, alert_minutes: 30}
+handlers: [use.drink]

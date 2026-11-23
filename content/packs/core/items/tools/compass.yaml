@@ -1,0 +1,14 @@
+# ItemKind.Compass (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: compass
+name: "compass"
+plural: "compasses"
+glyph: "("
+categories: [tool, usable]
+size: pocket
+mass_g: 60
+volume_ml: 60
+stacking: unique
+use_ticks: 100
+handlers: [use.bearing]

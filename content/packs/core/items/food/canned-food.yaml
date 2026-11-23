@@ -1,0 +1,16 @@
+# ItemKind.CannedFood (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: canned-food
+name: "can of food"
+plural: "cans of food"
+glyph: "♨"
+categories: [edible]
+size: pocket
+mass_g: 450
+volume_ml: 450
+stack_limit: 6
+stacking: stack
+use_ticks: 800
+food: {kcal: 400, water_ml: 150, alert_minutes: 0}
+handlers: [use.eat]

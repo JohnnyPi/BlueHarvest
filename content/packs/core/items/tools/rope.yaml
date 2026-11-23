@@ -1,0 +1,14 @@
+# ItemKind.Rope (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: rope
+name: "rope and harness"
+plural: "ropes"
+glyph: "("
+description: "20 m. Stays tied where you rope down."
+categories: [tool, usable]
+size: hand
+mass_g: 2500
+volume_ml: 5000
+stacking: unique
+handlers: [climb.rope]

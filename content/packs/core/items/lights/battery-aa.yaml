@@ -1,0 +1,16 @@
+# ItemKind.BatteryAA (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: battery-aa
+name: "AA battery"
+plural: "AA batteries"
+glyph: "("
+categories: [power]
+size: pocket
+mass_g: 25
+volume_ml: 10
+stacking: unique
+fill:
+  capacity: 100
+  start: 100
+  unit: "%"

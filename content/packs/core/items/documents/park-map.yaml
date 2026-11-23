@@ -1,0 +1,15 @@
+# ItemKind.ParkMap (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: park-map
+name: "park map"
+plural: "park maps"
+glyph: "?"
+description: "The visitor map, folded soft. Half the attractions were never built."
+categories: [document, usable]
+size: pocket
+mass_g: 50
+volume_ml: 100
+stacking: unique
+use_ticks: 400
+handlers: [use.read, map.park_map]

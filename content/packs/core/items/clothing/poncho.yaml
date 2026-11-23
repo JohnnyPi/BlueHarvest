@@ -1,0 +1,15 @@
+# ItemKind.Poncho (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: poncho
+name: "rain poncho"
+plural: "rain ponchos"
+glyph: "["
+categories: [wearable]
+size: pocket
+mass_g: 300
+volume_ml: 400
+stacking: unique
+wear: body
+warmth: 10
+handlers: [wear.rain_cover]

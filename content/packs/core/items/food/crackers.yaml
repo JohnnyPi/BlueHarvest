@@ -1,0 +1,16 @@
+# ItemKind.Crackers (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: crackers
+name: "pack of crackers"
+plural: "packs of crackers"
+glyph: "♨"
+categories: [edible]
+size: pocket
+mass_g: 200
+volume_ml: 300
+stack_limit: 6
+stacking: stack
+use_ticks: 600
+food: {kcal: 450, water_ml: 0, alert_minutes: 0}
+handlers: [use.eat]

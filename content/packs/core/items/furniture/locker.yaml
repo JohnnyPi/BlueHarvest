@@ -1,0 +1,17 @@
+# ItemKind.Locker (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: locker
+name: "locker"
+plural: "lockers"
+glyph: "▣"
+categories: [fixture, container]
+size: fixed
+mass_g: 30000
+volume_ml: 400000
+stacking: unique
+holds:
+  capacity_ml: 150000
+  closes: true
+  open_loudness: 14
+  open_ticks: 100

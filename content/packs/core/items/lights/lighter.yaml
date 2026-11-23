@@ -1,0 +1,17 @@
+# ItemKind.Lighter (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: lighter
+name: "lighter"
+plural: "lighters"
+glyph: "("
+categories: [tool]
+size: pocket
+mass_g: 30
+volume_ml: 30
+stacking: unique
+fill:
+  capacity: 40
+  start: 40
+  unit: "uses"
+handlers: [fire.flame]

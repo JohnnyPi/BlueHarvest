@@ -1,0 +1,21 @@
+# ItemKind.Headlamp (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: headlamp
+name: "headlamp"
+plural: "headlamps"
+glyph: "!"
+categories: [light, wearable, container]
+size: pocket
+mass_g: 120
+volume_ml: 200
+stacking: unique
+wear: head
+holds:
+  capacity_ml: 40
+  max_items: 3
+  only: [battery-aa]
+comes_with:
+  - item: battery-aa
+    quantity: 3
+handlers: [use.switch_light, light.headlamp]

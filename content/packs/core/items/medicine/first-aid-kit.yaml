@@ -1,0 +1,15 @@
+# ItemKind.FirstAidKit (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: first-aid-kit
+name: "first-aid kit"
+plural: "first-aid kits"
+glyph: "✚"
+description: "One treats a wound."
+categories: [medical, usable]
+size: hand
+mass_g: 600
+volume_ml: 1500
+stack_limit: 4
+stacking: stack
+handlers: [treat.first_aid]

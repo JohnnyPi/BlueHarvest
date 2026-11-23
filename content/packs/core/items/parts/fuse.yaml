@@ -1,0 +1,13 @@
+# ItemKind.Fuse (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: fuse
+name: "fuse"
+plural: "fuses"
+glyph: "("
+categories: [part]
+size: pocket
+mass_g: 20
+volume_ml: 10
+stack_limit: 10
+stacking: stack

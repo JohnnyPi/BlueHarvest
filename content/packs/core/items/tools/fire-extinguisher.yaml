@@ -1,0 +1,18 @@
+# ItemKind.FireExtinguisher (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: fire-extinguisher
+name: "fire extinguisher"
+plural: "fire extinguishers"
+glyph: "("
+categories: [tool]
+size: hand
+mass_g: 3000
+volume_ml: 8000
+stacking: unique
+fill:
+  capacity: 6
+  start: 6
+  unit: "charges"
+  mg_per_unit: 500000
+handlers: [fire.extinguish]

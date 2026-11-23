@@ -1,0 +1,14 @@
+# ItemKind.Torch (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: torch
+name: "torch"
+plural: "torches"
+glyph: "!"
+description: "A rag bound to a stick. Light it with a lighter or a match: it burns half an hour."
+categories: [light, usable]
+size: hand
+mass_g: 800
+volume_ml: 1600
+stacking: unique
+handlers: [use.light_torch, light.torch]

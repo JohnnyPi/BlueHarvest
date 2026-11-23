@@ -1,0 +1,17 @@
+# ItemKind.Fridge (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: fridge
+name: "fridge"
+plural: "fridges"
+glyph: "▣"
+categories: [fixture, container]
+size: fixed
+mass_g: 60000
+volume_ml: 500000
+stacking: unique
+holds:
+  capacity_ml: 90000
+  closes: true
+  open_loudness: 6
+  open_ticks: 60

@@ -1,0 +1,16 @@
+# ItemKind.Chocolate (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: chocolate
+name: "chocolate bar"
+plural: "chocolate bars"
+glyph: "♨"
+categories: [edible]
+size: pocket
+mass_g: 100
+volume_ml: 100
+stack_limit: 10
+stacking: stack
+use_ticks: 300
+food: {kcal: 500, water_ml: 0, alert_minutes: 20}
+handlers: [use.eat]

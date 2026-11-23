@@ -1,0 +1,21 @@
+# ItemKind.Flashlight (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: flashlight
+name: "flashlight"
+plural: "flashlights"
+glyph: "!"
+description: "Takes two D batteries; about ten hours on a fresh pair."
+categories: [light, usable, container]
+size: pocket
+mass_g: 400
+volume_ml: 400
+stacking: unique
+holds:
+  capacity_ml: 120
+  max_items: 2
+  only: [battery-d]
+comes_with:
+  - item: battery-d
+    quantity: 2
+handlers: [light.flashlight]

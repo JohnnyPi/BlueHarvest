@@ -1,0 +1,16 @@
+# ItemKind.BatteryD (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: battery-d
+name: "D battery"
+plural: "D batteries"
+glyph: "("
+categories: [power]
+size: pocket
+mass_g: 140
+volume_ml: 60
+stacking: unique
+fill:
+  capacity: 100
+  start: 100
+  unit: "%"

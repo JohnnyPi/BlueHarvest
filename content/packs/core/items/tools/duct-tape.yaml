@@ -1,0 +1,17 @@
+# ItemKind.DuctTape (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: duct-tape
+name: "roll of duct tape"
+plural: "rolls of duct tape"
+glyph: "("
+categories: [tool, part]
+size: pocket
+mass_g: 30
+volume_ml: 400
+stacking: unique
+fill:
+  capacity: 20
+  start: 20
+  unit: "uses"
+  mg_per_unit: 13500

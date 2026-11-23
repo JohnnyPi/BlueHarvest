@@ -1,0 +1,16 @@
+# ItemKind.FieldPack (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: field-pack
+name: "field pack"
+plural: "field packs"
+glyph: "["
+categories: [wearable, container]
+size: hand
+mass_g: 1800
+volume_ml: 3500
+stacking: unique
+wear: back
+holds:
+  capacity_ml: 45000
+  max_item_ml: 20000

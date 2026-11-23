@@ -1,0 +1,13 @@
+# ItemKind.Crowbar (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: crowbar
+name: "crowbar"
+plural: "crowbars"
+glyph: "("
+categories: [tool, weapon]
+size: hand
+mass_g: 2000
+volume_ml: 1500
+stacking: unique
+handlers: [tool.pry]

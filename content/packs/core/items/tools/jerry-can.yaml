@@ -1,0 +1,19 @@
+# ItemKind.JerryCan (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: jerry-can
+name: "jerry can"
+plural: "jerry cans"
+glyph: "("
+description: "Diesel. Fills a generator's day tank, or a fuse."
+categories: [fuel]
+size: hand
+mass_g: 1200
+volume_ml: 22000
+stacking: unique
+fill:
+  capacity: 20
+  start: 20
+  unit: "L"
+  mg_per_unit: 750000
+handlers: [fuel.jerry_can]

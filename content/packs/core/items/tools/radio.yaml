@@ -1,0 +1,21 @@
+# ItemKind.Radio (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: radio
+name: "two-way radio"
+plural: "two-way radios"
+glyph: "("
+categories: [usable, container]
+size: pocket
+mass_g: 350
+volume_ml: 400
+stacking: unique
+use_ticks: 300
+holds:
+  capacity_ml: 50
+  max_items: 4
+  only: [battery-aa]
+comes_with:
+  - item: battery-aa
+    quantity: 4
+handlers: [use.listen]

@@ -1,0 +1,20 @@
+# ItemKind.Painkillers (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: painkillers
+name: "bottle of painkillers"
+plural: "bottles of painkillers"
+glyph: "✚"
+categories: [medical, usable, edible]
+size: pocket
+mass_g: 40
+volume_ml: 50
+stacking: unique
+fill:
+  capacity: 20
+  start: 20
+  unit: "pills"
+  mg_per_unit: 500
+dose: 2
+use_ticks: 200
+handlers: [use.painkillers]

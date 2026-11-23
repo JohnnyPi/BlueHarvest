@@ -1,0 +1,13 @@
+# ItemKind.Knife (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: knife
+name: "knife"
+plural: "knives"
+glyph: ")"
+categories: [tool, weapon]
+size: pocket
+mass_g: 150
+volume_ml: 150
+stacking: unique
+source_ids: [ITM-MEL-002]

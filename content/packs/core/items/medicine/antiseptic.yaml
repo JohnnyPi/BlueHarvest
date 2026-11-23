@@ -1,0 +1,19 @@
+# ItemKind.Antiseptic (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: antiseptic
+name: "bottle of antiseptic"
+plural: "bottles of antiseptic"
+glyph: "✚"
+categories: [medical, usable]
+size: pocket
+mass_g: 30
+volume_ml: 150
+stacking: unique
+fill:
+  capacity: 10
+  start: 10
+  unit: "uses"
+  mg_per_unit: 10000
+use_ticks: 400
+handlers: [use.clean_wounds]

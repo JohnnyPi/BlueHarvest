@@ -1,0 +1,15 @@
+# ItemKind.SecurityLog (contracts §11), with every field ItemCatalog and the sim give it (P2a).
+schema: blueharvest.content/v1
+kind: item
+id: security-log
+name: "security log"
+plural: "security logs"
+glyph: "?"
+description: "Shift reports. The last page: 'Perimeter power fluctuating. Told to keep the gates shut and the radio off.'"
+categories: [document, usable]
+size: pocket
+mass_g: 200
+volume_ml: 300
+stacking: unique
+use_ticks: 600
+handlers: [use.read]
