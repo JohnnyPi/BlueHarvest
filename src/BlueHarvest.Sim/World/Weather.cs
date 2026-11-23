@@ -115,6 +115,17 @@ public sealed class Weather
 
     public WeatherSettings Settings { get; private set; } = WeatherSettings.Clear;
 
+    /// <summary>The scent clock's reading when the weather last changed, and that tick (a snapshot holds both).</summary>
+    internal (long Base, long Since) WashState => (_washBase, _washSince);
+
+    /// <summary>Puts back saved weather exactly, scent clock included (a loaded snapshot).</summary>
+    internal void Restore(WeatherSettings settings, long washBase, long washSince)
+    {
+        Settings = settings.Clamped();
+        _washBase = washBase;
+        _washSince = washSince;
+    }
+
     /// <summary>Changes the weather from <paramref name="now"/> on. Scent laid before keeps the wash it had.</summary>
     internal void Set(WeatherSettings settings, long now)
     {

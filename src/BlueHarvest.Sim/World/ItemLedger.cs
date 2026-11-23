@@ -60,6 +60,17 @@ public sealed class ItemLedger
         return item;
     }
 
+    /// <summary>
+    /// Sets how many items have been made (a loaded snapshot), so the next new item gets the next id and
+    /// none is ever reissued. Only forward: ids already given out stay given out.
+    /// </summary>
+    internal void RestoreMade(int made)
+    {
+        if (made < _lastId)
+            throw new InvalidOperationException($"{made} items made, but this ledger has already made {_lastId}.");
+        _lastId = made;
+    }
+
     /// <summary>What lies at a spot (both levels), in the order it was put there.</summary>
     public IReadOnlyList<WorldItem> At(long x, long y) =>
         _byPlace.TryGetValue((x, y), out var list) ? list : Array.Empty<WorldItem>();

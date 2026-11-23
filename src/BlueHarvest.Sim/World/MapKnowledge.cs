@@ -120,6 +120,25 @@ public sealed class MapKnowledge
     /// <summary>Trails of earlier survivors whose maps were merged in, oldest first; drawn fainter than <see cref="Trail"/>.</summary>
     public IReadOnlyList<IReadOnlyList<TrailStep>> OlderTrails => _olderTrails;
 
+    /// <summary>The seen cells as bits, 64 to a word (a snapshot holds them so).</summary>
+    internal IReadOnlyList<ulong> SeenWords => _seen;
+
+    /// <summary>Puts back saved seen cells (a loaded snapshot); the count follows.</summary>
+    internal void RestoreSeen(IReadOnlyList<ulong> words)
+    {
+        if (words.Count != _seen.Length)
+            throw new FormatException($"The saved map has {words.Count} words of seen cells; this island needs {_seen.Length}.");
+        SeenCount = 0;
+        for (int w = 0; w < _seen.Length; w++)
+        {
+            _seen[w] = words[w];
+            SeenCount += System.Numerics.BitOperations.PopCount(words[w]);
+        }
+    }
+
+    /// <summary>Puts back an older trail as it was saved (a loaded snapshot).</summary>
+    internal void RestoreOlderTrail(IReadOnlyList<TrailStep> trail) => _olderTrails.Add(trail.ToArray());
+
     /// <summary>Notes being in a cell. True if it's a new step of the trail (not the cell of the last one).</summary>
     public bool Walk(int cell, long tick)
     {

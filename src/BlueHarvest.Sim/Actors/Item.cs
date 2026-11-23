@@ -287,6 +287,9 @@ public sealed class Item
         && LitUntilTick == 0 && other.LitUntilTick == 0; // a lit or spent glow stick is one of its own
 
     /// <summary>Puts an item in (merging it into a stack of the same if there is one). Rules are checked by the caller.</summary>
+    /// <summary>Puts an item in as it was saved, without joining it to a stack already there (a loaded snapshot).</summary>
+    internal void Append(Item item) => (_contents ??= new List<Item>()).Add(item);
+
     internal void Insert(Item item)
     {
         if (MergeTarget(item) is { } stack)

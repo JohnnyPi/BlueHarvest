@@ -567,25 +567,10 @@ public partial class Main : Node2D
     /// <summary>Starts on the generated island where the explorer said, at eight in the morning of day 1, alone.</summary>
     private void LoadIsland(IslandWorld world, IslandChunker chunker)
     {
-        _island = new IslandWindow(world, chunker, Island.IslandLaunch.X, Island.IslandLaunch.Y, chunksAcross: 3);
-        new Simulation(NewSession(), _island.Map, Seed); // the session holds it: _sim
-        _sim.SetTimeOfDay(IslandStartHour);
-        // showers drift in on the trade wind and differ from place to place; each run has its own
-        _sim.FollowWeather(IslandWeather.For(world, Seed), _island.OriginX, _island.OriginY);
-        // the facilities' power as this run finds it: some still running, most dark, each with ways back
-        _sim.UsePower(PowerPlan.Build(world, Seed), _island.OriginX, _island.OriginY);
-        // the tide comes and goes twice a day, and the rivers rise after rain over their catchments
-        _sim.UseWater(IslandWaters.For(world, Seed));
-        // what was left in the rooms, ten years on: lockers, desks, fridges and what's in them
-        _sim.UseItems(ItemPlan.Build(world, Seed, _sim.Catalog));
-        // every named room, so the sim can say which room a tile is in and who walked into which
-        _sim.UseRooms(RoomIndex.Build(world));
-        // the island's mean air temperature at sea level: the sea's (it cools 6.5 °C a kilometre up)
-        _sim.SetBaseTemperature(world.Params.SeaTemp);
-        TilePos start = _island.NearestStandable(_island.ToLocal(Island.IslandLaunch.X, Island.IslandLaunch.Y));
-        Actor survivor = _sim.AddActor("Survivor", '@', start, Species.Human, _player, loadout: Loadout.TestbedSurvivor);
-        // the survivor's own island map, filled in as they explore (shown with M from step 25b-3)
-        _sim.UseMapKnowledge(survivor, world);
+        // the island's start, in the sim (P3b): the window, the run laid over the island, the survivor and their map
+        var start = new IslandStart(Island.IslandLaunch.X, Island.IslandLaunch.Y, Seed, IslandStartHour);
+        IslandExpedition.Start(NewSession(), world, chunker, start, _player);
+        _island = _session.Island;
         Say($"Island {world.Params.Seed}. You are on foot; the map follows you. F10 for the menu.");
     }
 

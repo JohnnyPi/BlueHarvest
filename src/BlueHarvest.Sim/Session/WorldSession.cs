@@ -1,6 +1,7 @@
 using BlueHarvest.Content;
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Events;
+using BlueHarvest.Sim.World.Generation;
 
 namespace BlueHarvest.Sim;
 
@@ -36,6 +37,7 @@ public sealed class WorldSession
     private bool _committing;
     private string? _cause;
     private SimEvent? _observing;
+    private int _quiet;
 
     /// <summary>A session on this registry's content. Throws if its items can't be used by the sim.</summary>
     public WorldSession(ContentRegistry content, int eventCapacity = EventLog.DefaultCapacity)
@@ -82,6 +84,50 @@ public sealed class WorldSession
 
     /// <summary>Whether a request with this ID has been committed.</summary>
     public bool IsProcessed(string requestId) => _processed.Contains(requestId);
+
+    /// <summary>
+    /// The streamed window on the generated island the surface plays on, for an island expedition
+    /// (<see cref="IslandExpedition"/>); null for a scenario map (the testbed, a .bhmap). Only island
+    /// expeditions are saved (contracts §8).
+    /// </summary>
+    public IslandWindow? Island { get; private set; }
+
+    /// <summary>How the island expedition was started (where, the run's seed, the hour), or null.</summary>
+    public IslandStart? Launch { get; private set; }
+
+    internal void UseIsland(IslandWindow window, IslandStart launch)
+    {
+        if (Island is not null)
+            throw new InvalidOperationException("This session already plays on an island.");
+        Island = window;
+        Launch = launch;
+    }
+
+    /// <summary>
+    /// While a snapshot is being put back, events aren't committed: rebuilding the world says nothing
+    /// that happened. The counters are restored afterwards (<see cref="RestoreCounters"/>).
+    /// </summary>
+    internal IDisposable Quietly()
+    {
+        _quiet++;
+        return new Subscription(() => _quiet--);
+    }
+
+    /// <summary>Puts back the saved revision, event ID and processed requests (a loaded snapshot).</summary>
+    internal void RestoreCounters(ulong worldRevision, ulong lastEventId, IEnumerable<string> processed)
+    {
+        if (Events.Count > 0 || _pending.Count > 0)
+            throw new InvalidOperationException("The counters can only be restored into a session with no events yet.");
+        WorldRevision = worldRevision;
+        LastEventId = lastEventId;
+        _processed.Clear();
+        _processedOrder.Clear();
+        foreach (string id in processed)
+        {
+            if (_processed.Add(id))
+                _processedOrder.Add(id);
+        }
+    }
 
     internal void Attach(Simulation simulation)
     {
@@ -168,6 +214,8 @@ public sealed class WorldSession
     /// <summary>Holds an event for the request it belongs to; outside any request it commits at once.</summary>
     internal void Emit(SimEventPayload payload, long tick)
     {
+        if (_quiet > 0)
+            return;
         if (_pending.Count == 0 && _depth == 0)
             _cause = ObservedCause;
         _pending.Add((payload, tick));
