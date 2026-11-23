@@ -89,7 +89,7 @@ foreach ($g in $goldens) {
     Write-Host ("  {0,-18} {1,3} hashes, {2} not in the tests" -f $g, @($tokens).Count, $miss.Count)
     foreach ($m in $miss) { Write-Host "    missing: $m" -ForegroundColor Red }
 }
-Add-Result 'Golden hashes pinned in the C# tests (expect 273)' (($missing -eq 0) -and ($allHashes -eq 273)) "$allHashes hashes, $missing missing"
+Add-Result 'Golden hashes pinned in the C# tests (expect 296)' (($missing -eq 0) -and ($allHashes -eq 296)) "$allHashes hashes, $missing missing"
 
 # ---------- 3b. the content packs (content/packs, as the game loads them) ----------
 Section 'content validate content\packs'
