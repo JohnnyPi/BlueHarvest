@@ -18,7 +18,7 @@ public class FlareBotTests
     {
         var map = new WorldMap(20, 24);
         map.Cover[new TilePos(10, 17)] = CoverType.WeakFence;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         sim.AddExit(new TilePos(2, 2), EscapePlans.JungleExit);
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 12), Species.Rex,
             new ScriptedController(new[] { new BiteAction(Investigative: true) }), Direction.South);

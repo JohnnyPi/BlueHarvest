@@ -17,7 +17,7 @@ public class WeatherTests
     [Fact]
     public void ClearWeather_LeavesTheSensesAlone()
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 10), Species.Rex, new HoldStillController(), Direction.North);
 
         Assert.Equal(WeatherSettings.Clear, sim.Weather.Settings);
@@ -31,7 +31,7 @@ public class WeatherTests
     [Fact]
     public void Rain_MasksSounds()
     {
-        var sim = new Simulation(new WorldMap(12, 1), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(12, 1), seed: 1);
         var listener = sim.AddActor("Listener", '@', new TilePos(0, 0), Species.Human, new PlayerController());
         int dry = PerceptionSystem.HearingLevel(sim, listener, new TilePos(10, 0), 18);
 
@@ -46,7 +46,7 @@ public class WeatherTests
     {
         IReadOnlyList<int> Masks(ulong seed, int windSpeed)
         {
-            var sim = new Simulation(new WorldMap(4, 4), seed);
+            var sim = new Simulation(TestContent.NewSession(), new WorldMap(4, 4), seed);
             sim.SetWeather(new WeatherSettings(WindSpeed: windSpeed));
             return Enumerable.Range(0, 50).Select(i => sim.Weather.HearingMask(i * Weather.GustWindowTicks)).ToList();
         }
@@ -61,7 +61,7 @@ public class WeatherTests
     [Fact]
     public void RainAndFog_ShortenSight()
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 10), Species.Rex, new HoldStillController(), Direction.North);
         var human = sim.AddActor("Pete", 'h', new TilePos(15, 15), Species.Human, new HoldStillController());
 
@@ -78,7 +78,7 @@ public class WeatherTests
     [Fact]
     public void Lightning_LightsEverythingForAMoment()
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 3) { AmbientLightPercent = 6 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 3) { AmbientLightPercent = 6 };
         sim.SetWeather(new WeatherSettings(Storm: true));
         var struck = new List<LightningStrike>();
         sim.LightningStruck += struck.Add;
@@ -96,7 +96,7 @@ public class WeatherTests
     [Fact]
     public void Thunder_MasksEvenLoudNoises()
     {
-        var sim = new Simulation(new WorldMap(4, 4), seed: 3);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(4, 4), seed: 3);
         sim.SetWeather(new WeatherSettings(Storm: true));
         var strike = sim.Weather.StrikesBetween(-1, 100_000).First();
 
@@ -110,7 +110,7 @@ public class WeatherTests
     {
         ulong Run(WeatherSettings weather)
         {
-            var sim = DemoWorld.Create(2024);
+            var sim = DemoWorld.Create(TestContent.NewSession(), 2024);
             sim.SetWeather(weather);
             sim.RunUntil(Ticks.FromSeconds(60));
             return sim.ComputeStateHash();
@@ -136,14 +136,14 @@ public class WeatherTests
     [Fact]
     public void MapFiles_KeepTheWeatherLine()
     {
-        var data = MapFile.Parse(StormyMap);
+        var data = MapFile.Parse(StormyMap, TestContent.Catalog);
         Assert.Equal(WeatherSettings.TestbedStorm, data.StartingWeather);
 
         string written = MapFile.Serialize(data);
         Assert.Contains("ambient 6\nweather rain 70 wind E 8 storm\nheights\n", written);
-        Assert.Equal(WeatherSettings.TestbedStorm, MapFile.Parse(written).StartingWeather);
+        Assert.Equal(WeatherSettings.TestbedStorm, MapFile.Parse(written, TestContent.Catalog).StartingWeather);
 
-        var sim = ScenarioBuilder.Build(data, seed: 1);
+        var sim = ScenarioBuilder.Build(TestContent.NewSession(), data, seed: 1);
         Assert.Equal(WeatherSettings.TestbedStorm, sim.Weather.Settings);
     }
 
@@ -154,7 +154,7 @@ public class WeatherTests
     [InlineData("weather wind E 30")]
     public void MapFiles_RejectBadWeather(string line)
     {
-        Assert.Throws<FormatException>(() => MapFile.Parse(StormyMap.Replace("weather rain 70 wind E 8 storm", line)));
+        Assert.Throws<FormatException>(() => MapFile.Parse(StormyMap.Replace("weather rain 70 wind E 8 storm", line), TestContent.Catalog));
     }
 }
 
@@ -164,7 +164,7 @@ public class ScentTests
     [Fact]
     public void Walking_LeavesATrail_AndKeepingStillMarksTheSpot()
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 1);
         var human = sim.AddActor("Pete", 'h', new TilePos(5, 5), Species.Human, new ScriptedController(new ActorAction[]
         {
             new MoveAction(Direction.East), new MoveAction(Direction.East), new MoveAction(Direction.East),
@@ -185,7 +185,7 @@ public class ScentTests
     {
         int StrengthAfter40Seconds(int rain, bool bleeding)
         {
-            var sim = new Simulation(new WorldMap(10, 10), seed: 1);
+            var sim = new Simulation(TestContent.NewSession(), new WorldMap(10, 10), seed: 1);
             var human = sim.AddActor("Pete", 'h', new TilePos(5, 5), Species.Human, new HoldStillController());
             if (bleeding)
                 sim.Injure(human, BodySection.LeftArm, Severity.Red, bleeding: true, "a test");
@@ -203,7 +203,7 @@ public class ScentTests
     /// <summary>The Rex at (20,20) facing north (nose at (20,16)); Pete keeping still at (27,20), 8 tiles off.</summary>
     private static (Simulation Sim, Actor Rex, Actor Human) RexAndStillHuman(WeatherSettings weather)
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 6 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 6 };
         sim.SetWeather(weather);
         var human = sim.AddActor("Pete", 'h', new TilePos(27, 20), Species.Human, new HoldStillController());
         var rex = sim.AddActor("Rex", 'T', new TilePos(20, 20), Species.Rex, new HoldStillController(), Direction.North);
@@ -234,7 +234,7 @@ public class ScentTests
     {
         // Pete bleeds behind the Rex, out of its view and silent. Blood (100) at 16 tiles in still air
         // arrives at 52: it knows prey is there and turns to hunt.
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 6 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 6 };
         var human = sim.AddActor("Pete", 'h', new TilePos(20, 32), Species.Human, new HoldStillController());
         sim.Injure(human, BodySection.LeftArm, Severity.Red, bleeding: true, "a test");
         var brain = new CreatureBrain(AiProfile.Rex, sim.Rng.Fork("ai:rex"));
@@ -255,7 +255,7 @@ public class ScentTests
     public void OnlyANewerMark_RefreshesWhatItKnows()
     {
         // So it follows a trail forwards, and doesn't go back to where it already looked.
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 6 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 6 };
         var human = sim.AddActor("Pete", 'h', new TilePos(20, 32), Species.Human, new HoldStillController());
         sim.Injure(human, BodySection.LeftArm, Severity.Red, bleeding: true, "a test");
         var rex = sim.AddActor("Rex", 'T', new TilePos(20, 20), Species.Rex, new HoldStillController(), Direction.North);
@@ -283,7 +283,7 @@ public class ScentTests
         var map = new WorldMap(10, 10);
         map.Cover[new TilePos(5, 5)] = CoverType.Vehicle;
         map.Cover[new TilePos(6, 5)] = CoverType.Vehicle;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var human = sim.AddActor("Marisol", 'h', new TilePos(5, 5), Species.Human, new HoldStillController());
 
         sim.RunUntil(100);
@@ -301,7 +301,7 @@ public class VibrationTests
     /// <summary>The Rex at (20,30) takes one step north to (20,29); Pete stands at (20,5), 24 tiles off.</summary>
     private static (Simulation Sim, Actor Rex, Actor Human) RexStepsTowardPete(WeatherSettings weather)
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1);
         sim.SetWeather(weather);
         var rex = sim.AddActor("Rex", 'T', new TilePos(20, 30), Species.Rex,
             new ScriptedController(new ActorAction[] { new MoveAction(Direction.North) }), Direction.North);
@@ -347,7 +347,7 @@ public class VibrationTests
     [Fact]
     public void TheRex_DoesntFeelPeoplesFootsteps()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(20, 20), Species.Rex, new HoldStillController(), Direction.North);
         sim.AddActor("Pete", 'h', new TilePos(22, 18), Species.Human,
             new ScriptedController(new ActorAction[] { new MoveAction(Direction.East, Sprint: true) }));
@@ -361,7 +361,7 @@ public class VibrationTests
     [Fact]
     public void Ground_CarriesFootfallsDifferently()
     {
-        var sim = new Simulation(new WorldMap(4, 4), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(4, 4), seed: 1);
         var grass = Covers.Get(CoverType.Grass);
         Assert.Equal(100, sim.Weather.VibrationPercent(grass, outdoors: true));
         Assert.Equal(160, sim.Weather.VibrationPercent(Covers.Deck, outdoors: true));

@@ -292,7 +292,7 @@ public class FollowWeatherTests
         IslandWorld world = TestIslands.World("Default");
         ulong Run()
         {
-            var sim = new Simulation(new WorldMap(16, 16), seed: 9);
+            var sim = new Simulation(TestContent.NewSession(), new WorldMap(16, 16), seed: 9);
             sim.SetTimeOfDay(8);
             sim.FollowWeather(IslandWeather.For(world, runSeed: 9), (long)(world.WidthM / 2), (long)(world.HeightM / 2));
             sim.RunUntil(2 * WorldClock.TicksPerGameHour);

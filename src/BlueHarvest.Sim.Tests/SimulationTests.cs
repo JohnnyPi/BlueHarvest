@@ -10,7 +10,7 @@ public class SimulationTests
 {
     private static Simulation Scripted(string[] rows, TilePos start, params ActorAction[] script)
     {
-        var sim = new Simulation(HeightMap.FromRows(rows), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), HeightMap.FromRows(rows), seed: 1);
         sim.AddActor("Tester", '@', start, Species.Human, new ScriptedController(script));
         return sim;
     }
@@ -55,8 +55,8 @@ public class SimulationTests
     [Fact]
     public void SameSeed_ReplaysIdentically()
     {
-        var a = DemoWorld.Create(12345);
-        var b = DemoWorld.Create(12345);
+        var a = DemoWorld.Create(TestContent.NewSession(), 12345);
+        var b = DemoWorld.Create(TestContent.NewSession(), 12345);
         a.RunUntil(Ticks.FromSeconds(60));
         b.RunUntil(Ticks.FromSeconds(60));
 
@@ -67,8 +67,8 @@ public class SimulationTests
     [Fact]
     public void DifferentSeed_Diverges()
     {
-        var a = DemoWorld.Create(1);
-        var b = DemoWorld.Create(2);
+        var a = DemoWorld.Create(TestContent.NewSession(), 1);
+        var b = DemoWorld.Create(TestContent.NewSession(), 2);
         a.RunUntil(Ticks.FromSeconds(60));
         b.RunUntil(Ticks.FromSeconds(60));
 
@@ -78,7 +78,7 @@ public class SimulationTests
     [Fact]
     public void ActorsNeverShareATile()
     {
-        var sim = DemoWorld.Create(777);
+        var sim = DemoWorld.Create(TestContent.NewSession(), 777);
         for (int i = 0; i < 5000; i++)
         {
             sim.Step();

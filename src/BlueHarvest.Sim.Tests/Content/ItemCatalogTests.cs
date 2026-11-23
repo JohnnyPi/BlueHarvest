@@ -1,6 +1,7 @@
 using BlueHarvest.Content;
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.ContentIntegration;
+using BlueHarvest.Sim.World;
 
 namespace BlueHarvest.Sim.Tests.ContentLibrary;
 
@@ -44,7 +45,7 @@ public class ItemCatalogTests
     public void EachItem_IsWhatItsYamlSays(string id)
     {
         ItemDefinition item = RepoContent.Registry.Get<ItemDefinition>(id);
-        ItemDef def = ItemCatalog.Of(item.Id);
+        ItemDef def = TestContent.Catalog.Of(item.Id);
 
         Assert.Equal(item.Id, def.Id);
         Assert.Equal(item.Name, def.Name);
@@ -99,15 +100,15 @@ public class ItemCatalogTests
     {
         foreach (string key in ItemHandlers.UseKeys)
         {
-            var def = ItemCatalog.All.First(d => d.Has(key));
+            var def = TestContent.Catalog.All.First(d => d.Has(key));
             Assert.NotNull(Recipes.UseOf(def));
         }
-        Assert.Equal(ItemUse.TakeMedicine, Recipes.UseOf(ItemCatalog.Of(CoreItems.Painkillers)));
-        Assert.Equal(ItemUse.TakeMedicine, Recipes.UseOf(ItemCatalog.Of(CoreItems.Antibiotics)));
-        Assert.Equal(ItemUse.DressWounds, Recipes.UseOf(ItemCatalog.Of(CoreItems.Splint)));
-        Assert.Equal(ItemUse.DressWounds, Recipes.UseOf(ItemCatalog.Of(CoreItems.Antiseptic)));
-        Assert.Equal(ItemUse.Inject, Recipes.UseOf(ItemCatalog.Of(CoreItems.EpiPen)));
-        Assert.Null(Recipes.UseOf(ItemCatalog.Of(CoreItems.FirstAidKit))); // it has its own key
+        Assert.Equal(ItemUse.TakeMedicine, Recipes.UseOf(TestContent.Catalog.Of(CoreItems.Painkillers)));
+        Assert.Equal(ItemUse.TakeMedicine, Recipes.UseOf(TestContent.Catalog.Of(CoreItems.Antibiotics)));
+        Assert.Equal(ItemUse.DressWounds, Recipes.UseOf(TestContent.Catalog.Of(CoreItems.Splint)));
+        Assert.Equal(ItemUse.DressWounds, Recipes.UseOf(TestContent.Catalog.Of(CoreItems.Antiseptic)));
+        Assert.Equal(ItemUse.Inject, Recipes.UseOf(TestContent.Catalog.Of(CoreItems.EpiPen)));
+        Assert.Null(Recipes.UseOf(TestContent.Catalog.Of(CoreItems.FirstAidKit))); // it has its own key
     }
 
     [Fact]
@@ -127,27 +128,32 @@ public class ItemCatalogTests
     }
 
     [Fact]
-    public void TheInstalledCatalog_IsTheRepoPacks()
+    public void ARegistrysCatalog_IsBuiltOnce_AndIsTheOneItsSessionsUse()
     {
-        Assert.Null(TestContent.InstallError);
-        Assert.True(ItemCatalog.IsInstalled);
-        Assert.Equal(RepoContent.Registry.Fingerprint, ItemCatalog.Fingerprint);
-        // installing the same packs again changes nothing
-        ItemDef flashlight = ItemCatalog.Of(CoreItems.Flashlight);
-        ItemCatalog.Install(RepoContent.Registry);
-        Assert.Same(flashlight, ItemCatalog.Of(CoreItems.Flashlight));
+        ItemCatalog catalog = ItemCatalog.For(RepoContent.Registry);
+        Assert.Equal(RepoContent.Registry.Fingerprint, catalog.Fingerprint);
+        Assert.Same(catalog, ItemCatalog.For(RepoContent.Registry));
+        Assert.Same(catalog.Of(CoreItems.Flashlight), ItemCatalog.For(RepoContent.Registry).Of(CoreItems.Flashlight));
+        var session = new WorldSession(RepoContent.Registry);
+        Assert.Same(catalog, session.Catalog);
+        Assert.Equal(RepoContent.Registry.Fingerprint, session.Fingerprint);
+        var sim = new Simulation(session, new WorldMap(4, 4), seed: 1);
+        Assert.Same(catalog, sim.Catalog);
+        Assert.Same(catalog, sim.Items.Catalog);
     }
 
     [Fact]
-    public void PacksWhoseItemsTheSimCantUse_AreRefused_AndTheCatalogStays()
+    public void PacksWhoseItemsTheSimCantUse_AreRefused_AndOtherCatalogsAreUntouched()
     {
         // without the sim's item handlers, every item names handlers this load doesn't know
         var options = new ContentLoadOptions { Mode = ContentMode.Authoring, GameVersion = SimContent.GameVersion, Handlers = HandlerRegistry.Default };
         ContentRegistry bare = RepoContent.Load(options).Registry!;
         Assert.NotEqual(RepoContent.Registry.Fingerprint, bare.Fingerprint);
-        var e = Assert.Throws<InvalidOperationException>(() => ItemCatalog.Install(bare));
+        var e = Assert.Throws<InvalidOperationException>(() => ItemCatalog.For(bare));
         Assert.Contains("core:flashlight", e.Message);
-        Assert.Equal(RepoContent.Registry.Fingerprint, ItemCatalog.Fingerprint);
+        Assert.Throws<InvalidOperationException>(() => new WorldSession(bare));
+        Assert.Equal(RepoContent.Registry.Fingerprint, TestContent.Catalog.Fingerprint);
+        Assert.NotNull(TestContent.Catalog.Find(CoreItems.Flashlight));
     }
 
     [Fact]

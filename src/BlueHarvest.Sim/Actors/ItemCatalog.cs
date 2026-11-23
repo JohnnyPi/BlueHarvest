@@ -70,47 +70,35 @@ public sealed record ItemSpec(ContentId Kind, int Count = 1, int? Amount = null,
     bool Locked = false, bool Open = false, bool Inside = false, bool Empty = false);
 
 /// <summary>
-/// Every kind of item, built from the content registry's item definitions (P2b): the game, the runner and the tests
-/// each install their registry once (<see cref="Install"/>) before making a simulation. There are no item kinds in
-/// code any more: an item is its content ID, and what it does is the handlers it names.
-/// <para>
-/// One catalog per process for now: every simulation shares it, so a registry must be the same one (the same
-/// fingerprint) for as long as simulations exist. P3's <c>WorldSession</c> will own it, with the pack lock.
-/// </para>
+/// Every kind of item, built from a content registry's item definitions. There are no item kinds in code: an item
+/// is its content ID, and what it does is the handlers it names. Each <see cref="WorldSession"/> reads its
+/// items through the catalog of its own registry (P3a), so two sessions with different packs can run side by side;
+/// <see cref="For"/> builds a registry's catalog once and hands back the same one after that.
 /// </summary>
-public static class ItemCatalog
+public sealed class ItemCatalog
 {
-    private sealed record Snapshot(string Fingerprint, IReadOnlyList<ItemDef> All, IReadOnlyDictionary<ContentId, ItemDef> ById);
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ContentRegistry, ItemCatalog> Built = new();
 
-    private static readonly object Gate = new();
-    private static volatile Snapshot? _current;
+    private readonly IReadOnlyDictionary<ContentId, ItemDef> _byId;
 
-    private static Snapshot Current => _current ?? throw new InvalidOperationException(
-        "No item catalog: load the content packs and call ItemCatalog.Install(registry) before making a simulation.");
-
-    /// <summary>Whether a registry's items are installed.</summary>
-    public static bool IsInstalled => _current is not null;
-
-    /// <summary>The installed registry's fingerprint, or null.</summary>
-    public static string? Fingerprint => _current?.Fingerprint;
-
-    /// <summary>
-    /// Builds the catalog from <paramref name="registry"/>'s item definitions and makes it the one every simulation
-    /// uses. Installing the same registry again (the same fingerprint) does nothing. Throws if an item isn't
-    /// runtime-ready (a handler the sim doesn't implement) or can't be read as a sim item.
-    /// </summary>
-    public static void Install(ContentRegistry registry)
+    private ItemCatalog(string fingerprint, IReadOnlyList<ItemDef> all, IReadOnlyDictionary<ContentId, ItemDef> byId)
     {
-        ArgumentNullException.ThrowIfNull(registry);
-        lock (Gate)
-        {
-            if (_current?.Fingerprint == registry.Fingerprint)
-                return;
-            _current = Build(registry);
-        }
+        Fingerprint = fingerprint;
+        All = all;
+        _byId = byId;
     }
 
-    private static Snapshot Build(ContentRegistry registry)
+    /// <summary>
+    /// The catalog of <paramref name="registry"/>'s items, built the first time it's asked for. Throws if an item
+    /// isn't runtime-ready (a handler the sim doesn't implement) or can't be read as a sim item.
+    /// </summary>
+    public static ItemCatalog For(ContentRegistry registry)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        return Built.GetValue(registry, Build);
+    }
+
+    private static ItemCatalog Build(ContentRegistry registry)
     {
         var items = registry.All<ItemDefinition>().OrderBy(d => d.Id).ToList();
         var notReady = items.Where(d => !registry.IsRuntimeReady(d.Id)).Select(d => d.Id.Value).ToList();
@@ -119,24 +107,27 @@ public static class ItemCatalog
                 $"These items aren't runtime-ready, so the sim can't use them: {string.Join(", ", notReady)}. Run 'content validate --runtime'.");
         var defs = items.Select(ItemDefBuilder.From).ToList();
         var byId = defs.ToDictionary(d => d.Id);
-        return new Snapshot(registry.Fingerprint, defs.AsReadOnly(), byId);
+        return new ItemCatalog(registry.Fingerprint, defs.AsReadOnly(), byId);
     }
 
-    /// <summary>The item with this ID. Throws if there's none: code that names an item expects it to exist.</summary>
-    public static ItemDef Of(ContentId id) =>
-        Current.ById.TryGetValue(id, out var def) ? def : throw new KeyNotFoundException($"There's no item {id} in the content packs.");
+    /// <summary>The fingerprint of the registry the catalog was built from.</summary>
+    public string Fingerprint { get; }
 
     /// <summary>Every item, by ID.</summary>
-    public static IReadOnlyList<ItemDef> All => Current.All;
+    public IReadOnlyList<ItemDef> All { get; }
+
+    /// <summary>The item with this ID. Throws if there's none: code that names an item expects it to exist.</summary>
+    public ItemDef Of(ContentId id) =>
+        _byId.TryGetValue(id, out var def) ? def : throw new KeyNotFoundException($"There's no item {id} in the content packs.");
 
     /// <summary>The item with this ID, or null.</summary>
-    public static ItemDef? Find(ContentId id) => Current.ById.TryGetValue(id, out var def) ? def : null;
+    public ItemDef? Find(ContentId id) => _byId.TryGetValue(id, out var def) ? def : null;
 
     /// <summary>
     /// The item with this ID as text (<c>core:flashlight</c>), or null. A bare ID (<c>flashlight</c>) takes
     /// <paramref name="defaultNamespace"/>, if one is given; otherwise it must be qualified. IDs are case-sensitive.
     /// </summary>
-    public static ItemDef? Find(string text, string? defaultNamespace = null)
+    public ItemDef? Find(string text, string? defaultNamespace = null)
     {
         ContentId id;
         bool parsed = defaultNamespace is null ? ContentId.TryParse(text, out id) : ContentId.TryResolve(text, defaultNamespace, out id);
@@ -149,7 +140,7 @@ public static class ItemCatalog
     /// IDs must be qualified unless <paramref name="defaultNamespace"/> is given (a pack's own tables, where a bare
     /// ID means that pack's, as in YAML); map files always qualify them.
     /// </summary>
-    public static IReadOnlyList<ItemSpec> ParseSpec(string text, string? defaultNamespace = null)
+    public IReadOnlyList<ItemSpec> ParseSpec(string text, string? defaultNamespace = null)
     {
         var specs = new List<ItemSpec>();
         foreach (string rawPart in text.Split(';'))
@@ -190,7 +181,7 @@ public static class ItemCatalog
         return specs;
     }
 
-    private static string UnknownItem(string text, string? defaultNamespace)
+    private string UnknownItem(string text, string? defaultNamespace)
     {
         if (defaultNamespace is null && text.IndexOf(':') < 0 && Find(text, "core") is not null)
             return $"Unknown item '{text}': item IDs must be qualified, 'core:{text}'.";

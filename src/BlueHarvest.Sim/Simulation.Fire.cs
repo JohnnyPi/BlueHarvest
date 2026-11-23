@@ -6,6 +6,7 @@ using BlueHarvest.Sim.Power;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Content;
 using BlueHarvest.Sim.ContentIntegration;
+using BlueHarvest.Sim.Events;
 
 namespace BlueHarvest.Sim;
 
@@ -228,7 +229,7 @@ public sealed partial class Simulation
         _fires[p] = fire;
         _fuel.Remove(p);
         if (cause is not null)
-            FireStarted?.Invoke(p, cause);
+            Emit(new FireStartedPayload(p, cause));
     }
 
     /// <summary>
@@ -237,7 +238,7 @@ public sealed partial class Simulation
     /// </summary>
     private int Ignite(Actor actor, Direction? direction, ContentId? source)
     {
-        if (source is { } other && ItemCatalog.Find(other)?.Has(ItemHandlers.Flare) != true)
+        if (source is { } other && Catalog.Find(other)?.Has(ItemHandlers.Flare) != true)
             return IgniteWithFlame(actor, direction, other);
         bool flareLeft = source is { } chosen ? actor.Inventory.Has(chosen) : actor.Inventory.HasWith(ItemHandlers.Flare);
         if (!flareLeft)
@@ -258,7 +259,7 @@ public sealed partial class Simulation
         _lightGrid = null;
         EmitNoise(tile, GearRules.FlareLoudness, NoiseKinds.Flare);
         bool caught = TryIgnite(tile, FireRules.HeldFlareHeat, actor.Name);
-        Kindled?.Invoke(actor, tile, caught);
+        Emit(new KindledPayload(actor, tile, caught));
         return GearRules.ThrowTicks;
     }
 
@@ -268,7 +269,7 @@ public sealed partial class Simulation
     /// </summary>
     private int IgniteWithFlame(Actor actor, Direction? direction, ContentId source)
     {
-        var def = ItemCatalog.Find(source);
+        var def = Catalog.Find(source);
         if (def is null || !def.Has(ItemHandlers.Flame) && !def.Has(ItemHandlers.Torch))
             return Refuse(actor, $"you can't light anything with {def?.WithArticle ?? "that"}");
         bool torch = def.Has(ItemHandlers.Torch);
@@ -285,7 +286,7 @@ public sealed partial class Simulation
             actor.Facing = facing;
         actor.LastMovedTick = CurrentTick;
         bool caught = TryIgnite(tile, torch ? FireRules.HeldFlareHeat : FireRules.LighterHeat, actor.Name);
-        Kindled?.Invoke(actor, tile, caught);
+        Emit(new KindledPayload(actor, tile, caught));
         return FireRules.LighterTicks;
     }
 
@@ -328,9 +329,9 @@ public sealed partial class Simulation
         }
         EmitNoise(actor.Position, FireRules.ExtinguishLoudness, NoiseKinds.Extinguisher, actor.Id);
         UpdateFireLights();
-        FireDoused?.Invoke(actor, put);
+        Emit(new FireDousedPayload(actor, put));
         if (hadFires && _fires.Count == 0)
-            FiresOut?.Invoke();
+            Emit(new FiresOutPayload());
         return FireRules.ExtinguishTicks;
     }
 
@@ -371,7 +372,7 @@ public sealed partial class Simulation
         can.Amount -= FireRules.PourLitresPerTile * tiles.Count;
         actor.LastMovedTick = CurrentTick;
         EmitNoise(actor.Position, FireRules.PourLoudness, NoiseKinds.Pouring, actor.Id);
-        FuelPoured?.Invoke(actor, tiles);
+        Emit(new FuelPouredPayload(actor, tiles));
         return FireRules.PourTicksPerTile * tiles.Count;
     }
 
@@ -394,7 +395,7 @@ public sealed partial class Simulation
         if (roll % 3 != 0)
             return;
         var tile = new TilePos((int)((roll >> 8) % (ulong)Map.Width), (int)((roll >> 32) % (ulong)Map.Height));
-        LightningHitGround?.Invoke(tile);
+        Emit(new LightningHitGroundPayload(tile));
         TryIgnite(tile, FireRules.LightningHeat, "lightning", strike.Tick);
     }
 
@@ -455,7 +456,7 @@ public sealed partial class Simulation
         UpdateSmoke();
         UpdateFireLights();
         if (hadFires && _fires.Count == 0)
-            FiresOut?.Invoke();
+            Emit(new FiresOutPayload());
     }
 
     /// <summary>The fires grow or die down, pass heat on, and burn out.</summary>
@@ -601,7 +602,7 @@ public sealed partial class Simulation
             if (Map.InBounds(centre))
             {
                 EmitNoise(centre, TankBurstLoudness, NoiseKinds.TanksBursting);
-                TanksBurst?.Invoke(centre);
+                Emit(new TanksBurstPayload(centre));
             }
         }
     }
@@ -626,7 +627,7 @@ public sealed partial class Simulation
             _lastBurnTick[actor.Id] = tick;
             Severity severity = hottest >= 70 ? Severity.Red : Severity.Yellow;
             Injure(actor, RandomSection(Array.Empty<BodySection>()), severity, bleeding: false, "burns");
-            Burned?.Invoke(actor, severity);
+            Emit(new BurnedPayload(actor, severity));
             if (!actor.IsDead)
                 CryOut(actor);
         }

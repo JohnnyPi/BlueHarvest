@@ -16,7 +16,7 @@ public class AilmentTests
 
     private static (Simulation Sim, PlayerController Drive, Actor You) Person(WorldMap? map = null, WeatherSettings? weather = null)
     {
-        var sim = new Simulation(map ?? new WorldMap(20, 10), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map ?? new WorldMap(20, 10), seed: 1);
         sim.SetWeather(weather ?? WeatherSettings.Clear);
         var drive = new PlayerController();
         var you = sim.AddActor("You", '@', Start, Species.Human, drive, Direction.East);

@@ -21,7 +21,7 @@ public class GearTests
     private static (Simulation Sim, PlayerController Drive, Actor Human) Person(WorldMap? map = null, TilePos? at = null,
         Loadout? loadout = null, int ambient = 6)
     {
-        var sim = new Simulation(map ?? new WorldMap(30, 30), seed: 5) { AmbientLightPercent = ambient };
+        var sim = new Simulation(TestContent.NewSession(), map ?? new WorldMap(30, 30), seed: 5) { AmbientLightPercent = ambient };
         var drive = new PlayerController();
         var human = sim.AddActor("You", '@', at ?? new TilePos(5, 5), Species.Human, drive, Direction.East,
             loadout: loadout ?? Expert);
@@ -77,7 +77,7 @@ public class GearTests
     private static (Simulation Sim, CreatureBrain Brain, PlayerController Drive, Actor Human) RexAndThrower(TilePos thrower)
     {
         var map = new WorldMap(40, 40);
-        var sim = new Simulation(map, seed: 5) { AmbientLightPercent = 6 };
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 5) { AmbientLightPercent = 6 };
         var brain = new CreatureBrain(AiProfile.Rex, sim.Rng.Fork("ai:rex"));
         sim.AddActor("Rex", 'T', new TilePos(20, 30), Species.Rex, brain, Direction.North);
         var drive = new PlayerController();

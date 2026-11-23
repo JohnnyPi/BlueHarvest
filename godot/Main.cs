@@ -61,7 +61,11 @@ public partial class Main : Node2D
         ("fog", new WeatherSettings(FogPercent: 70)),
     };
 
-    private Simulation _sim = null!;
+    /// <summary>The game: its content, items, revision and event ledger (P3a). A new game is a new session.</summary>
+    private WorldSession _session = null!;
+
+    /// <summary>The island surface the game is played on: the session's simulation.</summary>
+    private Simulation _sim => _session.Surface;
     private PlayerController _player = null!;
     private Actor _playerActor = null!;
 
@@ -564,7 +568,7 @@ public partial class Main : Node2D
     private void LoadIsland(IslandWorld world, IslandChunker chunker)
     {
         _island = new IslandWindow(world, chunker, Island.IslandLaunch.X, Island.IslandLaunch.Y, chunksAcross: 3);
-        _sim = new Simulation(_island.Map, Seed);
+        new Simulation(NewSession(), _island.Map, Seed); // the session holds it: _sim
         _sim.SetTimeOfDay(IslandStartHour);
         // showers drift in on the trade wind and differ from place to place; each run has its own
         _sim.FollowWeather(IslandWeather.For(world, Seed), _island.OriginX, _island.OriginY);
@@ -573,7 +577,7 @@ public partial class Main : Node2D
         // the tide comes and goes twice a day, and the rivers rise after rain over their catchments
         _sim.UseWater(IslandWaters.For(world, Seed));
         // what was left in the rooms, ten years on: lockers, desks, fridges and what's in them
-        _sim.UseItems(ItemPlan.Build(world, Seed));
+        _sim.UseItems(ItemPlan.Build(world, Seed, _sim.Catalog));
         // every named room, so the sim can say which room a tile is in and who walked into which
         _sim.UseRooms(RoomIndex.Build(world));
         // the island's mean air temperature at sea level: the sea's (it cools 6.5 °C a kilometre up)
@@ -614,8 +618,9 @@ public partial class Main : Node2D
 
         try
         {
-            var data = MapFile.Parse(Godot.FileAccess.GetFileAsString(MapPath));
-            _sim = ScenarioBuilder.Build(data, Seed, _player);
+            WorldSession session = NewSession();
+            var data = MapFile.Parse(Godot.FileAccess.GetFileAsString(MapPath), session.Catalog);
+            ScenarioBuilder.Build(session, data, Seed, _player);
             Say("Night, rain, power out. The Rex is loose. Stay still in the light; move in the dark.");
         }
         catch (Exception e)
@@ -625,10 +630,13 @@ public partial class Main : Node2D
         }
     }
 
+    /// <summary>Starts a new game's session on the loaded content; the simulation made next goes into it.</summary>
+    private WorldSession NewSession() => _session = ContentIntegration.GameContent.NewSession();
+
     private void UseDemo(string message)
     {
         _player = new PlayerController();
-        _sim = DemoWorld.Create(Seed, _player);
+        DemoWorld.Create(NewSession(), Seed, _player);
         Say(message);
     }
 

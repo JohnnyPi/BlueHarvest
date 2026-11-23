@@ -20,14 +20,14 @@ public class ItemTests
     [Fact]
     public void ItemGlyphs_NeverLookLikeSomethingElseOnTheMap_AndGoByFamily()
     {
-        foreach (ItemDef def in ItemCatalog.All)
+        foreach (ItemDef def in TestContent.Catalog.All)
         {
             Assert.False("+/<>H*@%".Contains(def.Glyph), $"{def.Id} uses '{def.Glyph}', which means something else on the map");
             Assert.False(char.IsAsciiLetterOrDigit(def.Glyph), $"{def.Id} uses '{def.Glyph}', a letter or digit (creatures and people)");
         }
-        char GlyphOf(ContentId kind) => ItemCatalog.Of(kind).Glyph;
-        Assert.All(ItemCatalog.All.Where(d => d.Is(ItemCategory.Medical) && !d.Is(ItemCategory.Fixture)), d => Assert.Equal('✚', d.Glyph));
-        Assert.All(ItemCatalog.All.Where(d => d.Is(ItemCategory.Edible) && !d.Is(ItemCategory.Medical)), d => Assert.Equal('♨', d.Glyph)); // pills are medical
+        char GlyphOf(ContentId kind) => TestContent.Catalog.Of(kind).Glyph;
+        Assert.All(TestContent.Catalog.All.Where(d => d.Is(ItemCategory.Medical) && !d.Is(ItemCategory.Fixture)), d => Assert.Equal('✚', d.Glyph));
+        Assert.All(TestContent.Catalog.All.Where(d => d.Is(ItemCategory.Edible) && !d.Is(ItemCategory.Medical)), d => Assert.Equal('♨', d.Glyph)); // pills are medical
         Assert.Equal('!', GlyphOf(CoreItems.Flashlight));
         Assert.Equal('!', GlyphOf(CoreItems.Flare));
         Assert.Equal(')', GlyphOf(CoreItems.Rifle));
@@ -37,7 +37,7 @@ public class ItemTests
 
     private static (Simulation Sim, PlayerController Drive, Actor You) Person(Loadout? loadout = null, TilePos? at = null)
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 7);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 7);
         var drive = new PlayerController();
         var you = sim.AddActor("You", '@', at ?? new TilePos(5, 5), Species.Human, drive, Direction.East, loadout: loadout);
         sim.RunUntilInputNeeded();
@@ -63,34 +63,34 @@ public class ItemTests
     public void TheCatalog_HasEveryItemInTheRepoPacks_ByItsContentId()
     {
         var items = RepoContent.Registry.All<ItemDefinition>().ToList();
-        Assert.Equal(items.Count, ItemCatalog.All.Count);
+        Assert.Equal(items.Count, TestContent.Catalog.All.Count);
         foreach (var item in items)
-            Assert.Equal(item.Id, ItemCatalog.Of(item.Id).Id);
-        Assert.Equal(items.Count, ItemCatalog.All.Select(d => d.Id).Distinct().Count());
-        Assert.All(ItemCatalog.All, d => Assert.Same(d, ItemCatalog.Find(d.Id.Value)));
+            Assert.Equal(item.Id, TestContent.Catalog.Of(item.Id).Id);
+        Assert.Equal(items.Count, TestContent.Catalog.All.Select(d => d.Id).Distinct().Count());
+        Assert.All(TestContent.Catalog.All, d => Assert.Same(d, TestContent.Catalog.Find(d.Id.Value)));
         // IDs are case-sensitive, and text must be qualified unless a pack is given
-        Assert.Null(ItemCatalog.Find("CORE:FLASHLIGHT"));
-        Assert.Null(ItemCatalog.Find("flashlight"));
-        Assert.Same(ItemCatalog.Of(CoreItems.Flashlight), ItemCatalog.Find("flashlight", "core"));
-        Assert.Throws<KeyNotFoundException>(() => ItemCatalog.Of(new ContentId("core:toaster")));
+        Assert.Null(TestContent.Catalog.Find("CORE:FLASHLIGHT"));
+        Assert.Null(TestContent.Catalog.Find("flashlight"));
+        Assert.Same(TestContent.Catalog.Of(CoreItems.Flashlight), TestContent.Catalog.Find("flashlight", "core"));
+        Assert.Throws<KeyNotFoundException>(() => TestContent.Catalog.Of(new ContentId("core:toaster")));
     }
 
     [Fact]
     public void Containers_SayWhatTheyHold_AndBagsAreWorn()
     {
-        Assert.True(ItemCatalog.Of(CoreItems.Daypack).Is(ItemCategory.Wearable | ItemCategory.Container));
-        Assert.Equal(WearSlot.Back, ItemCatalog.Of(CoreItems.Daypack).Wear);
-        Assert.True(ItemCatalog.Of(CoreItems.Locker).Holds!.Closes);
-        Assert.Equal(ItemSize.Fixed, ItemCatalog.Of(CoreItems.Locker).Size);
-        Assert.True(ItemCatalog.Of(CoreItems.WaterBottle).Is(ItemCategory.Potable));
-        Assert.True(ItemCatalog.Of(CoreItems.EnergyBar).Is(ItemCategory.Edible));
+        Assert.True(TestContent.Catalog.Of(CoreItems.Daypack).Is(ItemCategory.Wearable | ItemCategory.Container));
+        Assert.Equal(WearSlot.Back, TestContent.Catalog.Of(CoreItems.Daypack).Wear);
+        Assert.True(TestContent.Catalog.Of(CoreItems.Locker).Holds!.Closes);
+        Assert.Equal(ItemSize.Fixed, TestContent.Catalog.Of(CoreItems.Locker).Size);
+        Assert.True(TestContent.Catalog.Of(CoreItems.WaterBottle).Is(ItemCategory.Potable));
+        Assert.True(TestContent.Catalog.Of(CoreItems.EnergyBar).Is(ItemCategory.Edible));
     }
 
     [Fact]
     public void ASpec_RoundTrips()
     {
         const string text = "core:locker locked; >core:energy-bar x3; >core:water-bottle amount=400; core:crowbar";
-        var specs = ItemCatalog.ParseSpec(text);
+        var specs = TestContent.Catalog.ParseSpec(text);
 
         Assert.Equal(4, specs.Count);
         Assert.Equal(new ItemSpec(CoreItems.Locker, Locked: true), specs[0]);
@@ -107,19 +107,19 @@ public class ItemTests
     [InlineData("core:flare shiny")]
     [InlineData("flare")]          // bare IDs need a pack to resolve in
     [InlineData("core:Flare")]     // IDs are case-sensitive
-    public void BadSpecs_AreRefused(string text) => Assert.Throws<FormatException>(() => ItemCatalog.ParseSpec(text));
+    public void BadSpecs_AreRefused(string text) => Assert.Throws<FormatException>(() => TestContent.Catalog.ParseSpec(text));
 
     [Fact]
     public void ABareId_SaysToQualifyIt()
     {
-        var e = Assert.Throws<FormatException>(() => ItemCatalog.ParseSpec("locker; >flare"));
+        var e = Assert.Throws<FormatException>(() => TestContent.Catalog.ParseSpec("locker; >flare"));
         Assert.Contains("'core:locker'", e.Message);
     }
 
     [Fact]
     public void APacksOwnTable_CanUseBareIds()
     {
-        var specs = ItemCatalog.ParseSpec("locker locked; >flare x3", "core");
+        var specs = TestContent.Catalog.ParseSpec("locker locked; >flare x3", "core");
         Assert.Equal(new ItemSpec(CoreItems.Locker, Locked: true), specs[0]);
         Assert.Equal(new ItemSpec(CoreItems.Flare, Count: 3, Inside: true), specs[1]);
         Assert.Equal("core:locker locked; >core:flare x3", ItemCatalog.FormatSpec(specs));
@@ -273,7 +273,7 @@ public class ItemTests
     {
         var (sim, drive, you) = Person();
         var refusals = Refusals(sim);
-        var placed = sim.PlaceItems(ItemCatalog.ParseSpec("core:locker; >core:energy-bar x3; >core:water-bottle"), new TilePos(6, 5));
+        var placed = sim.PlaceItems(TestContent.Catalog.ParseSpec("core:locker; >core:energy-bar x3; >core:water-bottle"), new TilePos(6, 5));
         var locker = placed[0];
         var bars = placed[1];
         Assert.DoesNotContain(sim.ItemsWithinReach(you), r => r.Item == bars);
@@ -287,7 +287,7 @@ public class ItemTests
         Assert.Equal(3, you.Inventory.Count(CoreItems.EnergyBar));
         Assert.Single(locker.Contents);
 
-        var shut = sim.PlaceItems(ItemCatalog.ParseSpec("core:cabinet locked; >core:knife"), new TilePos(5, 6))[0];
+        var shut = sim.PlaceItems(TestContent.Catalog.ParseSpec("core:cabinet locked; >core:knife"), new TilePos(5, 6))[0];
         Do(sim, drive, new OpenAction(shut.Id));
         Assert.False(shut.IsOpen);
         Assert.Contains("locked", refusals[^1]);
@@ -348,7 +348,7 @@ public class ItemTests
         static int[] Ids()
         {
             var (sim, _, you) = Person(Loadout.TestbedSurvivor);
-            sim.PlaceItems(ItemCatalog.ParseSpec("core:desk; >core:notebook; >core:painkillers"), new TilePos(2, 2));
+            sim.PlaceItems(TestContent.Catalog.ParseSpec("core:desk; >core:notebook; >core:painkillers"), new TilePos(2, 2));
             return you.Inventory.All.Concat(sim.Items.All.SelectMany(l => l.Item.SelfAndNested())).Select(i => i.Id).ToArray();
         }
 
@@ -386,10 +386,10 @@ public class ItemTests
             "player 0 0 You\n" +
             "item 2 1 core:fridge open; >core:canned-food x2; >core:water-bottle amount=250\n" +
             "end\n";
-        var data = MapFile.Parse(text);
+        var data = MapFile.Parse(text, TestContent.Catalog);
         Assert.Equal(text, MapFile.Serialize(data));
 
-        var sim = ScenarioBuilder.Build(data, seed: 1);
+        var sim = ScenarioBuilder.Build(TestContent.NewSession(), data, seed: 1);
         var fridge = Assert.Single(sim.ItemsAt(new TilePos(2, 1))).Item;
         Assert.Equal(CoreItems.Fridge, fridge.Kind);
         Assert.True(fridge.IsOpen);
@@ -401,7 +401,7 @@ public class ItemTests
     public void AnItemMarker_WithAnUnknownItem_IsRefused()
     {
         const string text = "bhmap 3\nsize 1 1\nheights\n0\ncover\n.\nmarkers\nplayer 0 0\nitem 0 0 core:toaster\nend\n";
-        Assert.Throws<FormatException>(() => MapFile.Parse(text));
+        Assert.Throws<FormatException>(() => MapFile.Parse(text, TestContent.Catalog));
     }
 
     [Theory]
@@ -411,14 +411,14 @@ public class ItemTests
     public void OldItemMarkers_AreRefused_WithWhatToDo(string header, string marker)
     {
         string text = $"{header}\nsize 1 1\nheights\n0\ncover\n.\nmarkers\nplayer 0 0\n{marker}\nend\n";
-        var e = Assert.Throws<FormatException>(() => MapFile.Parse(text));
+        var e = Assert.Throws<FormatException>(() => MapFile.Parse(text, TestContent.Catalog));
         Assert.Contains("core:locker", e.Message);
     }
 
     [Fact]
     public void AVersion2Map_WithoutItems_StillReads()
     {
-        var data = MapFile.Parse("bhmap 2\nsize 1 1\nheights\n0\ncover\n.\nmarkers\nplayer 0 0\nend\n");
+        var data = MapFile.Parse("bhmap 2\nsize 1 1\nheights\n0\ncover\n.\nmarkers\nplayer 0 0\nend\n", TestContent.Catalog);
         Assert.Single(data.Markers);
     }
 }

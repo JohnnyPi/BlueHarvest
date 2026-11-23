@@ -64,7 +64,7 @@ public class MapFileTests
     [Fact]
     public void ParseV1_ReadsHeightsCoverAndMarkers()
     {
-        var data = MapFile.Parse(SmallV1);
+        var data = MapFile.Parse(SmallV1, TestContent.Catalog);
 
         Assert.Equal(4, data.Map.Width);
         Assert.Equal(2, data.Map.Height);
@@ -84,13 +84,13 @@ public class MapFileTests
     [Fact]
     public void V1_IsWrittenBackAsV2()
     {
-        Assert.Equal(Small, MapFile.Serialize(MapFile.Parse(SmallV1)));
+        Assert.Equal(Small, MapFile.Serialize(MapFile.Parse(SmallV1, TestContent.Catalog)));
     }
 
     [Fact]
     public void V1Floors_GetARoof()
     {
-        var data = MapFile.Parse(SmallV1.Replace(".&F#\n", "._F#\n"));
+        var data = MapFile.Parse(SmallV1.Replace(".&F#\n", "._F#\n"), TestContent.Catalog);
         Assert.True(data.Map.IsIndoor(new TilePos(1, 0)));
         Assert.Equal(StructureMap.DefaultRoofDm, data.Map.Structures.RoofDm(new TilePos(1, 0)));
         Assert.False(data.Map.IsIndoor(new TilePos(0, 0)));
@@ -99,21 +99,21 @@ public class MapFileTests
     [Fact]
     public void V2_RoundTripsExactly()
     {
-        Assert.Equal(Small, MapFile.Serialize(MapFile.Parse(Small)));
-        Assert.Equal(Full, MapFile.Serialize(MapFile.Parse(Full)));
+        Assert.Equal(Small, MapFile.Serialize(MapFile.Parse(Small, TestContent.Catalog)));
+        Assert.Equal(Full, MapFile.Serialize(MapFile.Parse(Full, TestContent.Catalog)));
     }
 
     [Fact]
     public void AVersion2File_ReadsAsVersion3_AndIsWrittenAs3()
     {
         string v2 = Full.Replace("bhmap 3\n", "bhmap 2\n");
-        Assert.Equal(Full, MapFile.Serialize(MapFile.Parse(v2)));
+        Assert.Equal(Full, MapFile.Serialize(MapFile.Parse(v2, TestContent.Catalog)));
     }
 
     [Fact]
     public void V2_ReadsDecimetersRoofsDoorsAndVehicles()
     {
-        var data = MapFile.Parse(Full);
+        var data = MapFile.Parse(Full, TestContent.Catalog);
         var map = data.Map;
 
         Assert.Equal(-20, map.Heights[new TilePos(0, 0)]);
@@ -130,16 +130,16 @@ public class MapFileTests
     public void Parse_AcceptsWindowsLineEndingsAndComments()
     {
         string text = "; testbed\r\n" + Small.Replace("\n", "\r\n").Replace("markers\r\n", "markers\r\n; spawns\r\n");
-        Assert.Equal(Small, MapFile.Serialize(MapFile.Parse(text)));
+        Assert.Equal(Small, MapFile.Serialize(MapFile.Parse(text, TestContent.Catalog)));
     }
 
     [Fact]
     public void Ambient_IsOptional_AndRoundTrips()
     {
-        Assert.Equal(100, MapFile.Parse(Small).AmbientLight);
+        Assert.Equal(100, MapFile.Parse(Small, TestContent.Catalog).AmbientLight);
 
         string night = Small.Replace("size 4 2\n", "size 4 2\nambient 6\n");
-        var data = MapFile.Parse(night);
+        var data = MapFile.Parse(night, TestContent.Catalog);
         Assert.Equal(6, data.AmbientLight);
         Assert.Equal(night, MapFile.Serialize(data));
     }
@@ -147,7 +147,7 @@ public class MapFileTests
     [Fact]
     public void Headlight_IsAMarkerKind()
     {
-        var data = MapFile.Parse(Small.Replace("light 3 0", "headlight 3 1"));
+        var data = MapFile.Parse(Small.Replace("light 3 0", "headlight 3 1"), TestContent.Catalog);
         Assert.Equal(MarkerKind.Headlight, data.Markers[2].Kind);
     }
 
@@ -165,7 +165,7 @@ public class MapFileTests
     [InlineData("doors\n", "dooors\n")]              // unknown section
     public void Parse_RejectsBrokenFiles(string find, string replace)
     {
-        Assert.Throws<FormatException>(() => MapFile.Parse(Small.Replace(find, replace)));
+        Assert.Throws<FormatException>(() => MapFile.Parse(Small.Replace(find, replace), TestContent.Catalog));
     }
 
     [Theory]
@@ -175,7 +175,7 @@ public class MapFileTests
     [InlineData("roofs\n....6\n...66\ndoors\n3 0 locked\n", "doors\n3 0 locked\nroofs\n....6\n...66\n")] // out of order
     public void Parse_RejectsBrokenStructureSections(string find, string replace)
     {
-        Assert.Throws<FormatException>(() => MapFile.Parse(Full.Replace(find, replace)));
+        Assert.Throws<FormatException>(() => MapFile.Parse(Full.Replace(find, replace), TestContent.Catalog));
     }
 
     /// <summary>A small v3 map with a raised platform (decks), a ladder and a support post.</summary>
@@ -200,7 +200,7 @@ public class MapFileTests
     [Fact]
     public void V2_DecksAndLadders_RoundTrip()
     {
-        var data = MapFile.Parse(WithPlatform);
+        var data = MapFile.Parse(WithPlatform, TestContent.Catalog);
 
         Assert.Equal(60, data.Map.Structures.DeckDm(new TilePos(1, 0)));
         Assert.Equal(60, data.Map.DeckTop(new TilePos(2, 0)));
@@ -213,12 +213,12 @@ public class MapFileTests
     [Fact]
     public void Ladder_NeedsADeckAboveIt()
     {
-        Assert.Throws<FormatException>(() => MapFile.Parse(WithPlatform.Replace("ladders\n2 0\n", "ladders\n3 0\n")));
+        Assert.Throws<FormatException>(() => MapFile.Parse(WithPlatform.Replace("ladders\n2 0\n", "ladders\n3 0\n"), TestContent.Catalog));
     }
 
     [Fact]
     public void StructureSections_NeedVersion2()
     {
-        Assert.Throws<FormatException>(() => MapFile.Parse(SmallV1.Replace("markers\n", "doors\n2 1 open\nmarkers\n")));
+        Assert.Throws<FormatException>(() => MapFile.Parse(SmallV1.Replace("markers\n", "doors\n2 1 open\nmarkers\n"), TestContent.Catalog));
     }
 }

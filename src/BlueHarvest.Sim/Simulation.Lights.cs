@@ -3,6 +3,7 @@ using BlueHarvest.Sim.Lighting;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Sim.ContentIntegration;
+using BlueHarvest.Sim.Events;
 
 namespace BlueHarvest.Sim;
 
@@ -41,7 +42,7 @@ public partial class Simulation
         {
             item.Lit = false;
             SyncItemLights();
-            ItemLightSwitched?.Invoke(actor, item, false);
+            Emit(new ItemLightSwitchedPayload(actor, item, false));
             return GearRules.FlashlightToggleTicks;
         }
         if (!item.Charged)
@@ -49,7 +50,7 @@ public partial class Simulation
         item.Lit = true;
         item.DrainedTick = CurrentTick;
         TrackLight(item);
-        ItemLightSwitched?.Invoke(actor, item, true);
+        Emit(new ItemLightSwitchedPayload(actor, item, true));
         return GearRules.FlashlightToggleTicks;
     }
 
@@ -65,7 +66,7 @@ public partial class Simulation
         if (!GiveItem(actor, stick))
             PlaceItem(stick, actor.Position, actor.OnDeck); // nowhere to hold it: it lies at your feet
         TrackLight(stick);
-        ItemLightSwitched?.Invoke(actor, stick, true);
+        Emit(new ItemLightSwitchedPayload(actor, stick, true));
         return CrackTicks;
     }
 
@@ -98,7 +99,7 @@ public partial class Simulation
         LightUp(torch, TorchTicks);
         TrackLight(torch);
         EmitNoise(actor.Position, 4, NoiseKinds.Fire, actor.Id);
-        ItemLightSwitched?.Invoke(actor, torch, true);
+        Emit(new ItemLightSwitchedPayload(actor, torch, true));
         return LightTorchTicks * NeedEffectsOf(actor).HandsPercent / 100;
     }
 
@@ -158,7 +159,7 @@ public partial class Simulation
                     SetLightOn(index, false);
                 _litItems.Remove(item);
                 if (died)
-                    ItemLightDied?.Invoke(holder, item);
+                    Emit(new ItemLightDiedPayload(holder, item));
                 continue;
             }
 

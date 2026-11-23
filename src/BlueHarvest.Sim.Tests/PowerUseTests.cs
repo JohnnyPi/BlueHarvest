@@ -229,7 +229,7 @@ public class PowerUseSimulationTests
 
         public Simulation Start(int hour = 12)
         {
-            Sim = new Simulation(Map, seed: 1);
+            Sim = new Simulation(TestContent.NewSession(), Map, seed: 1);
             Sim.SetTimeOfDay(hour);
             Sim.UsePower(Grid, 0, 0);
             return Sim;

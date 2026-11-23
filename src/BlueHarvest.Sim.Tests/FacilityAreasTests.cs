@@ -180,7 +180,7 @@ public class FacilityAreasTests
         IslandWorld world = TestIslands.World(island);
         FacilityAreas areas = world.Areas();
         RoomIndex rooms = RoomIndex.Build(world);
-        var maps = Everything(ItemPlan.Build(world, runSeed: 1)).Where(e => e.Item.Kind == CoreItems.ParkMap).OrderBy(e => e.Item.Id).ToList();
+        var maps = Everything(ItemPlan.Build(world, runSeed: 1, items: TestContent.Catalog)).Where(e => e.Item.Kind == CoreItems.ParkMap).OrderBy(e => e.Item.Id).ToList();
         Assert.NotEmpty(maps);
         var nth = new Dictionary<int, int>();
         foreach (var (map, x, y) in maps)
@@ -215,7 +215,7 @@ public class FacilityAreasTests
         var reachable = new HashSet<int>();
         for (ulong seed = 1; seed <= 20; seed++)
         {
-            foreach (var (item, x, y) in Everything(ItemPlan.Build(world, seed)))
+            foreach (var (item, x, y) in Everything(ItemPlan.Build(world, seed, items: TestContent.Catalog)))
             {
                 if (item.Kind != CoreItems.Keycard || item.Tag is null)
                     continue;
@@ -257,7 +257,7 @@ public class FacilityAreasTests
 
     private static (Simulation Sim, PlayerController Drive, Actor You, MapKnowledge Map) Reader(int tracking = 0, bool knowledge = true)
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 7);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 7);
         var drive = new PlayerController();
         var loadout = new Loadout("reader", new Skills(Tracking: tracking), Array.Empty<(ContentId, int)>());
         Actor you = sim.AddActor("You", '@', new TilePos(5, 5), Species.Human, drive, Direction.East, loadout: loadout);

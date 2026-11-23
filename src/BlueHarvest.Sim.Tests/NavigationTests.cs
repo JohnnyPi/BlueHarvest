@@ -26,7 +26,7 @@ public class NavigationTests
         var map = new WorldMap(10, 10);
         for (int y = 0; y <= 8; y++)
             map.Cover[new TilePos(5, y)] = CoverType.Wall;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var drive = new PlayerController();
         var human = sim.AddActor("You", '@', new TilePos(2, 2), Species.Human, drive);
 
@@ -40,7 +40,7 @@ public class NavigationTests
     [Fact]
     public void Rex_PlansTurns_AndArrives()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1);
         var drive = new PlayerController();
         var rex = sim.AddActor("Rex", 'T', new TilePos(20, 20), Species.Rex, drive, Direction.North);
 
@@ -60,7 +60,7 @@ public class NavigationTests
         for (int x = 0; x < 15; x++)
             map.Cover[new TilePos(x, 7)] = CoverType.Wall;
         map.Cover[new TilePos(7, 7)] = CoverType.Door;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(7, 11), Species.Rex, new PlayerController(), Direction.North);
         var human = sim.AddActor("You", '@', new TilePos(2, 12), Species.Human, new PlayerController());
 
@@ -79,7 +79,7 @@ public class NavigationTests
             if (x < gapFrom || x > gapTo)
                 map.Cover[new TilePos(x, 12)] = CoverType.DenseJungle;
         }
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(14, 20), Species.Rex, new PlayerController(), Direction.North);
 
         var path = Pathfinder.FindPath(sim, rex, new TilePos(14, 5), tolerance: 1);
@@ -89,7 +89,7 @@ public class NavigationTests
     [Fact]
     public void GoToController_ChasesAMovingGoal()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1);
         var goal = new TilePos(30, 30);
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 10), Species.Rex,
             new GoToController(() => goal, tolerance: 2), Direction.North);

@@ -520,7 +520,7 @@ public class SimulationPowerTests
         Site genetics = world.Works.Sites.First(t => t.Kind == "genetics");
         // six chunks: the compound (about 75 m each way) fits with room to spare wherever its centre falls
         var window = new IslandWindow(world, TestIslands.Chunker(Island), genetics.X, genetics.Y, 6);
-        var sim = new Simulation(window.Map, seed: 5);
+        var sim = new Simulation(TestContent.NewSession(), window.Map, seed: 5);
         sim.SetTimeOfDay(12);
         PowerGrid grid = PowerPlan.Build(world, runSeed: 1);
         sim.UsePower(grid, window.OriginX, window.OriginY);

@@ -2,6 +2,7 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Injuries;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.ContentIntegration;
+using BlueHarvest.Sim.Events;
 
 namespace BlueHarvest.Sim;
 
@@ -76,7 +77,7 @@ public sealed partial class Simulation
             {
                 var recipe = combination.Recipe!;
                 if (!HasUses(into, recipe.UsesOfA) || !HasUses(from, recipe.UsesOfB))
-                    return Refuse(actor, $"not enough to make {ItemCatalog.Of(recipe.Makes).WithArticle}");
+                    return Refuse(actor, $"not enough to make {Catalog.Of(recipe.Makes).WithArticle}");
                 UseUp(inventory, into, recipe.UsesOfA);
                 UseUp(inventory, from, recipe.UsesOfB);
                 made = CreateItem(recipe.Makes);
@@ -87,7 +88,7 @@ public sealed partial class Simulation
             }
         }
         EmitNoise(actor.Position, ItemRules.DropLoudness, NoiseKinds.Rummaging, actor.Id);
-        ItemsCombined?.Invoke(actor, combination, moved, made);
+        Emit(new ItemsCombinedPayload(actor, combination, moved, made));
         return ticks;
     }
 
@@ -133,7 +134,7 @@ public sealed partial class Simulation
         }
         inventory.Add(item, placement);
         EmitNoise(actor.Position, ItemRules.DropLoudness, NoiseKinds.Rummaging, actor.Id);
-        ItemTakenOut?.Invoke(actor, item, holder);
+        Emit(new ItemTakenOutPayload(actor, item, holder));
         return ItemRules.TakeOutTicks;
     }
 
@@ -152,7 +153,7 @@ public sealed partial class Simulation
             item.Amount = 0;
             inventory.Add(rounds, placement);
             EmitNoise(actor.Position, ItemRules.DropLoudness, NoiseKinds.Rummaging, actor.Id);
-            ItemTakenOut?.Invoke(actor, rounds, item);
+            Emit(new ItemTakenOutPayload(actor, rounds, item));
             return ItemRules.LoadTicksPerRound * count / 2;
         }
         if (item.Def.Holds is { Only: not null } && item.Contents.Count > 0)
@@ -262,7 +263,7 @@ public sealed partial class Simulation
         }
         if (use == ItemUse.Read)
             ReadParkMap(actor, item); // the first read may turn up something marked on it
-        ItemUsed?.Invoke(actor, item, use, used);
+        Emit(new ItemUsedPayload(actor, item, use, used));
         return Math.Max(RefuseTicks, def.UseTicks * NeedEffectsOf(actor).HandsPercent / 100);
     }
 
@@ -288,7 +289,7 @@ public sealed partial class Simulation
         container.Locked = false;
         container.IsOpen = true;
         EmitNoise(reach.At, ItemRules.PryLoudness, NoiseKinds.Prying, actor.Id);
-        LockForced?.Invoke(actor, container);
+        Emit(new LockForcedPayload(actor, container));
         return ItemRules.PryTicks;
     }
 
@@ -323,6 +324,6 @@ public sealed partial class Simulation
                 return;
         }
         SetLightOn(light, false);
-        LightDied?.Invoke(actor);
+        Emit(new LightDiedPayload(actor));
     }
 }

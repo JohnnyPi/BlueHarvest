@@ -1,3 +1,4 @@
+using BlueHarvest.Content;
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Ai;
 using BlueHarvest.Sim.Core;
@@ -81,12 +82,13 @@ public static class BatchRunner
         return new Variation(dx, dy, facing, rng.NextInt(0, MaxReactionTicks + 1));
     }
 
-    /// <summary>Plays one run to an escape, a death, or the time limit.</summary>
+    /// <summary>Plays one run to an escape, a death, or the time limit, in a session of its own on this content.</summary>
     /// <param name="vary">Apply the seed's variation (Rex start, reaction time). Off for tests that need the map as drawn.</param>
-    public static RunResult RunOnce(string mapText, EscapePlan plan, bool withNpcs, ulong seed, long maxTicks,
+    public static RunResult RunOnce(ContentRegistry content, string mapText, EscapePlan plan, bool withNpcs, ulong seed, long maxTicks,
         WeatherSettings? weather = null, bool vary = true)
     {
-        var data = MapFile.Parse(mapText);
+        var session = new WorldSession(content);
+        var data = MapFile.Parse(mapText, session.Catalog);
         if (!withNpcs)
             data = data with { Markers = data.Markers.Where(m => m.Kind != MarkerKind.Npc).ToList() };
 
@@ -99,7 +101,7 @@ public static class BatchRunner
         };
 
         var bot = new EscapeBot(plan, variation.ReactionTicks);
-        var sim = ScenarioBuilder.Build(data, seed, bot, variation.RexFacing);
+        var sim = ScenarioBuilder.Build(session, data, seed, bot, variation.RexFacing);
         if (weather is not null)
             sim.SetWeather(weather);
 
@@ -163,7 +165,7 @@ public static class BatchRunner
     /// results come back in a fixed order (plan, NPCs on then off, seed) whatever order they finish in.
     /// </summary>
     /// <param name="progress">Called after each run with (runs done, runs in all); may be called from any thread.</param>
-    public static IReadOnlyList<RunResult> RunAll(string mapText, IReadOnlyList<EscapePlan> plans, int runsPerOption,
+    public static IReadOnlyList<RunResult> RunAll(ContentRegistry content, string mapText, IReadOnlyList<EscapePlan> plans, int runsPerOption,
         long maxTicks, WeatherSettings? weather = null, ulong firstSeed = 1, Action<int, int>? progress = null)
     {
         var jobs = new List<(EscapePlan Plan, bool Npcs, ulong Seed)>();
@@ -181,7 +183,7 @@ public static class BatchRunner
         Parallel.For(0, jobs.Count, i =>
         {
             var (plan, npcs, seed) = jobs[i];
-            results[i] = RunOnce(mapText, plan, npcs, seed, maxTicks, weather);
+            results[i] = RunOnce(content, mapText, plan, npcs, seed, maxTicks, weather);
             progress?.Invoke(Interlocked.Increment(ref done), jobs.Count);
         });
         return results;

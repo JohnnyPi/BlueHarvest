@@ -16,7 +16,7 @@ public class ContactMemoryTests
     /// <summary>A Rex at (20,30) looking north (eyes at (20,26)) and a human 12 tiles in front of its eyes.</summary>
     private static (Simulation Sim, Actor Rex, Actor Human) Standoff(int ambient, bool humanMoves)
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1) { AmbientLightPercent = ambient };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1) { AmbientLightPercent = ambient };
         var rex = sim.AddActor("Rex", 'T', new TilePos(20, 30), Species.Rex, new HoldStillController(), Direction.North);
         IActorController human = humanMoves
             ? new ScriptedController(new ActorAction[] { new MoveAction(Direction.North) })
@@ -76,7 +76,7 @@ public class ContactMemoryTests
     [Fact]
     public void Footsteps_BehindIt_AreAnUnknownWithAFuzzyEstimate()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 6 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 6 };
         var rex = sim.AddActor("Rex", 'T', new TilePos(20, 20), Species.Rex, new HoldStillController(), Direction.North);
         var human = sim.AddActor("Pete", 'h', new TilePos(25, 26), Species.Human,
             new ScriptedController(new ActorAction[] { new MoveAction(Direction.East) }));
@@ -97,7 +97,7 @@ public class CreatureBrainTests
 {
     private static (Simulation Sim, Actor Rex, CreatureBrain Brain) RexWithBrain(WorldMap map, TilePos at, Direction facing, int ambient)
     {
-        var sim = new Simulation(map, seed: 7) { AmbientLightPercent = ambient };
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 7) { AmbientLightPercent = ambient };
         var brain = new CreatureBrain(AiProfile.Rex, sim.Rng.Fork("ai:rex"));
         var rex = sim.AddActor("Rex", 'T', at, Species.Rex, brain, facing);
         return (sim, rex, brain);

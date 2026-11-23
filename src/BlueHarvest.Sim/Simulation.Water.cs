@@ -2,6 +2,7 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Sim.Events;
 
 namespace BlueHarvest.Sim;
 
@@ -144,9 +145,9 @@ public sealed partial class Simulation
         int phase = MoonPhaseAt(minute);
         int turn = waters.TideTurn(minute, phase);
         if (turn != 0 && HasSeaInWindow)
-            WaterChanged?.Invoke(turn > 0
+            Emit(new WaterChangedPayload(turn > 0
                 ? new WaterEvent(WaterEventKind.HighTide, -1, "The tide is at its height; it turns and begins to ebb.")
-                : new WaterEvent(WaterEventKind.LowTide, -1, "The tide is out as far as it goes: the flats lie bare."));
+                : new WaterEvent(WaterEventKind.LowTide, -1, "The tide is out as far as it goes: the flats lie bare.")));
 
         bool changed = SetLevels(minute);
         if (changed)
@@ -207,13 +208,13 @@ public sealed partial class Simulation
             _riverBand[river] = band;
             if (quiet || !known || band == wasBand)
                 continue;
-            WaterChanged?.Invoke(band > wasBand
+            Emit(new WaterChangedPayload(band > wasBand
                 ? band == 2
                     ? new WaterEvent(WaterEventKind.RiverInFlood, river, "A river nearby is in flood: brown water over its banks, its fords gone.")
                     : new WaterEvent(WaterEventKind.RiverRising, river, "A river nearby is rising after the rain: its fords run deeper.")
                 : new WaterEvent(WaterEventKind.RiverFalling, river, band == 0
                     ? "A river nearby has fallen back to its usual level."
-                    : "A river nearby is falling, back inside its banks."));
+                    : "A river nearby is falling, back inside its banks.")));
         }
         return changed;
     }
@@ -251,7 +252,7 @@ public sealed partial class Simulation
         if (changed == 0)
             return;
         WaterChanges += changed;
-        WaterMoved?.Invoke();
+        Emit(new WaterMovedPayload());
     }
 
     /// <summary>
@@ -379,7 +380,7 @@ public sealed partial class Simulation
         TilePos to = at.Offset(down);
         Place(actor, to, actor.Facing, onDeck: false);
         EmitNoise(to, SplashLoudness, NoiseKinds.Splashing, actor.Id);
-        Swept?.Invoke(actor, to);
+        Emit(new SweptPayload(actor, to));
         return SweptTicks;
     }
 

@@ -1,6 +1,7 @@
 #nullable enable
 using System.Linq;
 using BlueHarvest.Content;
+using BlueHarvest.Sim;
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.ContentIntegration;
 using Godot;
@@ -16,14 +17,15 @@ namespace BlueHarvest.Game.ContentIntegration;
 /// </para>
 /// <para>
 /// The load is in authoring mode for now: recipes, sources and devices name handlers that arrive in P5, so a
-/// runtime load would refuse them. The sim's items come from it (P2b): a successful load installs them in the
-/// item catalog (<see cref="SimContent.LoadForPlay"/>), and nothing can be played without that
-/// (<see cref="RequireItems"/>). P3's WorldSession will own the registry.
+/// runtime load would refuse them. The sim's items come from it (P2b): a successful load builds the item catalog,
+/// and every game is a <see cref="WorldSession"/> made from the registry (<see cref="NewSession"/>, P3a). Nothing can
+/// be played without the items (<see cref="RequireItems"/>).
 /// </para>
 /// </summary>
 public static class GameContent
 {
     private static ContentLoadResult? _result;
+    private static ItemCatalog? _catalog;
 
     /// <summary>The load's result, loading on first use.</summary>
     public static ContentLoadResult Result => _result ??= Load();
@@ -55,7 +57,7 @@ public static class GameContent
                 false => " · DIFFERS from content/packs: rebuild to recopy",
                 null => "",
             };
-            string items = ItemCatalog.IsInstalled ? $" · {ItemCatalog.All.Count} items" : " · items NOT installed: see the Output panel";
+            string items = Catalog is { } catalog ? $" · {catalog.All.Count} items" : " · items NOT ready: see the Output panel";
             return $"Content: {packs} pack{(packs == 1 ? "" : "s")} · {registry.Count} definitions{items} · " +
                 $"{registry.Fingerprint[..19]}…{check}";
         }
@@ -64,29 +66,38 @@ public static class GameContent
     /// <summary>Whether the menu should show the summary as a problem.</summary>
     public static bool Healthy => ItemsReady && MatchesSource != false;
 
-    /// <summary>Whether the items are in the catalog, loading the content first if it hasn't been.</summary>
-    public static bool ItemsReady => Result.Succeeded && ItemCatalog.IsInstalled;
+    /// <summary>The items, from the loaded content (loading it first if it hasn't been), or null if they didn't come with it.</summary>
+    public static ItemCatalog? Catalog => Result.Succeeded ? _catalog : null;
 
-    /// <summary>Loads the content if it hasn't been, and throws, saying why, if the items didn't come with it.</summary>
-    public static void RequireItems()
+    /// <summary>Whether the items are ready, loading the content first if it hasn't been.</summary>
+    public static bool ItemsReady => Catalog is not null;
+
+    /// <summary>Loads the content if it hasn't been, and returns the items; throws, saying why, if they didn't come with it.</summary>
+    public static ItemCatalog RequireItems() => Catalog ?? throw new System.InvalidOperationException(
+        $"The items come from the content packs, and they didn't load ({Summary}). See the Output panel; building the project recopies the packs.");
+
+    /// <summary>A new game's session on the loaded content: make the simulation in it. Throws if the items aren't ready.</summary>
+    public static WorldSession NewSession()
     {
-        if (!ItemsReady)
-            throw new System.InvalidOperationException(
-                $"The items come from the content packs, and they didn't load ({Summary}). See the Output panel; building the project recopies the packs.");
+        RequireItems();
+        return new WorldSession(Result.Registry!);
     }
 
     private static ContentLoadResult Load()
     {
-        ContentLoadResult result;
-        try
+        ContentLoadResult result = SimContent.LoadForPlay(new GodotContentSource());
+        _catalog = null;
+        if (result.Registry is { } loaded)
         {
-            result = SimContent.LoadForPlay(new GodotContentSource());
-        }
-        catch (System.InvalidOperationException e)
-        {
-            // the packs loaded, but their items can't go in the catalog (an item the sim can't use)
-            GD.PushError($"Content: the items couldn't be installed: {e.Message}");
-            result = ContentLoader.LoadFrom(new GodotContentSource(), Options);
+            try
+            {
+                _catalog = ItemCatalog.For(loaded);
+            }
+            catch (System.InvalidOperationException e)
+            {
+                // the packs loaded, but their items can't be used (an item the sim doesn't implement)
+                GD.PushError($"Content: the items aren't ready: {e.Message}");
+            }
         }
         foreach (ContentDiagnostic d in result.Diagnostics)
         {

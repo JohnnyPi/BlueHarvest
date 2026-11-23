@@ -15,7 +15,7 @@ public class ExitTests
     [Fact]
     public void ReachingAnExit_EndsTheRunAsAnEscape()
     {
-        var sim = new Simulation(new WorldMap(10, 3), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(10, 3), seed: 1);
         var exit = sim.AddExit(new TilePos(5, 1), "floor hatch");
         var player = new PlayerController();
         var you = sim.AddActor("You", '@', new TilePos(3, 1), Species.Human, player);
@@ -39,7 +39,7 @@ public class ExitTests
     [Fact]
     public void Escapees_AreGone_FromTurnsAndFromSight()
     {
-        var sim = new Simulation(new WorldMap(10, 3), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(10, 3), seed: 1);
         sim.AddExit(new TilePos(5, 1), "culvert");
         var pete = sim.AddActor("Pete", 'h', new TilePos(4, 1), Species.Human,
             new ScriptedController(new ActorAction[] { new MoveAction(Direction.East) }));
@@ -55,7 +55,7 @@ public class ExitTests
     [Fact]
     public void TheRex_CantUseAnExit()
     {
-        var sim = new Simulation(new WorldMap(20, 24), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 24), seed: 1);
         sim.AddExit(new TilePos(10, 11), "floor hatch");
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 12), Species.Rex,
             new ScriptedController(new ActorAction[] { new MoveAction(Direction.North) }), Direction.North);
@@ -73,9 +73,9 @@ public class ExitTests
             "bhmap 2\nsize 3 1\nheights\n0 0 0\ncover\n.w.\nmarkers\n" +
             "player 0 0\nexit 2 0 floor hatch\nsparks 1 0\nend\n";
 
-        var data = MapFile.Parse(text);
+        var data = MapFile.Parse(text, TestContent.Catalog);
         string written = MapFile.Serialize(data);
-        var sim = ScenarioBuilder.Build(data, seed: 1);
+        var sim = ScenarioBuilder.Build(TestContent.NewSession(), data, seed: 1);
 
         Assert.Contains("exit 2 0 floor hatch\n", written);
         Assert.Contains("sparks 1 0\n", written);
@@ -96,7 +96,7 @@ public class SaggingFenceTests
         map.Cover[new TilePos(9, 17)] = CoverType.WeakFence;
         map.Cover[new TilePos(10, 17)] = CoverType.WeakFence;
         map.Cover[new TilePos(11, 17)] = CoverType.Fence;
-        var sim = new Simulation(map, seed: 1) { AmbientLightPercent = 6 };
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1) { AmbientLightPercent = 6 };
         var sparks = sim.AddSparks(new TilePos(10, 17));
         var died = new List<SparkingFence>();
         sim.SparksDied += died.Add;
@@ -125,7 +125,7 @@ public class SaggingFenceTests
     {
         var map = new WorldMap(10, 10);
         map.Cover[new TilePos(5, 5)] = CoverType.WeakFence;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         sim.AddSparks(new TilePos(5, 5));
         sim.AddActor("Pete", 'h', new TilePos(1, 1), Species.Human, new HoldStillController());
 
@@ -137,7 +137,7 @@ public class SaggingFenceTests
     [Fact]
     public void Sparks_NeedASaggingFence()
     {
-        var sim = new Simulation(new WorldMap(4, 4), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(4, 4), seed: 1);
         Assert.Throws<ArgumentException>(() => sim.AddSparks(new TilePos(1, 1)));
     }
 }
@@ -157,7 +157,7 @@ public class TestbedEscapeTests
     [Fact]
     public void TheTestbed_HasItsThreeExitsAndSparks()
     {
-        var sim = ScenarioBuilder.Build(MapFile.Parse(Text), seed: 1);
+        var sim = ScenarioBuilder.Build(TestContent.NewSession(), MapFile.Parse(Text, TestContent.Catalog), seed: 1);
         Assert.Equal(new[] { EscapePlans.JungleExit, EscapePlans.BuildingExit, EscapePlans.CulvertExit }.OrderBy(n => n),
             sim.Exits.Select(e => e.Name).OrderBy(n => n));
         Assert.NotEmpty(sim.Sparks);
@@ -170,7 +170,7 @@ public class TestbedEscapeTests
     [InlineData(EscapePlans.CulvertExit)]
     public void EveryExit_IsOutOfTheRexsReach(string exitName)
     {
-        var sim = ScenarioBuilder.Build(MapFile.Parse(Text), seed: 1);
+        var sim = ScenarioBuilder.Build(TestContent.NewSession(), MapFile.Parse(Text, TestContent.Catalog), seed: 1);
         var exit = sim.Exits.Single(e => e.Name == exitName);
         var rex = sim.Actors.Single(a => a.Species == Species.Rex);
         var someone = sim.AddActor("Someone", 'h', exit.Position, Species.Human, new HoldStillController());
@@ -183,7 +183,7 @@ public class TestbedEscapeTests
     [Fact]
     public void TheRex_BreaksThroughTheSaggingFence_RightAway()
     {
-        var run = BatchRunner.RunOnce(Text, EscapePlan.StayInVehicle, withNpcs: true, seed: 1, maxTicks: Ticks.FromSeconds(30));
+        var run = BatchRunner.RunOnce(TestContent.Registry, Text, EscapePlan.StayInVehicle, withNpcs: true, seed: 1, maxTicks: Ticks.FromSeconds(30));
 
         Assert.NotNull(run.BreachTick);
         Assert.InRange(run.BreachTick!.Value, 0, Ticks.FromSeconds(20));
@@ -196,7 +196,7 @@ public class TestbedEscapeTests
     [InlineData(EscapePlan.FlareThenJungle, EscapePlans.JungleExit)]
     public void WithNoRex_EachRunningPlan_ReachesItsExit(EscapePlan plan, string exitName)
     {
-        var run = BatchRunner.RunOnce(TextWithoutRex, plan, withNpcs: false, seed: 1, maxTicks: Ticks.FromSeconds(180));
+        var run = BatchRunner.RunOnce(TestContent.Registry, TextWithoutRex, plan, withNpcs: false, seed: 1, maxTicks: Ticks.FromSeconds(180));
 
         Assert.Equal(RunOutcome.Escaped, run.Outcome);
         Assert.Equal(exitName, run.Exit);
@@ -206,7 +206,7 @@ public class TestbedEscapeTests
     public void WithNoRex_TheTowerPlan_EndsUpOnTheDeck()
     {
         var bot = new EscapeBot(EscapePlan.ClimbWatchtower);
-        var sim = ScenarioBuilder.Build(MapFile.Parse(TextWithoutRex), seed: 1, bot);
+        var sim = ScenarioBuilder.Build(TestContent.NewSession(), MapFile.Parse(TextWithoutRex, TestContent.Catalog), seed: 1, bot);
         var player = sim.Actors.Single(a => a.Controller == bot);
 
         sim.RunUntil(Ticks.FromSeconds(120));
@@ -217,7 +217,7 @@ public class TestbedEscapeTests
     [Fact]
     public void TheRappelPoint_IsTheLedgeAboveTheCulvert()
     {
-        var sim = ScenarioBuilder.Build(MapFile.Parse(Text), seed: 1);
+        var sim = ScenarioBuilder.Build(TestContent.NewSession(), MapFile.Parse(Text, TestContent.Catalog), seed: 1);
         var culvert = sim.Exits.Single(e => e.Name == EscapePlans.CulvertExit);
 
         var point = EscapeBot.RappelPoint(sim, culvert.Position);

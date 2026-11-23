@@ -155,7 +155,7 @@ public class PerceptionTests
     /// <summary>A human the test drives, and an east-facing Rex that only waits, its eyes 10 tiles away.</summary>
     private static (Simulation Sim, PlayerController Player, Actor Human, Actor Rex) Standoff(int ambient)
     {
-        var sim = new Simulation(new WorldMap(30, 5), seed: 1) { AmbientLightPercent = ambient };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(30, 5), seed: 1) { AmbientLightPercent = ambient };
         var player = new PlayerController();
         var human = sim.AddActor("You", '@', new TilePos(17, 2), Species.Human, player);
         var rex = sim.AddActor("Rex", 'T', new TilePos(3, 2), Species.Rex,
@@ -204,7 +204,7 @@ public class PerceptionTests
     [Fact]
     public void Rex_CantSeeBehindItself()
     {
-        var sim = new Simulation(new WorldMap(30, 5), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(30, 5), seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(15, 2), Species.Rex, new PlayerController(), facing: Direction.East);
         Assert.Equal(new TilePos(19, 2), sim.EyeTile(rex)); // it looks from its head
         Assert.Equal(0, PerceptionSystem.SightScore(sim, rex, new TilePos(5, 2), 17, moving: true));
@@ -217,7 +217,7 @@ public class PerceptionTests
         var map = new WorldMap(20, 3);
         for (int x = 14; x <= 17; x++)
             map.Cover[new TilePos(x, 1)] = CoverType.DenseJungle;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(3, 1), Species.Rex, new PlayerController(), facing: Direction.East);
         // Its eyes are at (7,1): the jungle starts 7 tiles ahead.
 
@@ -232,13 +232,13 @@ public class PerceptionTests
     [Fact]
     public void Walls_MuffleNoise()
     {
-        var open = new Simulation(new WorldMap(12, 1), seed: 1);
+        var open = new Simulation(TestContent.NewSession(), new WorldMap(12, 1), seed: 1);
         var listener = open.AddActor("Listener", '@', new TilePos(0, 0), Species.Human, new PlayerController());
         Assert.Equal(8, PerceptionSystem.HearingLevel(open, listener, new TilePos(10, 0), 18));
 
         var walled = new WorldMap(12, 1);
         walled.Cover[new TilePos(5, 0)] = CoverType.Wall;
-        var sim = new Simulation(walled, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), walled, seed: 1);
         var behindWall = sim.AddActor("Listener", '@', new TilePos(0, 0), Species.Human, new PlayerController());
         Assert.Equal(2, PerceptionSystem.HearingLevel(sim, behindWall, new TilePos(10, 0), 18));
     }

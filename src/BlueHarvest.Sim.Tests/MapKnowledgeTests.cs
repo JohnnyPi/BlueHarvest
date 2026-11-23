@@ -365,7 +365,7 @@ public class MapKnowledgeTests
         Assert.Equal('s', control.Gate); // the walk goes out of the gate, away from the buildings
         double gateY = control.Y + control.R;
         var window = new IslandWindow(world, TestIslands.Chunker("Default"), control.X, gateY + 175, 9);
-        var sim = new Simulation(window.Map, seed: 5);
+        var sim = new Simulation(TestContent.NewSession(), window.Map, seed: 5);
         sim.SetTimeOfDay(hour);
         sim.UseRooms(RoomIndex.Build(world));
         var drive = new PlayerController();

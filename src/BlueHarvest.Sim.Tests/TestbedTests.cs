@@ -21,7 +21,7 @@ public class TestbedTests
     [Fact]
     public void Parses_WithOnePlayerAndOneRex()
     {
-        var data = MapFile.Parse(Text);
+        var data = MapFile.Parse(Text, TestContent.Catalog);
         Assert.Single(data.Markers, m => m.Kind == MarkerKind.Player);
         Assert.Single(data.Markers, m => m.Kind == MarkerKind.Rex);
     }
@@ -29,7 +29,7 @@ public class TestbedTests
     [Fact]
     public void ActorsStartOnPassableTiles()
     {
-        var data = MapFile.Parse(Text);
+        var data = MapFile.Parse(Text, TestContent.Catalog);
         // Lights can sit anywhere, and sparks belong on a fence.
         foreach (var marker in data.Markers.Where(m => m.Kind is not (MarkerKind.Light or MarkerKind.Sparks)))
         {
@@ -42,9 +42,9 @@ public class TestbedTests
     public void IsVersion3_AndItsItemsAreCoreContent()
     {
         Assert.StartsWith($"bhmap {MapFile.FormatVersion}", Text);
-        var data = MapFile.Parse(Text);
+        var data = MapFile.Parse(Text, TestContent.Catalog);
         Assert.Equal(11, data.Markers.Count(m => m.Kind == MarkerKind.Item));
-        var sim = ScenarioBuilder.Build(data, seed: 1);
+        var sim = ScenarioBuilder.Build(TestContent.NewSession(), data, seed: 1);
         var lying = sim.ItemsOnMap().Select(l => l.Lying.Item).SelectMany(i => i.SelfAndNested()).ToList();
         Assert.NotEmpty(lying);
         Assert.All(lying, i => Assert.Equal("core", i.Kind.Namespace));
@@ -54,17 +54,17 @@ public class TestbedTests
     [Fact]
     public void RoundTripsThroughSerializer()
     {
-        string once = MapFile.Serialize(MapFile.Parse(Text));
-        string twice = MapFile.Serialize(MapFile.Parse(once));
+        string once = MapFile.Serialize(MapFile.Parse(Text, TestContent.Catalog));
+        string twice = MapFile.Serialize(MapFile.Parse(once, TestContent.Catalog));
         Assert.Equal(once, twice);
     }
 
     [Fact]
     public void RunsDeterministically()
     {
-        var data = MapFile.Parse(Text);
-        var a = ScenarioBuilder.Build(data, seed: 42);
-        var b = ScenarioBuilder.Build(MapFile.Parse(Text), seed: 42);
+        var data = MapFile.Parse(Text, TestContent.Catalog);
+        var a = ScenarioBuilder.Build(TestContent.NewSession(), data, seed: 42);
+        var b = ScenarioBuilder.Build(TestContent.NewSession(), MapFile.Parse(Text, TestContent.Catalog), seed: 42);
         a.RunUntil(Ticks.FromSeconds(120));
         b.RunUntil(Ticks.FromSeconds(120));
         Assert.Equal(a.ComputeStateHash(), b.ComputeStateHash());
@@ -74,7 +74,7 @@ public class TestbedTests
     public void PlayerMarker_GetsThePlayerController()
     {
         var player = new PlayerController();
-        var sim = ScenarioBuilder.Build(MapFile.Parse(Text), seed: 1, player);
+        var sim = ScenarioBuilder.Build(TestContent.NewSession(), MapFile.Parse(Text, TestContent.Catalog), seed: 1, player);
         Assert.Single(sim.Actors, a => a.Controller == player);
         Assert.Equal(StepResult.AwaitingInput, sim.RunUntilInputNeeded());
     }
@@ -82,7 +82,7 @@ public class TestbedTests
     [Fact]
     public void RexAndNpcsGetBrains()
     {
-        var sim = ScenarioBuilder.Build(MapFile.Parse(Text), seed: 1, new PlayerController());
+        var sim = ScenarioBuilder.Build(TestContent.NewSession(), MapFile.Parse(Text, TestContent.Catalog), seed: 1, new PlayerController());
         Assert.IsType<CreatureBrain>(Assert.Single(sim.Actors, a => a.Species == Species.Rex).Controller);
         Assert.All(sim.Actors.Where(a => a.Glyph == 'h'), a => Assert.IsType<HumanBrain>(a.Controller));
     }
@@ -90,8 +90,8 @@ public class TestbedTests
     [Fact]
     public void LightsAndAmbient_ComeFromTheFile()
     {
-        var data = MapFile.Parse(Text);
-        var sim = ScenarioBuilder.Build(data, seed: 1);
+        var data = MapFile.Parse(Text, TestContent.Catalog);
+        var sim = ScenarioBuilder.Build(TestContent.NewSession(), data, seed: 1);
         // Sparks bring a flickering light of their own.
         int lightMarkers = data.Markers.Count(m => m.Kind is MarkerKind.Light or MarkerKind.Headlight or MarkerKind.Sparks);
 

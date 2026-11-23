@@ -11,7 +11,7 @@ public class PlayerTurnTests
     public void Step_WaitsForInput_WithoutChangingAnything()
     {
         var player = new PlayerController();
-        var sim = new Simulation(HeightMap.FromRows("000"), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), HeightMap.FromRows("000"), seed: 1);
         var you = sim.AddActor("You", '@', new TilePos(0, 0), Species.Human, player);
 
         Assert.Equal(StepResult.AwaitingInput, sim.Step());
@@ -24,7 +24,7 @@ public class PlayerTurnTests
     public void PendingAction_IsTaken_ThenOthersAct_UntilPlayerIsDueAgain()
     {
         var player = new PlayerController();
-        var sim = new Simulation(HeightMap.FromRows("00000", "00000"), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), HeightMap.FromRows("00000", "00000"), seed: 1);
         var you = sim.AddActor("You", '@', new TilePos(0, 0), Species.Human, player);
         var other = sim.AddActor("Other", 'o', new TilePos(4, 1), Species.Human,
             new ScriptedController(Array.Empty<ActorAction>())); // always waits 100 ticks
@@ -45,7 +45,7 @@ public class PlayerTurnTests
     public void BlockedClimb_RaisesEventWithReason()
     {
         var player = new PlayerController();
-        var sim = new Simulation(HeightMap.FromRows("05"), seed: 1); // 2.5 m: past the 2 m people can climb
+        var sim = new Simulation(TestContent.NewSession(), HeightMap.FromRows("05"), seed: 1); // 2.5 m: past the 2 m people can climb
         var you = sim.AddActor("You", '@', new TilePos(0, 0), Species.Human, player);
         string? reason = null;
         sim.MoveBlocked += (_, r) => reason = r;
@@ -60,7 +60,7 @@ public class PlayerTurnTests
     [Fact]
     public void DropPastSafeLimit_IsBlocked()
     {
-        var sim = new Simulation(HeightMap.FromRows("50"), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), HeightMap.FromRows("50"), seed: 1);
         var you = sim.AddActor("You", '@', new TilePos(0, 0), Species.Human, new PlayerController());
         Assert.Equal("too far to drop (2.5 m)", sim.MoveBlockReason(you, Direction.East));
     }
@@ -69,7 +69,7 @@ public class PlayerTurnTests
     public void PlayerHistory_ReplaysIdentically()
     {
         var player = new PlayerController();
-        var live = DemoWorld.Create(5, player);
+        var live = DemoWorld.Create(TestContent.NewSession(), 5, player);
         live.RunUntilInputNeeded();
 
         var inputs = new ActorAction[]
@@ -84,7 +84,7 @@ public class PlayerTurnTests
             live.RunUntilInputNeeded();
         }
 
-        var replay = DemoWorld.Create(5, new ScriptedController(player.History));
+        var replay = DemoWorld.Create(TestContent.NewSession(), 5, new ScriptedController(player.History));
         for (long i = 0; i < live.ActionsResolved; i++)
             replay.Step();
 

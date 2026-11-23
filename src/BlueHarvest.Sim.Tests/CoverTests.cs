@@ -12,7 +12,7 @@ public class CoverTests
         for (int x = 0; x < coverRow.Length; x++)
             map.Cover[new TilePos(x, 0)] = Covers.FromFileChar(coverRow[x])!.Type;
 
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var actor = sim.AddActor("Tester", '@', new TilePos(0, 0), species, new PlayerController());
         return (sim, actor);
     }

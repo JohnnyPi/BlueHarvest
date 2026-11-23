@@ -1,31 +1,22 @@
-using System.Runtime.CompilerServices;
+using BlueHarvest.Content;
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Tests.ContentLibrary;
 
 namespace BlueHarvest.Sim.Tests;
 
 /// <summary>
-/// The sim's items come from content/packs (P2b), so the test assembly installs the repo's packs before any test
-/// runs, as the runner and the game do at startup. If they don't load, nothing is installed: every test that makes
-/// an item then fails with "No item catalog", and RepoPackTests says what's wrong with the packs.
+/// The sim's items come from content/packs (P2b), read through a session (P3a): every test simulation is made in a
+/// session of its own on the repo's packs, as the runner and the game make theirs. If the packs don't load, every
+/// test that makes a session fails saying why (RepoPackTests says it too).
 /// </summary>
 internal static class TestContent
 {
-    /// <summary>Why the packs couldn't be installed, or null.</summary>
-    public static Exception? InstallError { get; private set; }
+    /// <summary>The repo's packs, loaded once.</summary>
+    public static ContentRegistry Registry => RepoContent.Registry;
 
-#pragma warning disable CA2255 // a test assembly is the application here: the hook runs before any test
-    [ModuleInitializer]
-    internal static void InstallItems()
-    {
-        try
-        {
-            ItemCatalog.Install(RepoContent.Registry);
-        }
-        catch (Exception e)
-        {
-            InstallError = e;
-        }
-    }
-#pragma warning restore CA2255
+    /// <summary>The repo packs' items: the same catalog every test session uses.</summary>
+    public static ItemCatalog Catalog => ItemCatalog.For(Registry);
+
+    /// <summary>A new session on the repo's packs, for one simulation.</summary>
+    public static WorldSession NewSession() => new(Registry);
 }

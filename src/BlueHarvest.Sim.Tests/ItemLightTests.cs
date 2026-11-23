@@ -10,7 +10,7 @@ public class ItemLightTests
 {
     private static (Simulation Sim, PlayerController Drive, Actor You) Person()
     {
-        var sim = new Simulation(new WorldMap(30, 12), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(30, 12), seed: 1);
         sim.SetWeather(WeatherSettings.Clear);
         var drive = new PlayerController();
         var you = sim.AddActor("You", '@', new TilePos(5, 5), Species.Human, drive, Direction.East);

@@ -18,6 +18,16 @@ public sealed class ItemLedger
     private readonly SortedDictionary<int, WorldItem> _byId = new();
     private int _lastId;
 
+    /// <summary>A ledger making items from this catalog (its session's: <see cref="Simulation.Catalog"/>).</summary>
+    public ItemLedger(ItemCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        Catalog = catalog;
+    }
+
+    /// <summary>Where the ledger's kinds of item come from.</summary>
+    public ItemCatalog Catalog { get; }
+
     /// <summary>How many items have been made so far (lying, carried or anywhere).</summary>
     public int Made => _lastId;
 
@@ -35,14 +45,14 @@ public sealed class ItemLedger
     /// </summary>
     public Item Create(ContentId kind, int? amount = null, string? tag = null, int level = 0, bool fitted = true)
     {
-        var def = ItemCatalog.Of(kind);
+        var def = Catalog.Of(kind);
         int fill = Math.Clamp(amount ?? (def.Stacks ? 1 : def.StartAmount), def.Stacks ? 1 : 0, def.MaxAmount);
         var item = new Item(++_lastId, def, fill) { Tag = tag, Level = level };
         if (fitted && def.Comes is { } comes)
         {
             foreach (var (inner, count) in comes)
             {
-                var innerDef = ItemCatalog.Of(inner);
+                var innerDef = Catalog.Of(inner);
                 for (int i = 0; i < (innerDef.Stacks ? 1 : count); i++)
                     item.Insert(Create(inner, innerDef.Stacks ? count : null));
             }

@@ -17,7 +17,7 @@ public enum MarkerKind : byte
     /// <summary>
     /// Items lying on a tile; the name is an item spec with qualified content IDs
     /// ("core:locker locked; &gt;core:flashlight; &gt;core:energy-bar x3"), one marker for everything on the tile
-    /// (see ItemCatalog.ParseSpec).
+    /// (see ItemCatalog.ParseSpec; checked when the map is read with a session's catalog).
     /// </summary>
     Item,
 }
@@ -86,7 +86,12 @@ public static class MapFile
 
     private static readonly string[] Sections = { "roofs", "decks", "ladders", "doors", "vehicles", "markers" };
 
-    public static MapData Parse(string text)
+    /// <summary>
+    /// Reads a map. Item markers are checked against <paramref name="items"/> when it's given (a session's catalog: the
+    /// map editor, the tests); without it they're only checked for being there, and an unknown item is found when the
+    /// map is built into a simulation (ScenarioBuilder).
+    /// </summary>
+    public static MapData Parse(string text, BlueHarvest.Sim.Actors.ItemCatalog? items = null)
     {
         var lines = text.Replace("\r", "").Split('\n');
         int i = 0;
@@ -287,7 +292,7 @@ public static class MapFile
                         $"Change the header to 'bhmap {FormatVersion}' and qualify each item ID ('locker' becomes 'core:locker').");
                 try
                 {
-                    if (string.IsNullOrWhiteSpace(name) || BlueHarvest.Sim.Actors.ItemCatalog.ParseSpec(name).Count == 0)
+                    if (string.IsNullOrWhiteSpace(name) || items?.ParseSpec(name).Count == 0)
                         throw new FormatException("no items listed");
                 }
                 catch (FormatException e)

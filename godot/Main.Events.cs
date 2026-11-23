@@ -234,7 +234,7 @@ public partial class Main
     private void OnItemThrown(Actor actor, ContentId item, TilePos landed)
     {
         if (actor == _playerActor)
-            Say(ItemCatalog.Find(item)?.Has(ItemHandlers.GlowStick) == true
+            Say(_sim.Catalog.Find(item)?.Has(ItemHandlers.GlowStick) == true
                 ? "The glow stick tumbles away and lies glowing softly where it lands."
                 : $"The flare lands at {landed}, hissing and spitting red light.");
     }

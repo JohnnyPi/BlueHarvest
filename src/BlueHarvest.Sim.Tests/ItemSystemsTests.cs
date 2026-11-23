@@ -139,7 +139,7 @@ public class ItemSystemsTests
     private static (Simulation Sim, Compound C, PlayerController Drive, Actor You) AtTheCompound(TilePos at)
     {
         var c = new Compound();
-        var sim = new Simulation(new WorldMap(40, 40), seed: 2);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 2);
         sim.SetTimeOfDay(12);
         sim.UsePower(c.Grid, 0, 0);
         var drive = new PlayerController();
@@ -192,7 +192,7 @@ public class ItemSystemsTests
         map.Structures.SetDoor(door, DoorState.Closed);
         c.Grid.AddDoor(c.Site.Id, door.X, door.Y, DoorKind.SecurityLock, "Server hall", level);
         c.Grid.Settle(100, (_, _) => WeatherSettings.Clear);
-        var sim = new Simulation(map, seed: 2);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 2);
         sim.SetTimeOfDay(12);
         sim.UsePower(c.Grid, 0, 0);
         var drive = new PlayerController();
@@ -241,7 +241,7 @@ public class ItemSystemsTests
         var to = c.Grid.AddDevice(new Transport(c.Grid.NextDeviceId, c.Site.Id, "the elevator", new Footprint(30, 30, 36, 36),
             TransportKind.Monorail, "Underground monorail", "Station B", alongM: 600, shaftM: 10));
         c.Grid.Settle(100, (_, _) => WeatherSettings.Clear);
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1);
         sim.SetTimeOfDay(12);
         sim.UsePower(c.Grid, 0, 0);
         var results = new List<PowerResult>();
@@ -265,7 +265,7 @@ public class ItemSystemsTests
                 for (int x = 0; x < 20; x++)
                     if (!floorBut.Contains(new TilePos(x, y)))
                         map.Cover[new TilePos(x, y)] = CoverType.Floor;
-        var sim = new Simulation(map, seed: 3);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 3);
         sim.SetWeather(WeatherSettings.Clear);
         var drive = new PlayerController();
         var you = sim.AddActor("You", '@', new TilePos(5, 5), Species.Human, drive, Direction.East);

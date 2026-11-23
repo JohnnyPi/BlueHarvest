@@ -16,7 +16,7 @@ public class DoorTests
         var map = new WorldMap(4, 1);
         map.Cover[new TilePos(1, 0)] = CoverType.Door;
         map.Structures.SetDoor(new TilePos(1, 0), state);
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var drive = new PlayerController();
         var human = sim.AddActor("You", '@', new TilePos(0, 0), Species.Human, drive);
         sim.RunUntilInputNeeded();
@@ -73,7 +73,7 @@ public class DoorTests
             map.Cover[new TilePos(x, 4)] = CoverType.Wall;
         map.Cover[new TilePos(4, 4)] = CoverType.Door;
         map.Structures.SetDoor(new TilePos(4, 4), DoorState.Closed);
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(4, 6), Species.Rex, new PlayerController(), Direction.North);
 
         Assert.Equal("a wall is in the way", sim.MoveBlockReason(rex, Direction.North));
@@ -111,7 +111,7 @@ public class ReachTests
         for (int y = 12; y < 20; y++)
             for (int x = 0; x < 20; x++)
                 map.Heights[new TilePos(x, y)] = (short)ledgeDm;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 8), Species.Rex, new PlayerController(), Direction.South);
 
         Assert.Equal(reachable, sim.BiteZone(rex).Contains(new TilePos(10, 13)));
@@ -124,7 +124,7 @@ public class ReachTests
         for (int y = 0; y < 8; y++)
             for (int x = 0; x < 40; x++)
                 map.Heights[new TilePos(x, y)] = 80; // an 8 m ledge along the top
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var brain = new CreatureBrain(AiProfile.Rex, sim.Rng.Fork("ai:rex"));
         var rex = sim.AddActor("Rex", 'T', new TilePos(20, 25), Species.Rex, brain, Direction.North);
         var human = sim.AddActor("You", '@', new TilePos(20, 6), Species.Human, new HoldStillController());
@@ -149,7 +149,7 @@ public class VehicleTests
         foreach (var (x, y) in new[] { (1, 1), (2, 1), (1, 2), (2, 2), (8, 1), (9, 1) })
             map.Cover[new TilePos(x, y)] = CoverType.Vehicle;
 
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
 
         Assert.Equal(2, sim.Vehicles.Count);
         Assert.Equal("vehicle 1", sim.Vehicles[0].Name);
@@ -168,7 +168,7 @@ public class VehicleTests
             map.Cover[new TilePos(x, 13)] = CoverType.Vehicle;
             map.Cover[new TilePos(x, 14)] = CoverType.Vehicle;
         }
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var drive = new PlayerController();
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 10), Species.Rex, drive, Direction.South);
         var pete = sim.AddActor("Pete", 'h', new TilePos(10, 14), Species.Human, new HoldStillController());
@@ -204,7 +204,7 @@ public class VehicleTests
         var map = new WorldMap(20, 20);
         for (int x = 8; x <= 12; x++)
             map.Cover[new TilePos(x, 10)] = CoverType.Vehicle;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         sim.AddLight(LightSource.Headlight(new TilePos(12, 10), Direction.East));
         var drive = new PlayerController();
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 12), Species.Rex, drive, Direction.North);

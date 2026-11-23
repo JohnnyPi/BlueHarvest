@@ -178,7 +178,7 @@ public class SimulationWindowTests
         const string island = "SmallNoCliffs";
         Site gen = TestIslands.Works(island).Sites.First(t => t.Kind == "genetics");
         var window = new IslandWindow(TestIslands.World(island), TestIslands.Chunker(island), gen.X, gen.Y, 4);
-        var sim = new Simulation(window.Map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), window.Map, seed: 1);
         // start the player near the window's west edge
         TilePos start = window.NearestStandable(new TilePos(30, 128));
         Assert.True(window.NearEdge(start));

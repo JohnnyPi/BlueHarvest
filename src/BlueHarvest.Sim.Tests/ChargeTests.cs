@@ -13,7 +13,7 @@ public class ChargeTests
 {
     private static Actor RexDoing(ActorAction action, out Simulation sim)
     {
-        sim = new Simulation(new WorldMap(30, 40), seed: 1);
+        sim = new Simulation(TestContent.NewSession(), new WorldMap(30, 40), seed: 1);
         return sim.AddActor("Rex", 'T', new TilePos(15, 15), Species.Rex,
             new ScriptedController(new[] { action }), Direction.South);
     }
@@ -55,7 +55,7 @@ public class ChargeTests
             for (int x = 0; x < 30; x++)
                 map.Cover[new TilePos(x, y)] = CoverType.SparseJungle;
         }
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(15, 15), Species.Rex,
             new ScriptedController(new[] { new MoveAction(Direction.South, Sprint: true) }), Direction.South);
 
@@ -69,7 +69,7 @@ public class ChargeTests
     public void TheBrain_ChargesPreyItCanSee()
     {
         // Daylight; a person pacing 22 tiles ahead of the Rex is plainly seen.
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1);
         var pacing = Enumerable.Range(0, 20)
             .Select(i => (ActorAction)new MoveAction(i % 2 == 0 ? Direction.East : Direction.West)).ToList();
         sim.AddActor("Pete", 'h', new TilePos(20, 8), Species.Human, new ScriptedController(pacing));
@@ -87,7 +87,7 @@ public class ChargeTests
     [Fact]
     public void TheBrain_DoesntChargeALight()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 6 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 6 };
         sim.AddLight(new LightSource(new TilePos(20, 14), HeightDm: 10, RadiusTiles: 4, IntensityPercent: 90));
         var brain = new CreatureBrain(AiProfile.Rex, sim.Rng.Fork("ai:rex"));
         var rex = sim.AddActor("Rex", 'T', new TilePos(20, 30), Species.Rex, brain, Direction.North);
@@ -106,7 +106,7 @@ public class BotStartTests
     [Fact]
     public void WithNoBreach_TheBotWaits_ThenSetsOffAnyway()
     {
-        var sim = new Simulation(new WorldMap(40, 30), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 30), seed: 1);
         sim.AddExit(new TilePos(35, 5), EscapePlans.JungleExit);
         sim.AddActor("Rex", 'T', new TilePos(30, 20), Species.Rex, new HoldStillController(), Direction.South);
         var bot = new EscapeBot(EscapePlan.RunToJungle);
@@ -128,7 +128,7 @@ public class BotStartTests
         // The Rex bites through a sagging fence on its first turn (tick 0).
         var map = new WorldMap(20, 24);
         map.Cover[new TilePos(10, 17)] = CoverType.WeakFence;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         sim.AddExit(new TilePos(2, 23), EscapePlans.JungleExit);
         sim.AddActor("Rex", 'T', new TilePos(10, 12), Species.Rex,
             new ScriptedController(new[] { new BiteAction(Investigative: true) }), Direction.South);
@@ -172,8 +172,8 @@ public class BatchRepeatTests
     public void TheSameSeed_PlaysTheSameRun()
     {
         string text = Text;
-        var first = BatchRunner.RunOnce(text, EscapePlan.RunToJungle, withNpcs: true, seed: 3, maxTicks: Ticks.FromSeconds(40));
-        var second = BatchRunner.RunOnce(text, EscapePlan.RunToJungle, withNpcs: true, seed: 3, maxTicks: Ticks.FromSeconds(40));
+        var first = BatchRunner.RunOnce(TestContent.Registry, text, EscapePlan.RunToJungle, withNpcs: true, seed: 3, maxTicks: Ticks.FromSeconds(40));
+        var second = BatchRunner.RunOnce(TestContent.Registry, text, EscapePlan.RunToJungle, withNpcs: true, seed: 3, maxTicks: Ticks.FromSeconds(40));
 
         Assert.Equal(first, second);
         Assert.NotNull(first.StartedTick);

@@ -13,7 +13,7 @@ public class NeedsTests
 
     private static (Simulation Sim, PlayerController Drive, Actor You) Person(NeedsStart? start = null, int width = 40, bool needs = true)
     {
-        var sim = new Simulation(new WorldMap(width, 10), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(width, 10), seed: 1);
         sim.SetWeather(WeatherSettings.Clear); // no thunder to wake anyone
         var drive = new PlayerController();
         var you = sim.AddActor("You", '@', new TilePos(2, 5), Species.Human, drive, Direction.East);
@@ -240,7 +240,7 @@ public class NeedsTests
     [Fact]
     public void TheDayStarts_AwakeSinceSeven()
     {
-        var sim = new Simulation(new WorldMap(10, 10), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(10, 10), seed: 1);
         sim.SetTimeOfDay(13);
         var you = sim.AddActor("You", '@', new TilePos(2, 5), Species.Human, new PlayerController(), Direction.East);
         sim.UseNeeds(you);

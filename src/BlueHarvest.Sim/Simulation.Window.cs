@@ -1,5 +1,6 @@
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Sim.Events;
 
 namespace BlueHarvest.Sim;
 
@@ -148,7 +149,7 @@ public sealed partial class Simulation
         }
 
         WindowShifts++;
-        WindowShifted?.Invoke(dx, dy);
+        Emit(new WindowShiftedPayload(dx, dy));
     }
 
     /// <summary>

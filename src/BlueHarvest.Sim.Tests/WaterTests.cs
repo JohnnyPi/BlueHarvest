@@ -176,7 +176,7 @@ public class WaterSimulationTests
     [Fact]
     public void TheTide_CoversAndUncoversTheBeach_AsTheSeaRisesAndFalls()
     {
-        var sim = new Simulation(Beach(), seed: 3);
+        var sim = new Simulation(TestContent.NewSession(), Beach(), seed: 3);
         var events = new List<WaterEvent>();
         sim.WaterChanged += events.Add;
         sim.UseWater(new WaterLevels(11, Direction.NorthWest, []));
@@ -216,7 +216,7 @@ public class WaterSimulationTests
     [Fact]
     public void TheRecentHighWater_IsTheHighestTheSeaStoodInTheLastHalfTide()
     {
-        var sim = new Simulation(Beach(), seed: 3);
+        var sim = new Simulation(TestContent.NewSession(), Beach(), seed: 3);
         sim.UseWater(new WaterLevels(11, Direction.NorthWest, []));
         var seen = new List<int>();
         bool clearAbove = false;
@@ -235,7 +235,7 @@ public class WaterSimulationTests
                 clearAbove = true;
         }
         Assert.True(clearAbove, "the high-water mark never stood above an ebbing sea");
-        Assert.Equal(0, new Simulation(Beach(), seed: 3).RecentHighWaterDm); // no tides: the sea now
+        Assert.Equal(0, new Simulation(TestContent.NewSession(), Beach(), seed: 3).RecentHighWaterDm); // no tides: the sea now
     }
 
     [Fact]
@@ -244,7 +244,7 @@ public class WaterSimulationTests
         WorldMap map = Beach();
         var wreck = new TilePos(4, 12);
         map.Cover[wreck] = CoverType.Rubble;
-        var sim = new Simulation(map, seed: 3);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 3);
         sim.UseWater(new WaterLevels(11, Direction.NorthWest, []));
         sim.RunUntil(14 * WorldClock.TicksPerGameHour);
         Assert.Equal(CoverType.Rubble, sim.Cover[wreck]);
@@ -269,7 +269,7 @@ public class WaterSimulationTests
                     map.Flow[p] = new WaterFlow((sbyte)flowDm, 0);
             }
         }
-        var sim = new Simulation(map, seed: 4);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 4);
         var events = new List<WaterEvent>();
         sim.WaterChanged += events.Add;
         sim.FollowWeather(new Rain(rain), 0, 0);
@@ -352,7 +352,7 @@ public class WaterSimulationTests
     {
         var map = new WorldMap(10, 10);
         map.Cover[new TilePos(2, 2)] = CoverType.ShallowWater;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         sim.UseWater(new WaterLevels(1, Direction.NorthWest, []));
         sim.RunUntil(8 * WorldClock.TicksPerGameHour);
         Assert.Equal(CoverType.ShallowWater, sim.Cover[new TilePos(2, 2)]);
@@ -448,7 +448,7 @@ public class IslandWaterTests
     {
         IslandWorld world = TestIslands.World(Island);
         IslandWindow window = AtTheCoast(world);
-        var sim = new Simulation(window.Map, seed: 2);
+        var sim = new Simulation(TestContent.NewSession(), window.Map, seed: 2);
         int before = window.AllChanges().TileCount;
         sim.UseWater(IslandWaters.For(world, runSeed: 1));
         sim.RunUntil(7 * WorldClock.TicksPerGameHour);

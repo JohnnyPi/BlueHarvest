@@ -4,6 +4,7 @@ using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Content;
 using BlueHarvest.Sim.ContentIntegration;
+using BlueHarvest.Sim.Events;
 
 namespace BlueHarvest.Sim;
 
@@ -228,7 +229,7 @@ public partial class Simulation
         Nourish(actor, (0, NeedRules.DrinkFromWaterMl, 0));
         MaybeCatchGutInfection(actor);
         EmitNoise(at, 4, NoiseKinds.Drinking, actor.Id);
-        DrankWater?.Invoke(actor, at);
+        Emit(new DrankWaterPayload(actor, at));
         return NeedRules.DrinkFromWaterTicks * NeedEffectsOf(actor).HandsPercent / 100;
     }
 
@@ -247,7 +248,7 @@ public partial class Simulation
         item.Amount = item.Def.MaxAmount;
         item.Unsafe = true;
         EmitNoise(at, 4, NoiseKinds.Drinking, actor.Id);
-        WaterFilled?.Invoke(actor, item);
+        Emit(new WaterFilledPayload(actor, item));
         return NeedRules.FillTicks * NeedEffectsOf(actor).HandsPercent / 100;
     }
 

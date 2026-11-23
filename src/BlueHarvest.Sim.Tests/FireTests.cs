@@ -50,7 +50,7 @@ public class FireTests
     [InlineData(CoverType.Fence)]
     public void MetalStoneSandAndWater_NeverBurnOfThemselves(CoverType cover)
     {
-        var sim = new Simulation(Field(cover, 10), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), Field(cover, 10), seed: 1);
         var p = new TilePos(5, 5);
         Assert.Equal(0, sim.BurnableAt(p));
         Assert.False(sim.TryIgnite(p, FireRules.LightningHeat, "a test"));
@@ -61,7 +61,7 @@ public class FireTests
     {
         WorldMap map = Field(CoverType.Track, 10);
         map.Cover[new TilePos(2, 2)] = CoverType.ShallowWater;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         sim.SpillFuel(new TilePos(5, 5));
         sim.SpillFuel(new TilePos(2, 2));
         Assert.Equal(FireRules.FuelBurnable, sim.BurnableAt(new TilePos(5, 5)));
@@ -73,7 +73,7 @@ public class FireTests
     {
         long Burnt(int rain, out bool caughtAtOnce)
         {
-            var sim = new Simulation(Field(CoverType.TallGrass, 20), seed: 3);
+            var sim = new Simulation(TestContent.NewSession(), Field(CoverType.TallGrass, 20), seed: 3);
             sim.SetWeather(new WeatherSettings(RainPercent: rain));
             bool? caught = null;
             sim.Kindled += (_, _, c) => caught = c;
@@ -92,11 +92,11 @@ public class FireTests
     [Fact]
     public void AFlare_WontLightDenseJungle_OrShortGrass_ButFuelOnWetGroundGoesUp()
     {
-        var lawn = new Simulation(Field(CoverType.Grass, 10), seed: 3);
+        var lawn = new Simulation(TestContent.NewSession(), Field(CoverType.Grass, 10), seed: 3);
         for (int i = 0; i < 40; i++)
             Assert.False(lawn.TryIgnite(new TilePos(5, 5), FireRules.FlareHeat, "a test")); // 30 + 50
 
-        var sim = new Simulation(Field(CoverType.DenseJungle, 20), seed: 3);
+        var sim = new Simulation(TestContent.NewSession(), Field(CoverType.DenseJungle, 20), seed: 3);
         var p = new TilePos(10, 10);
         for (int i = 0; i < 40; i++)
             Assert.False(sim.TryIgnite(p, FireRules.FlareHeat, "a test")); // 20 + 50: never enough
@@ -110,7 +110,7 @@ public class FireTests
     [Fact]
     public void Fire_RunsDownwind_AndNotAgainstTheWind()
     {
-        var sim = new Simulation(Field(CoverType.TallGrass), seed: 5);
+        var sim = new Simulation(TestContent.NewSession(), Field(CoverType.TallGrass), seed: 5);
         sim.SetWeather(new WeatherSettings(WindFrom: Direction.West, WindSpeed: 10)); // blowing east
         var start = new TilePos(15, 20);
         LightWithFuel(sim, start);
@@ -139,7 +139,7 @@ public class FireTests
                 map.Cover[new TilePos(x, y)] = CoverType.DenseJungle;
         }
         // grass on the far side of the stream, then the jungle: fire set on both sides
-        var sim = new Simulation(map, seed: 2);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 2);
         LightWithFuel(sim, new TilePos(10, 20));
         LightWithFuel(sim, new TilePos(25, 20));
         sim.RunUntil(Seconds(300));
@@ -159,7 +159,7 @@ public class FireTests
     {
         ulong Burn()
         {
-            var sim = new Simulation(Field(CoverType.Grass), seed: 9);
+            var sim = new Simulation(TestContent.NewSession(), Field(CoverType.Grass), seed: 9);
             sim.SetWeather(new WeatherSettings(WindFrom: Direction.North, WindSpeed: 6));
             LightWithFuel(sim, new TilePos(20, 10));
             sim.RunUntil(Seconds(90));
@@ -171,7 +171,7 @@ public class FireTests
     [Fact]
     public void ABurntOutFire_LeavesAsh_AndSaysSo()
     {
-        var sim = new Simulation(Field(CoverType.Scrub, 12), seed: 4);
+        var sim = new Simulation(TestContent.NewSession(), Field(CoverType.Scrub, 12), seed: 4);
         sim.SetWeather(new WeatherSettings(RainPercent: 30)); // damp enough that it doesn't spread far
         bool outEvent = false;
         sim.FiresOut += () => outEvent = true;
@@ -187,7 +187,7 @@ public class FireTests
     [Fact]
     public void Rain_PutsAFireOut()
     {
-        var sim = new Simulation(Field(CoverType.DenseJungle, 12), seed: 4);
+        var sim = new Simulation(TestContent.NewSession(), Field(CoverType.DenseJungle, 12), seed: 4);
         var p = new TilePos(6, 6);
         LightWithFuel(sim, p);
         sim.SetWeather(new WeatherSettings(RainPercent: 100));
@@ -198,7 +198,7 @@ public class FireTests
     [Fact]
     public void StandingInFire_Burns()
     {
-        var sim = new Simulation(Field(CoverType.TallGrass, 12), seed: 4);
+        var sim = new Simulation(TestContent.NewSession(), Field(CoverType.TallGrass, 12), seed: 4);
         var you = sim.AddActor("You", '@', new TilePos(6, 6), Species.Human, new Once(new WaitAction(1000)));
         var burns = new List<Severity>();
         sim.Burned += (a, s) => { if (a == you) burns.Add(s); };
@@ -211,7 +211,7 @@ public class FireTests
     [Fact]
     public void Fire_MakesSmokeDownwind_ThatHidesWhatsBeyond()
     {
-        var sim = new Simulation(Field(CoverType.TallGrass), seed: 6);
+        var sim = new Simulation(TestContent.NewSession(), Field(CoverType.TallGrass), seed: 6);
         sim.SetWeather(new WeatherSettings(WindFrom: Direction.West, WindSpeed: 10));
         LightWithFuel(sim, new TilePos(10, 20));
         sim.RunUntil(Seconds(4));
@@ -225,7 +225,7 @@ public class FireTests
     [Fact]
     public void Fire_GivesLight()
     {
-        var sim = new Simulation(Field(CoverType.TallGrass, 20), seed: 6) { AmbientLightPercent = 2 };
+        var sim = new Simulation(TestContent.NewSession(), Field(CoverType.TallGrass, 20), seed: 6) { AmbientLightPercent = 2 };
         LightWithFuel(sim, new TilePos(10, 10));
         sim.RunUntil(Seconds(2));
         Assert.Contains(sim.Lights, l => l.On && l.Position == new TilePos(10, 10));
@@ -235,7 +235,7 @@ public class FireTests
     [Fact]
     public void PeopleStepOutOfFire_AndTheRexBacksAway()
     {
-        var sim = new Simulation(Field(CoverType.Grass), seed: 7);
+        var sim = new Simulation(TestContent.NewSession(), Field(CoverType.Grass), seed: 7);
         var you = sim.AddActor("You", '@', new TilePos(10, 10), Species.Human, new Once(new WaitAction(600)));
         LightWithFuel(sim, new TilePos(11, 10));
         Assert.True(sim.FleeFire(you, Simulation.FireFearHuman) is MoveAction { Direction: var away } && away.Delta().Dx < 0);
@@ -255,7 +255,7 @@ public class FireTests
             WorldMap map = Field(CoverType.TallGrass, 20);
             for (int x = 0; x < 20; x++)
                 map.Cover[new TilePos(x, 10)] = CoverType.WeakFence;
-            var sim = new Simulation(map, seed: 8);
+            var sim = new Simulation(TestContent.NewSession(), map, seed: 8);
             sim.SetWeather(new WeatherSettings(RainPercent: rain));
             var started = new List<string>();
             sim.FireStarted += (_, cause) => started.Add(cause);
@@ -273,7 +273,7 @@ public class FireTests
         WorldMap map = Field(CoverType.Grass, 12);
         var post = new TilePos(6, 6);
         map.Cover[post] = CoverType.Support;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         sim.SetWeather(new WeatherSettings(RainPercent: 40)); // the grass round it won't carry it
         LightWithFuel(sim, post);
         sim.RunUntil(Seconds(260));
@@ -287,7 +287,7 @@ public class FireTests
         for (int x = 6; x <= 8; x++)
             for (int y = 6; y <= 7; y++)
                 map.Cover[new TilePos(x, y)] = CoverType.Vehicle;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         Vehicle vehicle = Assert.Single(sim.Vehicles);
         LightWithFuel(sim, new TilePos(6, 6));
         sim.RunUntil(Seconds(10));
@@ -302,7 +302,7 @@ public class FireTests
     public void FuelTanks_HeatedByAFire_GoUp()
     {
         WorldMap map = Field(CoverType.Grass, 20);
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var grid = new PowerGrid(seed: 2);
         PowerSite site = grid.AddSite("depot", "depot", 10, 10, 15, 10);
         FuelStore tanks = grid.AddDevice(new FuelStore(grid.NextDeviceId, site.Id, "the fuel tanks", new Footprint(8, 8, 10, 10), capacityLitres: 4000));

@@ -219,7 +219,7 @@ public class SimulationClockTests
         var phases = new HashSet<int>();
         for (ulong seed = 1; seed <= 12; seed++)
         {
-            var sim = new Simulation(new WorldMap(4, 4), seed);
+            var sim = new Simulation(TestContent.NewSession(), new WorldMap(4, 4), seed);
             sim.SetTimeOfDay(0);
             phases.Add(sim.MoonPhase);
             Assert.InRange(sim.MoonPhase, 0, Sky.MoonCycle - 1);

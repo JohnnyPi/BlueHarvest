@@ -25,7 +25,6 @@ public static class ItemPlan
     {
         public bool Inside { get; } = Spec.StartsWith('>');
 
-        public IReadOnlyList<ItemSpec> Items { get; } = ItemCatalog.ParseSpec(Spec.TrimStart('>'), "core");
 
         public bool Matches(string room, string siteKind) =>
             (Sites is null || Sites.Contains(siteKind))
@@ -265,15 +264,22 @@ public static class ItemPlan
         new(["Chart room"], 40, ">keycard level=3", ["drowned"]),
     ];
 
+    /// <summary>The table's specs read with a session's catalog, once per catalog (row by row, as <see cref="Table"/>).</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ItemCatalog, IReadOnlyList<ItemSpec>[]> Parsed = new();
+
+    private static IReadOnlyList<ItemSpec>[] TableFor(ItemCatalog items) =>
+        Parsed.GetValue(items, catalog => Table.Select(row => catalog.ParseSpec(row.Spec.TrimStart('>'), "core")).ToArray());
+
     /// <summary>A building of this many rooms or more keeps a fire extinguisher by its first room's door, most of the time.</summary>
     private const int ExtinguisherRooms = 4, ExtinguisherPercent = 70;
 
-    /// <summary>The run's loot as a ledger of items lying on the island, ready for Simulation.UseItems.</summary>
-    public static ItemLedger Build(IslandWorld world, ulong runSeed)
+    /// <summary>The run's loot as a ledger of items lying on the island, ready for Simulation.UseItems: pass the simulation's catalog.</summary>
+    public static ItemLedger Build(IslandWorld world, ulong runSeed, ItemCatalog items)
     {
         IslandWorks works = world.Works;
         ulong seed = new StateHasher().Add((ulong)world.Params.Seed).Add("loot").Add(runSeed).Value;
-        var ledger = new ItemLedger();
+        var ledger = new ItemLedger(items);
+        var table = TableFor(items);
         var siteKinds = new Dictionary<string, string>();
         var siteIndex = new Dictionary<string, int>();
         for (int i = 0; i < works.Sites.Count; i++)
@@ -320,7 +326,7 @@ public static class ItemPlan
                     Loot loot = Table[row];
                     if (!loot.Matches(name, kind) || Roll(seed, label, row) >= loot.Percent)
                         continue;
-                    foreach (ItemSpec spec in loot.Items)
+                    foreach (ItemSpec spec in table[row])
                     {
                         foreach (Item item in Make(ledger, spec, site, seed, label, row))
                         {
@@ -371,7 +377,7 @@ public static class ItemPlan
     /// </summary>
     private static IEnumerable<Item> Make(ItemLedger ledger, ItemSpec spec, string site, ulong seed, string label, int row)
     {
-        var def = ItemCatalog.Of(spec.Kind);
+        var def = ledger.Catalog.Of(spec.Kind);
         int copies = def.Stacks ? 1 : spec.Count;
         for (int i = 0; i < copies; i++)
         {

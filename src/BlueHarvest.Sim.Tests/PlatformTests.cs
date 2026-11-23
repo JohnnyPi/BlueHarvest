@@ -33,7 +33,7 @@ public class PlatformTests
                 map.Cover[new TilePos(x, 2)] = CoverType.Wall;
             }
         }
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var drive = new PlayerController();
         var human = sim.AddActor("You", '@', new TilePos(2, 1), Species.Human, drive);
         sim.RunUntilInputNeeded();
@@ -78,7 +78,7 @@ public class PlatformTests
         var map = new WorldMap(10, 10);
         map.Structures.SetDeck(new TilePos(5, 5), 60);
         map.Structures.SetLadder(new TilePos(5, 5), true);
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var drive = new PlayerController();
         var human = sim.AddActor("You", '@', new TilePos(5, 5), Species.Human, drive);
         sim.RunUntilInputNeeded();
@@ -101,7 +101,7 @@ public class PlatformTests
         var map = new WorldMap(20, 20);
         for (int x = 0; x < 20; x++)
             map.Structures.SetDeck(new TilePos(x, 10), deckDm);
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 12), Species.Rex, new PlayerController(), Direction.North);
 
         Assert.Equal(fits ? null : "a platform is in the way", sim.MoveBlockReason(rex, Direction.North));
@@ -116,7 +116,7 @@ public class PlatformTests
         for (int y = 13; y <= 14; y++)
             for (int x = 9; x <= 11; x++)
                 map.Structures.SetDeck(new TilePos(x, y), deckDm);
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var drive = new PlayerController();
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 10), Species.Rex, drive, Direction.South);
         var human = sim.AddActor("Pete", 'h', new TilePos(10, 13), Species.Human, new HoldStillController(), onDeck: true);
@@ -140,7 +140,7 @@ public class PlatformTests
             map.Structures.SetDeck(new TilePos(x, 10), 60);
         map.Cover[new TilePos(8, 10)] = CoverType.Support;
         map.Cover[new TilePos(9, 10)] = CoverType.Support;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var drive = new PlayerController();
         var rex = sim.AddActor("Rex", 'T', new TilePos(8, 12), Species.Rex, drive, Direction.North);
         var pete = sim.AddActor("Pete", 'h', new TilePos(11, 10), Species.Human, new HoldStillController(), onDeck: true);
@@ -178,7 +178,7 @@ public class PlatformTests
             map.Structures.SetDeck(new TilePos(x, 10), 60);
         map.Cover[new TilePos(16, 10)] = CoverType.Support;
         map.Cover[new TilePos(17, 10)] = CoverType.Support;
-        var sim = new Simulation(map, seed: 7);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 7);
         var brain = new CreatureBrain(AiProfile.Rex, sim.Rng.Fork("ai:rex"));
         var rex = sim.AddActor("Rex", 'T', new TilePos(20, 24), Species.Rex, brain, Direction.North);
         var pacing = Enumerable.Range(0, 80)

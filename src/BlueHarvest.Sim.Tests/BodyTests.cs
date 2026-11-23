@@ -9,7 +9,7 @@ public class BodyTests
     /// <summary>A Rex the test drives, on open ground unless the map says otherwise.</summary>
     private static (Simulation Sim, PlayerController Drive, Actor Rex) RexOn(WorldMap map, TilePos at, Direction facing)
     {
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var drive = new PlayerController();
         var rex = sim.AddActor("Rex", 'T', at, Species.Rex, drive, facing);
         sim.RunUntilInputNeeded();
@@ -139,7 +139,7 @@ public class BodyTests
     [Fact]
     public void TurningSweepsTheTail_IntoAnyoneStandingThere()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1);
         var drive = new PlayerController();
         var rex = sim.AddActor("Rex", 'T', new TilePos(15, 15), Species.Rex, drive, Direction.North);
         var human = sim.AddActor("Pete", 'h', new TilePos(13, 21), Species.Human,
@@ -157,7 +157,7 @@ public class BodyTests
     [Fact]
     public void RexCore_OccupiesTiles_HeadAndTailDont()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(15, 15), Species.Rex, new PlayerController(), Direction.North);
         var human = sim.AddActor("You", '@', new TilePos(13, 15), Species.Human, new PlayerController());
 
@@ -171,7 +171,7 @@ public class BodyTests
     [Fact]
     public void LargeBody_MustSpawnInsideTheMap()
     {
-        var sim = new Simulation(new WorldMap(10, 10), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(10, 10), seed: 1);
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             sim.AddActor("Rex", 'T', new TilePos(0, 5), Species.Rex, new PlayerController(), Direction.North));
     }

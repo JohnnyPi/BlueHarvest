@@ -14,7 +14,7 @@ public class HealthTests
     /// <summary>A human the test drives, alone on open ground at (5,5).</summary>
     private static (Simulation Sim, PlayerController Drive, Actor Human) Alone(Loadout? loadout = null)
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 3);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 3);
         var drive = new PlayerController();
         var human = sim.AddActor("You", '@', new TilePos(5, 5), Species.Human, drive, loadout: loadout);
         sim.RunUntilInputNeeded();
@@ -59,7 +59,7 @@ public class HealthTests
     [Fact]
     public void Bleeding_RunsOut_AfterNinetySeconds()
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 3);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 3);
         var human = sim.AddActor("Pete", 'h', new TilePos(5, 5), Species.Human, new HoldStillController());
         sim.Injure(human, BodySection.Torso, Severity.Red, bleeding: true, "test");
         var died = new List<string>();
@@ -106,7 +106,7 @@ public class HealthTests
     [Fact]
     public void YellowWounds_HealWithTime()
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 3);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 3);
         var human = sim.AddActor("Pete", 'h', new TilePos(5, 5), Species.Human, new HoldStillController());
         sim.Injure(human, BodySection.LeftArm, Severity.Yellow, bleeding: false, "test");
 
@@ -147,7 +147,7 @@ public class HealthTests
         var map = new WorldMap(10, 10);
         map.Structures.SetDeck(new TilePos(5, 5), 60);
         map.Structures.SetLadder(new TilePos(5, 5), true);
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var drive = new PlayerController();
         var human = sim.AddActor("You", '@', new TilePos(5, 5), Species.Human, drive);
         sim.RunUntilInputNeeded();
@@ -176,7 +176,7 @@ public class HealthTests
     [Fact]
     public void ARexBite_IsTwoBleedingMajorWounds()
     {
-        var sim = new Simulation(new WorldMap(30, 30), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(30, 30), seed: 1);
         var drive = new PlayerController();
         sim.AddActor("Rex", 'T', new TilePos(10, 10), Species.Rex, drive, Direction.South);
         var pete = sim.AddActor("Pete", 'h', new TilePos(10, 14), Species.Human, new HoldStillController());
@@ -193,7 +193,7 @@ public class HealthTests
     [Fact]
     public void TheDead_TakeNoTurns_AndArentSeen()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1);
         var watcher = sim.AddActor("Rex", 'T', new TilePos(20, 30), Species.Rex, new HoldStillController(), Direction.North);
         var pete = sim.AddActor("Pete", 'h', new TilePos(20, 20), Species.Human, new HoldStillController());
         sim.Injure(pete, BodySection.Head, Severity.Red, bleeding: false, "test");

@@ -24,16 +24,11 @@ public static class SimContent
     };
 
     /// <summary>
-    /// Loads the packs for play and installs their items (<see cref="Actors.ItemCatalog.Install"/>): what the runner,
-    /// the tests and the game do before making a simulation. The load is in authoring mode until P5, because recipes,
-    /// sources and devices name handlers that arrive then; the items themselves must all be runtime-ready. The
-    /// catalog is installed only if the load succeeded; the result says why if it didn't.
+    /// Loads the packs for play: what the runner, the tests and the game do before making a session
+    /// (<see cref="WorldSession"/>) from the registry. The load is in authoring mode until P5, because recipes,
+    /// sources and devices name handlers that arrive then; the items themselves must all be runtime-ready, which the
+    /// session checks when it builds its catalog. The result says why if the load failed.
     /// </summary>
-    public static ContentLoadResult LoadForPlay(IContentSource source)
-    {
-        ContentLoadResult result = ContentLoader.LoadFrom(source, Options(ContentMode.Authoring));
-        if (result.Registry is { } registry)
-            Actors.ItemCatalog.Install(registry);
-        return result;
-    }
+    public static ContentLoadResult LoadForPlay(IContentSource source) =>
+        ContentLoader.LoadFrom(source, Options(ContentMode.Authoring));
 }

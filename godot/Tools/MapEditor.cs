@@ -105,8 +105,8 @@ public partial class MapEditor : Node2D
         MapData data;
         try
         {
-            ContentIntegration.GameContent.RequireItems(); // item markers name content IDs (P2b)
-            data = MapFile.Parse(File.ReadAllText(path));
+            // item markers name content IDs (P2b), checked against the loaded items
+            data = MapFile.Parse(File.ReadAllText(path), ContentIntegration.GameContent.RequireItems());
         }
         catch (InvalidOperationException e)
         {
@@ -330,7 +330,7 @@ public partial class MapEditor : Node2D
     /// </summary>
     private List<VehicleSpec> VehicleSpecs(WorldMap map)
     {
-        var probe = new Simulation(map, seed: 0); // finds the vehicles; nothing runs
+        var probe = new Simulation(ContentIntegration.GameContent.NewSession(), map, seed: 0); // finds the vehicles; nothing runs
         var specs = new Dictionary<int, VehicleSpec>();
         foreach (var cell in VehicleNames.Keys.Concat(VehicleIntegrity.Keys).Distinct())
         {

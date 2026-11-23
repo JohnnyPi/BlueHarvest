@@ -3,6 +3,7 @@ using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Sim.World.Generation;
 using BlueHarvest.Sim.ContentIntegration;
+using BlueHarvest.Sim.Events;
 
 namespace BlueHarvest.Sim;
 
@@ -76,9 +77,9 @@ public sealed partial class Simulation
         _lastSight[actor.Id] = (ix, iy, range);
         var (found, sites) = MapSight.See(k, _mapWorld, _mapFeatures, x, y, range, CurrentTick);
         foreach (FoundFeature f in found)
-            FeatureFound?.Invoke(actor, f);
+            Emit(new FeatureFoundPayload(actor, f));
         foreach (int site in sites)
-            SiteFound?.Invoke(actor, site);
+            Emit(new SiteFoundPayload(actor, site));
     }
 
     /// <summary>Picking up a park map charts its sheet (step 25b-2).</summary>
@@ -88,7 +89,7 @@ public sealed partial class Simulation
             || !ParkMaps.TryParse(item.Tag, _mapWorld.Works, out int area, out int sheet))
             return;
         bool fresh = k.Chart(area, sheet);
-        MapCharted?.Invoke(actor, item, new ChartedSheet(area, sheet), fresh);
+        Emit(new MapChartedPayload(actor, item, new ChartedSheet(area, sheet), fresh));
     }
 
     /// <summary>
@@ -113,10 +114,10 @@ public sealed partial class Simulation
             if (k.Find(f))
             {
                 found = f;
-                FeatureFound?.Invoke(actor, f);
+                Emit(new FeatureFoundPayload(actor, f));
             }
         }
-        ParkMapRead?.Invoke(actor, item, found);
+        Emit(new ParkMapReadPayload(actor, item, found));
     }
 
     /// <summary>What a park map can turn up for a reader: unknown features in its sheet, or else elsewhere in its area. Ruins, then wrecks, then caves, by id.</summary>

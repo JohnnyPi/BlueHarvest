@@ -31,7 +31,7 @@ public class SenseTests
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++)
                 map.Cover[new TilePos(x, y)] = cover;
-        return new Simulation(map, seed: 1) { AmbientLightPercent = ambient };
+        return new Simulation(TestContent.NewSession(), map, seed: 1) { AmbientLightPercent = ambient };
     }
 
     private static Actor You(Simulation sim, TilePos at, ActorAction? first = null, Loadout? loadout = null) =>
@@ -151,7 +151,7 @@ public class SenseTests
                     map.Flow[p] = new WaterFlow((sbyte)flowDm, 0);
             }
         }
-        var sim = new Simulation(map, seed: 4);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 4);
         sim.UseWater(new WaterLevels(1, Direction.NorthWest, []));
         return sim;
     }

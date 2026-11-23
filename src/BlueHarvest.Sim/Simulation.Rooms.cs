@@ -1,6 +1,7 @@
 using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Sim.World.Generation;
+using BlueHarvest.Sim.Events;
 
 namespace BlueHarvest.Sim;
 
@@ -68,11 +69,11 @@ public sealed partial class Simulation
             return;
         _roomOf[actor.Id] = id;
         if (was >= 0)
-            ActorLeftRoom?.Invoke(actor, _rooms.Rooms[was]);
+            Emit(new ActorLeftRoomPayload(actor, _rooms.Rooms[was]));
         if (now is not null)
         {
             NoteRoomKnown(actor, now);
-            ActorEnteredRoom?.Invoke(actor, now);
+            Emit(new ActorEnteredRoomPayload(actor, now));
         }
     }
 

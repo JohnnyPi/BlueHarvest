@@ -175,7 +175,7 @@ public partial class Main
     {
         CombineKind.Load => $"Load {c.From.Def.Plural} into the {c.Into.Def.Name}",
         CombineKind.Fit => $"Fit {c.From.Describe()} into the {c.Into.Def.Name}",
-        _ => $"Make {ItemCatalog.Of(c.Recipe!.Makes).WithArticle} ({c.Into.Def.Name} + {c.From.Def.Name})",
+        _ => $"Make {_sim.Catalog.Of(c.Recipe!.Makes).WithArticle} ({c.Into.Def.Name} + {c.From.Def.Name})",
     };
 
     /// <summary>For a locked container within reach: whether your key opens it, or a crowbar can force it.</summary>

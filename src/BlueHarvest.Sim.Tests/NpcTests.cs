@@ -21,7 +21,7 @@ public class NpcTests
     /// <summary>Daylight, open ground, a still Rex at (16,20) with its head toward the south.</summary>
     private static (Simulation Sim, Actor Rex) RexInTheOpen(int size = 40)
     {
-        var sim = new Simulation(new WorldMap(size, size), seed: 5) { AmbientLightPercent = 100 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(size, size), seed: 5) { AmbientLightPercent = 100 };
         var rex = sim.AddActor("Rex", 'T', new TilePos(16, 20), Species.Rex, new HoldStillController(), Direction.South);
         return (sim, rex);
     }
@@ -69,7 +69,7 @@ public class NpcTests
     [Fact]
     public void ALoudTread_IsAThreat_QuietFootsteps_AreNot()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 0 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 0 };
         var listener = sim.AddActor("Marisol", 'h', new TilePos(10, 10), Species.Human, new HoldStillController());
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 25), Species.Rex, new HoldStillController(), Direction.North);
         var pete = sim.AddActor("Pete", 'h', new TilePos(14, 10), Species.Human, new HoldStillController());
@@ -86,7 +86,7 @@ public class NpcTests
     [Fact]
     public void AScream_TellsTheRexItsPrey_ButPeopleOnlyThatSomeoneIsInTrouble()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 0 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1) { AmbientLightPercent = 0 };
         var rex = sim.AddActor("Rex", 'T', new TilePos(20, 30), Species.Rex, new HoldStillController(), Direction.North);
         var listener = sim.AddActor("Marisol", 'h', new TilePos(26, 20), Species.Human, new HoldStillController());
         var screamer = sim.AddActor("Pete", 'h', new TilePos(20, 20), Species.Human,
@@ -168,7 +168,7 @@ public class NpcTests
         map.Structures.SetRoof(new TilePos(1, 1), 30);
         map.Cover[new TilePos(3, 1)] = CoverType.DenseJungle;
         map.Cover[new TilePos(5, 1)] = CoverType.SparseJungle;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
 
         Assert.True(HumanBrain.IsShelter(sim, new TilePos(1, 1)));
         Assert.True(HumanBrain.IsShelter(sim, new TilePos(3, 1)));
@@ -179,7 +179,7 @@ public class NpcTests
     [Fact]
     public void TheBrave_PatchUpABleedingCompanion()
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 2) { AmbientLightPercent = 100 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 2) { AmbientLightPercent = 100 };
         var doctor = sim.AddActor("Dr. Okafor", 'h', new TilePos(8, 10), Species.Human,
             Brain(sim, new Traits(Courage: 70, Selfishness: 15, PanicThreshold: 101, KnowsMotionVision: false)),
             loadout: Loadout.Doctor);
@@ -199,7 +199,7 @@ public class NpcTests
     [Fact]
     public void TheTimid_DoNot()
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 2) { AmbientLightPercent = 100 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 2) { AmbientLightPercent = 100 };
         sim.AddActor("Pete", 'h', new TilePos(8, 10), Species.Human,
             Brain(sim, new Traits(Courage: 25, Selfishness: 75, PanicThreshold: 101, KnowsMotionVision: false)),
             loadout: Loadout.Doctor);
@@ -214,7 +214,7 @@ public class NpcTests
     [Fact]
     public void Follow_KeepsThemCloseBehind()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 2) { AmbientLightPercent = 100 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 2) { AmbientLightPercent = 100 };
         var script = new List<ActorAction> { new OrderAction(1, NpcOrder.Follow) };
         script.AddRange(Enumerable.Repeat<ActorAction>(new MoveAction(Direction.East), 12));
         var leader = sim.AddActor("You", '@', new TilePos(12, 10), Species.Human, new ScriptedController(script));
@@ -265,7 +265,7 @@ public class NpcTests
     [Fact]
     public void Hide_SendsThemToCover_WithNothingToFear()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 2) { AmbientLightPercent = 100 };
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 2) { AmbientLightPercent = 100 };
         AddHut(sim);
         sim.AddActor("You", '@', new TilePos(17, 31), Species.Human,
             new ScriptedController(new ActorAction[] { new OrderAction(1, NpcOrder.Hide) }));
@@ -282,7 +282,7 @@ public class NpcTests
     [Fact]
     public void Orders_OnlyCarryEightTiles()
     {
-        var sim = new Simulation(new WorldMap(30, 10), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(30, 10), seed: 1);
         var drive = new PlayerController();
         var you = sim.AddActor("You", '@', new TilePos(5, 5), Species.Human, drive);
         var near = sim.AddActor("Marisol", 'h', new TilePos(5 + Simulation.OrderRange, 5), Species.Human, new HoldStillController());
@@ -308,7 +308,7 @@ public class NpcTests
     [Fact]
     public void FirstAidOnSomeoneElse_NeedsThemNextToYou()
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 3);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 3);
         var drive = new PlayerController();
         var you = sim.AddActor("You", '@', new TilePos(5, 5), Species.Human, drive, loadout: Loadout.Doctor);
         var far = sim.AddActor("Pete", 'h', new TilePos(8, 5), Species.Human, new HoldStillController());

@@ -14,7 +14,7 @@ public class ItemUseTests
 {
     private static (Simulation Sim, PlayerController Drive, Actor You) Person(Loadout? loadout = null)
     {
-        var sim = new Simulation(new WorldMap(20, 20), seed: 11);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(20, 20), seed: 11);
         var drive = new PlayerController();
         var you = sim.AddActor("You", '@', new TilePos(5, 5), Species.Human, drive, Direction.East, loadout: loadout);
         sim.RunUntilInputNeeded();
@@ -46,16 +46,16 @@ public class ItemUseTests
     [Fact]
     public void TheCatalog_HasEveryKindOfThing()
     {
-        Assert.True(ItemCatalog.All.Count >= 90);
+        Assert.True(TestContent.Catalog.All.Count >= 90);
         foreach (var category in new[] { ItemCategory.Edible, ItemCategory.Potable, ItemCategory.Medical, ItemCategory.Light, ItemCategory.Power,
                      ItemCategory.Tool, ItemCategory.Weapon, ItemCategory.Ammo, ItemCategory.Wearable, ItemCategory.Document, ItemCategory.Key,
                      ItemCategory.Part, ItemCategory.Fuel, ItemCategory.Container, ItemCategory.Fixture })
-            Assert.Contains(ItemCatalog.All, d => d.Is(category));
+            Assert.Contains(TestContent.Catalog.All, d => d.Is(category));
         // what fills a thing stacks, and what a thing comes with fits it
-        foreach (var def in ItemCatalog.All)
+        foreach (var def in TestContent.Catalog.All)
         {
             if (def.Fills is { } fill)
-                Assert.True(ItemCatalog.Of(fill).Stacks, $"{def.Id} fills with {fill}, which should stack");
+                Assert.True(TestContent.Catalog.Of(fill).Stacks, $"{def.Id} fills with {fill}, which should stack");
             if (def.Comes is { } comes)
                 Assert.All(comes, c => Assert.Contains(c.Kind, def.Holds!.Only!));
         }
@@ -70,7 +70,7 @@ public class ItemUseTests
         Assert.True(fitted.Charged);
         Assert.Equal("a flashlight (2 D batteries, 100%)", fitted.Describe());
 
-        var empty = sim.PlaceItems(ItemCatalog.ParseSpec("core:flashlight empty"), new TilePos(1, 1))[0];
+        var empty = sim.PlaceItems(TestContent.Catalog.ParseSpec("core:flashlight empty"), new TilePos(1, 1))[0];
         Assert.Empty(empty.Contents);
         Assert.False(empty.Charged);
     }
@@ -221,7 +221,7 @@ public class ItemUseTests
     {
         var (sim, drive, you) = Person();
         var refusals = Refusals(sim);
-        var cabinet = sim.PlaceItems(ItemCatalog.ParseSpec("core:cabinet locked tag=lab level=2; >core:research-file"), new TilePos(6, 5))[0];
+        var cabinet = sim.PlaceItems(TestContent.Catalog.ParseSpec("core:cabinet locked tag=lab level=2; >core:research-file"), new TilePos(6, 5))[0];
         var low = sim.CreateItem(CoreItems.Keycard, tag: "lab", level: 1);
         Assert.True(sim.GiveItem(you, low));
 
@@ -246,7 +246,7 @@ public class ItemUseTests
     {
         var (sim, drive, you) = Person();
         var refusals = Refusals(sim);
-        var crate = sim.PlaceItems(ItemCatalog.ParseSpec("core:crate locked; >core:lantern"), new TilePos(6, 5))[0];
+        var crate = sim.PlaceItems(TestContent.Catalog.ParseSpec("core:crate locked; >core:lantern"), new TilePos(6, 5))[0];
 
         Do(sim, drive, new PryAction(crate.Id));
         Assert.Contains("crowbar", refusals[^1]);
@@ -271,10 +271,10 @@ public class ItemUseTests
         static List<(ContentId, long, long, int, int)> Of(ItemLedger ledger) =>
             ledger.All.SelectMany(l => l.Item.SelfAndNested().Select(i => (i.Kind, l.X, l.Y, i.Amount, i.Id))).ToList();
 
-        var first = Of(ItemPlan.Build(world, runSeed: 1));
+        var first = Of(ItemPlan.Build(world, runSeed: 1, items: TestContent.Catalog));
         Assert.True(first.Count > 100, $"only {first.Count} items on the island");
-        Assert.Equal(first, Of(ItemPlan.Build(world, runSeed: 1)));
-        Assert.NotEqual(first, Of(ItemPlan.Build(world, runSeed: 2)));
+        Assert.Equal(first, Of(ItemPlan.Build(world, runSeed: 1, items: TestContent.Catalog)));
+        Assert.NotEqual(first, Of(ItemPlan.Build(world, runSeed: 2, items: TestContent.Catalog)));
     }
 
     [Fact]
@@ -283,7 +283,7 @@ public class ItemUseTests
         IslandWorld world = TestIslands.World(Island);
         Site genetics = world.Works.Sites.First(t => t.Kind == "genetics");
         var window = new IslandWindow(world, TestIslands.Chunker(Island), genetics.X, genetics.Y, 6);
-        var ledger = ItemPlan.Build(world, runSeed: 1);
+        var ledger = ItemPlan.Build(world, runSeed: 1, items: TestContent.Catalog);
 
         int checkedHere = 0;
         foreach (var lying in ledger.All)
@@ -302,7 +302,7 @@ public class ItemUseTests
     {
         IslandWorld world = TestIslands.World(Island);
         var siteNames = world.Works.Sites.Select(s => s.Name).ToHashSet();
-        var everything = ItemPlan.Build(world, runSeed: 1).All.SelectMany(l => l.Item.SelfAndNested()).ToList();
+        var everything = ItemPlan.Build(world, runSeed: 1, items: TestContent.Catalog).All.SelectMany(l => l.Item.SelfAndNested()).ToList();
 
         var cards = everything.Where(i => i.Kind == CoreItems.Keycard).ToList();
         Assert.NotEmpty(cards);
@@ -322,12 +322,12 @@ public class ItemUseTests
     public void TheIsland_TakesItsLoot_BeforeAnyoneArrives()
     {
         IslandWorld world = TestIslands.World(Island);
-        var sim = new Simulation(new WorldMap(10, 10), seed: 1);
-        var ledger = ItemPlan.Build(world, runSeed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(10, 10), seed: 1);
+        var ledger = ItemPlan.Build(world, runSeed: 1, items: TestContent.Catalog);
         sim.UseItems(ledger);
         Assert.Same(ledger, sim.Items);
         sim.AddActor("You", '@', new TilePos(1, 1), Species.Human, new PlayerController(), loadout: Loadout.TestbedSurvivor);
-        Assert.Throws<InvalidOperationException>(() => sim.UseItems(new ItemLedger()));
+        Assert.Throws<InvalidOperationException>(() => sim.UseItems(new ItemLedger(TestContent.Catalog)));
         // the survivor's kit took fresh ids after the loot's
         Assert.All(sim.Actors[0].Inventory.All, i => Assert.True(i.Id > ledger.All.Max(l => l.Item.Id)));
     }

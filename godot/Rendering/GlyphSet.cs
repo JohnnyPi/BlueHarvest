@@ -73,7 +73,7 @@ public static class GlyphSet
             GD.PushWarning("Glyph check: the items didn't load, so their glyphs weren't checked.");
             problems++;
         }
-        foreach (var def in ContentIntegration.GameContent.ItemsReady ? BlueHarvest.Sim.Actors.ItemCatalog.All : System.Array.Empty<BlueHarvest.Sim.Actors.ItemDef>())
+        foreach (var def in ContentIntegration.GameContent.Catalog?.All ?? System.Array.Empty<BlueHarvest.Sim.Actors.ItemDef>())
         {
             char c = def.Glyph;
             if (!IsApproved(c) || IsReserved(c) || ground.Contains(c))

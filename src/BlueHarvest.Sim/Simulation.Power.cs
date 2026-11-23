@@ -6,6 +6,7 @@ using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.Power;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Sim.ContentIntegration;
+using BlueHarvest.Sim.Events;
 
 namespace BlueHarvest.Sim;
 
@@ -70,7 +71,7 @@ public sealed partial class Simulation
         Power = grid;
         SetIslandOrigin(islandX, islandY);
         foreach (PowerEvent e in grid.Settle(SunPercent(CurrentTick), PowerWeather(GameMinute(CurrentTick))))
-            PowerChanged?.Invoke(e);
+            Emit(new PowerChangedPayload(e));
         SyncPowerWorld();
     }
 
@@ -159,7 +160,7 @@ public sealed partial class Simulation
             SyncPowerFences();
         }
         foreach (PowerEvent e in events)
-            PowerChanged?.Invoke(e);
+            Emit(new PowerChangedPayload(e));
     }
 
     /// <summary>Lamps, security doors and live fences in the window, all brought in line with the network.</summary>
@@ -255,7 +256,7 @@ public sealed partial class Simulation
         EmitNoise(fence, ShockLoudness, NoiseKinds.ElectricCrack);
         if (!actor.IsLarge)
             Injure(actor, CurrentTick % 2 == 0 ? BodySection.RightArm : BodySection.LeftArm, Severity.Yellow, bleeding: false, "an electric fence");
-        Shocked?.Invoke(actor, fence);
+        Emit(new ShockedPayload(actor, fence));
         return ShockTicks;
     }
 
@@ -280,7 +281,7 @@ public sealed partial class Simulation
             return DoorTicks;
         }
         EmitNoise(tile, ForcedDoorLoudness, NoiseKinds.DoorForced, actor.Id);
-        DoorForced?.Invoke(actor, tile);
+        Emit(new DoorForcedPayload(actor, tile));
         return ForcedDoorTicks;
     }
 
@@ -301,7 +302,7 @@ public sealed partial class Simulation
         {
             Vacate(actor);
             Place(actor, tile, actor.Facing, onDeck: false);
-            RideEnded?.Invoke(actor);
+            Emit(new RideEndedPayload(actor));
             return tile;
         }
         // off the map (or someone is standing there): wait at the far end until the window gets there
@@ -311,7 +312,7 @@ public sealed partial class Simulation
         actor.ParkedLightOn = actor.CarriedLight is { } held && _lights[held].On;
         if (actor.CarriedLight is { } carried && _lights[carried].On)
             SetLightOn(carried, false);
-        RideEnded?.Invoke(actor);
+        Emit(new RideEndedPayload(actor));
         return tile;
     }
 
@@ -412,7 +413,7 @@ public sealed partial class Simulation
             || KeycardFor(actor, door) is not { } card)
             return null;
         int ticks = SwingDoor(actor, tile, DoorState.Open) + ItemRules.UnlockTicks;
-        KeycardUsed?.Invoke(actor, card, tile);
+        Emit(new KeycardUsedPayload(actor, card, tile));
         return ticks;
     }
 
@@ -427,7 +428,7 @@ public sealed partial class Simulation
         PowerDevice device = Power.Devices[deviceId];
         if (!DevicesInReach(actor).Contains(device))
         {
-            PowerOperated?.Invoke(actor, device, new PowerResult(false, $"You need to be at {device.Name} to work it.", 0));
+            Emit(new PowerOperatedPayload(actor, device, new PowerResult(false, $"You need to be at {device.Name} to work it.", 0)));
             return BumpTicks;
         }
         int roll = Rng.Fork($"power:{deviceId}:{CurrentTick}").NextInt(100);
@@ -444,12 +445,12 @@ public sealed partial class Simulation
             // get out just inside the far room's corner once the ride's time has passed (see CompleteRide)
             actor.PendingRide = (to.Footprint.X0 + 1, to.Footprint.Y0 + 1);
         }
-        PowerOperated?.Invoke(actor, device, result);
+        Emit(new PowerOperatedPayload(actor, device, result));
         // the lights, doors and fences answer the switch at once, not at the next minute
         List<PowerEvent> events = Power.Settle(SunPercent(CurrentTick), PowerWeather(GameMinute(CurrentTick)));
         SyncPowerWorld();
         foreach (PowerEvent e in events)
-            PowerChanged?.Invoke(e);
+            Emit(new PowerChangedPayload(e));
         return Math.Max(BumpTicks, result.Ticks);
     }
 }

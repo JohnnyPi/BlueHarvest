@@ -32,7 +32,7 @@ public class CreatureNeedsTests
 
     private static Simulation Open(int width = 60, int height = 30, int? hour = null, WorldMap? map = null)
     {
-        var sim = new Simulation(map ?? new WorldMap(width, height), seed: 5);
+        var sim = new Simulation(TestContent.NewSession(), map ?? new WorldMap(width, height), seed: 5);
         sim.SetWeather(WeatherSettings.Clear);
         if (hour is { } h)
             sim.SetTimeOfDay(h);

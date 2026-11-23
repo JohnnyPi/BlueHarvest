@@ -2,6 +2,7 @@ using BlueHarvest.Sim.Actors;
 using BlueHarvest.Sim.Core;
 using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
+using BlueHarvest.Sim.Events;
 
 namespace BlueHarvest.Sim;
 
@@ -79,7 +80,7 @@ public partial class Simulation
         UpdateNeeds(eater);
         needs.Hunger = Math.Max(0, needs.Hunger - needs.Profile.MealKcal * 10);
         needs.FedTick = CurrentTick;
-        AteKill?.Invoke(eater, kill);
+        Emit(new AteKillPayload(eater, kill));
     }
 
     /// <summary>Sets someone's needs directly (setup, tests, debug): kcal and ml short, minutes awake, breath, heat lost, wetness, just fed.</summary>
@@ -206,7 +207,7 @@ public partial class Simulation
             needs.Asleep = true;
             needs.WakeCheckTick = CurrentTick;
             actor.LastMovedTick = CurrentTick;
-            FellAsleep?.Invoke(actor);
+            Emit(new FellAsleepPayload(actor));
         }
         return Math.Max(1, ticks);
     }
@@ -217,7 +218,7 @@ public partial class Simulation
             return;
         needs.Asleep = false;
         needs.WokeTick = CurrentTick;
-        WokeUp?.Invoke(actor, why);
+        Emit(new WokeUpPayload(actor, why));
     }
 
     /// <summary>A noise since the last check loud enough, where the sleeper lies, to wake them.</summary>
@@ -349,7 +350,7 @@ public partial class Simulation
                 continue;
             needs.Reported[(int)kind] = stage;
             if (!silent)
-                NeedChanged?.Invoke(actor, kind, stage, was);
+                Emit(new NeedChangedPayload(actor, kind, stage, was));
         }
     }
 

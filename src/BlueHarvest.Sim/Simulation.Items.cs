@@ -4,6 +4,7 @@ using BlueHarvest.Sim.Perception;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Content;
 using BlueHarvest.Sim.ContentIntegration;
+using BlueHarvest.Sim.Events;
 
 namespace BlueHarvest.Sim;
 
@@ -23,7 +24,7 @@ public sealed partial class Simulation
     /// <summary>A refused item action (nothing to reach, no room) costs this much: a moment's fumbling, no noise.</summary>
     public const int RefuseTicks = 10;
 
-    private ItemLedger _items = new();
+    private ItemLedger _items;
 
     /// <summary>The run's items: everything lying in the world, and the maker of every item.</summary>
     public ItemLedger Items => _items;
@@ -46,6 +47,8 @@ public sealed partial class Simulation
     /// </summary>
     public void UseItems(ItemLedger ledger)
     {
+        if (!ReferenceEquals(ledger.Catalog, Catalog))
+            throw new ArgumentException("That ledger's items come from another session's content.", nameof(ledger));
         if (_items.Made > 0)
             throw new InvalidOperationException("Items have already been made in this run; take the ledger before adding actors or items.");
         _items = ledger;
@@ -94,7 +97,7 @@ public sealed partial class Simulation
         Item? lastContainer = null;
         foreach (var spec in specs)
         {
-            var def = ItemCatalog.Of(spec.Kind);
+            var def = Catalog.Of(spec.Kind);
             int copies = def.Stacks ? 1 : spec.Count;
             for (int i = 0; i < copies; i++)
             {
@@ -122,9 +125,9 @@ public sealed partial class Simulation
     /// <summary>Gives an actor their loadout's kit: worn things first, so that bags are on before the rest goes in.</summary>
     private void Equip(Actor actor, Loadout loadout)
     {
-        foreach (var (kind, count) in loadout.Items.OrderBy(k => ItemCatalog.Of(k.Kind).Wear == WearSlot.None ? 1 : 0))
+        foreach (var (kind, count) in loadout.Items.OrderBy(k => Catalog.Of(k.Kind).Wear == WearSlot.None ? 1 : 0))
         {
-            var def = ItemCatalog.Of(kind);
+            var def = Catalog.Of(kind);
             for (int left = count; left > 0;)
             {
                 int amount = def.Stacks ? Math.Min(left, def.MaxAmount) : def.StartAmount;
@@ -216,7 +219,7 @@ public sealed partial class Simulation
 
     private int Refuse(Actor actor, string reason)
     {
-        MoveBlocked?.Invoke(actor, reason);
+        Emit(new MoveBlockedPayload(actor, reason));
         return RefuseTicks;
     }
 
@@ -246,7 +249,7 @@ public sealed partial class Simulation
             actor.Facing = Directions.FromDelta(reach.At.X - actor.Position.X, reach.At.Y - actor.Position.Y);
         EmitNoise(actor.Position, ItemRules.PickUpLoudness, NoiseKinds.Rummaging, actor.Id);
         ChartParkMap(actor, item); // a park map charts its sheet on the survivor's map
-        ItemPickedUp?.Invoke(actor, item);
+        Emit(new ItemPickedUpPayload(actor, item));
         return ItemRules.PickUpTicks
             + (grams > ItemRules.HeavyItemGrams ? ItemRules.HeavyPickUpTicks : 0)
             + (intoBag ? ItemRules.StowTicks : 0)
@@ -261,7 +264,7 @@ public sealed partial class Simulation
         PlaceItem(item, actor.Position, actor.OnDeck);
         LetGoOf(actor, item);
         EmitNoise(actor.Position, ItemRules.DropLoudness, NoiseKinds.Thump, actor.Id);
-        ItemDropped?.Invoke(actor, item);
+        Emit(new ItemDroppedPayload(actor, item));
         return ItemRules.DropTicks;
     }
 
@@ -286,7 +289,7 @@ public sealed partial class Simulation
         if (!carried)
             LetGoOf(actor, item);
         EmitNoise(actor.Position, ItemRules.PickUpLoudness, NoiseKinds.Rummaging, actor.Id);
-        ItemStowed?.Invoke(actor, item, container);
+        Emit(new ItemStowedPayload(actor, item, container));
         return ItemRules.PutTicks;
     }
 
@@ -308,13 +311,13 @@ public sealed partial class Simulation
                     ? $"the {container.Def.Name} is locked (you could force it)" : $"the {container.Def.Name} is locked");
             container.Locked = false;
             extra = ItemRules.UnlockTicks;
-            ContainerUnlocked?.Invoke(actor, container, key);
+            Emit(new ContainerUnlockedPayload(actor, container, key));
         }
 
         container.IsOpen = !container.IsOpen;
         if (holds.OpenLoudness > 0)
             EmitNoise(reach.At, holds.OpenLoudness, NoiseKinds.Opening, actor.Id);
-        ContainerOpened?.Invoke(actor, container, container.IsOpen);
+        Emit(new ContainerOpenedPayload(actor, container, container.IsOpen));
         return Math.Max(RefuseTicks, container.IsOpen ? holds.OpenTicks : holds.OpenTicks / 2) + extra;
     }
 

@@ -154,7 +154,7 @@ public class IslandWindowTests
         (double x, double y) = Genetics();
         IslandWorld world = TestIslands.World(Island);
         IslandWindow w = WindowAt(x, y, chunks: 3);
-        var sim = new Simulation(w.Map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), w.Map, seed: 1);
         sim.FollowWeather(IslandWeather.For(world, runSeed: 1), w.OriginX, w.OriginY);
 
         // every fifth tile each way, by island position: 39 × 39 of them
@@ -425,7 +425,7 @@ public class IslandWindowTests
         (double x, double y) = Genetics();
         IslandWindow w = WindowAt(x, y, 2);
         string text = IslandWindow.ExportBhmap(TestIslands.World(Island), TestIslands.Chunker(Island), x, y, 2);
-        MapData data = MapFile.Parse(text);
+        MapData data = MapFile.Parse(text, TestContent.Catalog);
         Assert.Equal(128, data.Map.Width);
         MapMarker player = Assert.Single(data.Markers);
         Assert.Equal(MarkerKind.Player, player.Kind);

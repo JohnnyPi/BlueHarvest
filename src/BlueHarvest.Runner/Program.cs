@@ -32,14 +32,15 @@ if (args.Length > 0 && args[0] == "content")
     Environment.ExitCode = RunContent(args.Skip(1).ToArray());
     return;
 }
-if (!InstallContent())
+BhContent.ContentRegistry? content = LoadContent();
+if (content is null)
 {
     Environment.ExitCode = 2;
     return;
 }
 if (args.Length > 0 && args[0] == "batch")
 {
-    RunBatch(args.Skip(1).ToArray());
+    RunBatch(args.Skip(1).ToArray(), content);
     return;
 }
 if (args.Length > 0 && args[0] == "island")
@@ -54,14 +55,15 @@ string? mapPath = args.Length > 2 && args[2] != "-" ? args[2] : FindUp(Path.Comb
 WeatherSettings? weatherOverride = args.Length > 3 ? ParseWeather(args[3]) : null;
 
 Simulation sim;
+var session = new WorldSession(content);
 if (mapPath is not null)
 {
-    sim = ScenarioBuilder.Build(MapFile.Parse(File.ReadAllText(mapPath)), seed);
+    sim = ScenarioBuilder.Build(session, MapFile.Parse(File.ReadAllText(mapPath), session.Catalog), seed);
     Console.WriteLine($"Blue Harvest sim {SimInfo.Version} | {Path.GetFileName(mapPath)} | seed {seed} | {seconds}s of game time");
 }
 else
 {
-    sim = DemoWorld.Create(seed);
+    sim = DemoWorld.Create(session, seed);
     Console.WriteLine($"Blue Harvest sim {SimInfo.Version} | demo map (no testbed found) | seed {seed} | {seconds}s of game time");
 }
 
@@ -164,7 +166,7 @@ static WeatherSettings? ParseWeather(string name) => name.ToLowerInvariant() swi
     _ => throw new ArgumentException($"Unknown weather '{name}'; use clear, rain, storm, fog or map."),
 };
 
-static void RunBatch(string[] args)
+static void RunBatch(string[] args, BhContent.ContentRegistry content)
 {
     string Arg(int i) => i < args.Length ? args[i] : "-";
     int runs = int.TryParse(Arg(0), out int r) && r > 0 ? r : 30;
@@ -188,7 +190,7 @@ static void RunBatch(string[] args)
     string mapPath = Arg(4) != "-" ? Arg(4)
         : FindUp(Path.Combine("godot", "Maps", "testbed.bhmap")) ?? throw new FileNotFoundException("Could not find godot/Maps/testbed.bhmap.");
     string mapText = File.ReadAllText(mapPath);
-    var mapWeather = weather ?? MapFile.Parse(mapText).StartingWeather;
+    var mapWeather = weather ?? MapFile.Parse(mapText, BlueHarvest.Sim.Actors.ItemCatalog.For(content)).StartingWeather;
     long limit = Ticks.FromSeconds(minutes * 60);
 
     int total = plans.Count * 2 * runs;
@@ -197,7 +199,7 @@ static void RunBatch(string[] args)
     var clock = System.Diagnostics.Stopwatch.StartNew();
     int lastShown = -1;
     var gate = new object();
-    var results = BatchRunner.RunAll(mapText, plans, runs, limit, weather, firstSeed: 1, progress: (done, all) =>
+    var results = BatchRunner.RunAll(content, mapText, plans, runs, limit, weather, firstSeed: 1, progress: (done, all) =>
     {
         int percent = done * 100 / all;
         lock (gate)
@@ -344,23 +346,34 @@ static int RunContent(string[] args)
     return result.Succeeded ? 0 : 1;
 }
 
-// Loads content/packs above the program folder and installs its items for the sim. False (with the reasons
-// printed) if there's no content/packs or it doesn't load.
-static bool InstallContent()
+// Loads content/packs above the program folder and checks its items are ready for the sim: every session is made
+// from the registry. Null (with the reasons printed) if there's no content/packs or it doesn't load.
+static BhContent.ContentRegistry? LoadContent()
 {
     string? path = FindUpDirectory(Path.Combine("content", "packs"));
     if (path is null)
     {
         Console.Error.WriteLine("Could not find content/packs above the program folder: the sim's items come from it.");
-        return false;
+        return null;
     }
     BhContent.ContentLoadResult result = BlueHarvest.Sim.ContentIntegration.SimContent.LoadForPlay(new BhContent.FileSystemContentSource(path));
-    if (result.Succeeded)
-        return true;
+    if (result.Succeeded && result.Registry is { } registry)
+    {
+        try
+        {
+            _ = BlueHarvest.Sim.Actors.ItemCatalog.For(registry); // what every session builds its items from
+            return registry;
+        }
+        catch (InvalidOperationException e)
+        {
+            Console.Error.WriteLine(e.Message);
+            return null;
+        }
+    }
     foreach (BhContent.ContentDiagnostic d in result.Diagnostics.Where(d => d.Severity == BhContent.ContentSeverity.Error))
         Console.Error.WriteLine(d);
     Console.Error.WriteLine($"{path} didn't load; run 'content validate' for the details.");
-    return false;
+    return null;
 }
 
 static string? FindUpDirectory(string relativePath)

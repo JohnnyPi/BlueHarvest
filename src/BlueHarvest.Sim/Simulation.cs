@@ -7,6 +7,7 @@ using BlueHarvest.Sim.Time;
 using BlueHarvest.Sim.World;
 using BlueHarvest.Content;
 using BlueHarvest.Sim.ContentIntegration;
+using BlueHarvest.Sim.Events;
 
 namespace BlueHarvest.Sim;
 
@@ -100,8 +101,12 @@ public sealed partial class Simulation
     /// Starts a simulation on a map. Every connected patch of vehicle cover becomes a Vehicle and
     /// every connected patch of deck a Platform, so set those tiles before creating the simulation.
     /// </summary>
-    public Simulation(WorldMap map, ulong seed)
+    public Simulation(WorldSession session, WorldMap map, ulong seed)
     {
+        ArgumentNullException.ThrowIfNull(session);
+        session.Attach(this);
+        Session = session;
+        _items = new ItemLedger(session.Catalog);
         Map = map;
         Rng = new Rng(seed);
         Weather = new Weather(Rng.Fork("weather").NextULong());
@@ -117,8 +122,8 @@ public sealed partial class Simulation
     }
 
     /// <summary>A map with heights only; every tile is grass.</summary>
-    public Simulation(HeightMap terrain, ulong seed)
-        : this(new WorldMap(terrain, new CoverMap(terrain.Width, terrain.Height)), seed)
+    public Simulation(WorldSession session, HeightMap terrain, ulong seed)
+        : this(session, new WorldMap(terrain, new CoverMap(terrain.Width, terrain.Height)), seed)
     {
     }
 
@@ -385,7 +390,7 @@ public sealed partial class Simulation
             return;
         Weather.Set(next, tick);
         _lightGrid = null;
-        WeatherChanged?.Invoke(Weather.Settings);
+        Emit(new WeatherChangedPayload(Weather.Settings));
     }
 
     /// <summary>Noises from the last <see cref="NoiseMemoryTicks"/> ticks, oldest first.</summary>
@@ -436,7 +441,7 @@ public sealed partial class Simulation
         _followWeather = false;
         Weather.Set(settings, CurrentTick);
         _lightGrid = null; // a storm may start or stop mid-flash
-        WeatherChanged?.Invoke(Weather.Settings);
+        Emit(new WeatherChangedPayload(Weather.Settings));
     }
 
     /// <param name="onDeck">Start on the deck over <paramref name="position"/> (single-tile actors only).</param>
@@ -582,7 +587,7 @@ public sealed partial class Simulation
     {
         foreach (var strike in Weather.StrikesBetween(fromExclusive, toInclusive))
         {
-            LightningStruck?.Invoke(strike);
+            Emit(new LightningStruckPayload(strike));
             StrikeGround(strike);
         }
     }
@@ -692,7 +697,7 @@ public sealed partial class Simulation
         }
         if (actor.Needs is { Asleep: true } sleeper)
             Wake(actor, sleeper, "pain");
-        ActorInjured?.Invoke(actor, section, health[section].Severity, cause);
+        Emit(new ActorInjuredPayload(actor, section, health[section].Severity, cause));
     }
 
     /// <summary>
@@ -748,7 +753,7 @@ public sealed partial class Simulation
             SetLightOn(light, false);
         if (actor.Controller is PlayerController)
             _playerEscaped = true;
-        ActorEscaped?.Invoke(actor, exit);
+        Emit(new ActorEscapedPayload(actor, exit));
     }
 
     /// <summary>
@@ -782,7 +787,7 @@ public sealed partial class Simulation
             sparks.Live = false;
             sparks.DiedTick = CurrentTick;
             SetLightOn(sparks.LightIndex, false);
-            SparksDied?.Invoke(sparks);
+            Emit(new SparksDiedPayload(sparks));
         }
     }
 
@@ -795,7 +800,7 @@ public sealed partial class Simulation
         Vacate(actor);
         if (actor.Controller is PlayerController)
             _playerDied = true;
-        ActorDied?.Invoke(actor, cause);
+        Emit(new ActorDiedPayload(actor, cause));
     }
 
     /// <summary>A fall past the safe drop wounds a leg, and worse the further it goes.</summary>
@@ -1069,6 +1074,19 @@ public sealed partial class Simulation
     /// </summary>
     public StepResult Step()
     {
+        Session.BeginRequest();
+        try
+        {
+            return StepTurn();
+        }
+        finally
+        {
+            Session.EndRequest(); // the turn's events commit together, now that it's over
+        }
+    }
+
+    private StepResult StepTurn()
+    {
         if (!PeekLiving(out int id, out long tick))
             return StepResult.Idle;
 
@@ -1101,16 +1119,17 @@ public sealed partial class Simulation
         if (actor.Health.Concussed && _injuryRng.Chance(InjuryRules.BlackoutPercent, 100))
         {
             action = new WaitAction(InjuryRules.BlackoutTicks);
-            ActorBlackedOut?.Invoke(actor);
+            Emit(new ActorBlackedOutPayload(actor));
         }
         else if (NeedBlackout(actor) is { } faint)
         {
             action = new WaitAction(NeedRules.BlackoutTicks);
-            NeedBlackedOut?.Invoke(actor, faint);
+            Emit(new NeedBlackedOutPayload(actor, faint));
         }
 
         _scheduler.TryDequeue(out _, out _);
         actor.Charging = false; // only a charging step sets it again
+        Emit(new ActorActedPayload(actor, action));
         int cost = Resolve(actor, action);
         UpdateKnowledge(actor); // what the survivor sees across the island from where they are now
         SyncItemLights(); // lights carried, set down, thrown, run down or burnt out
@@ -1143,13 +1162,21 @@ public sealed partial class Simulation
             if (Step() == StepResult.AwaitingInput)
                 return;
         }
-        if (tick > CurrentTick)
-            CurrentTick = tick;
-        ExpireLights();
-        AdvanceWeather();
-        AdvanceSparks();
-        AdvanceMachinery();
-        AdvanceFire();
+        Session.BeginRequest(); // the world moving on to the tick is a request of its own
+        try
+        {
+            if (tick > CurrentTick)
+                CurrentTick = tick;
+            ExpireLights();
+            AdvanceWeather();
+            AdvanceSparks();
+            AdvanceMachinery();
+            AdvanceFire();
+        }
+        finally
+        {
+            Session.EndRequest();
+        }
     }
 
     /// <summary>
@@ -1307,7 +1334,7 @@ public sealed partial class Simulation
     private int Bump(Actor actor, string reason)
     {
         EmitNoise(actor.Position, BumpLoudness, NoiseKinds.Bump, actor.Id);
-        MoveBlocked?.Invoke(actor, reason);
+        Emit(new MoveBlockedPayload(actor, reason));
         return BumpTicks;
     }
 
@@ -1385,8 +1412,8 @@ public sealed partial class Simulation
     /// </summary>
     private int Throw(Actor actor, ContentId item, TilePos target)
     {
-        bool flare = ItemCatalog.Find(item)?.Has(ItemHandlers.Flare) == true;
-        bool glowStick = !flare && ItemCatalog.Find(item)?.Has(ItemHandlers.GlowStick) == true;
+        bool flare = Catalog.Find(item)?.Has(ItemHandlers.Flare) == true;
+        bool glowStick = !flare && Catalog.Find(item)?.Has(ItemHandlers.GlowStick) == true;
         if (!flare && !glowStick)
             return Bump(actor, "that isn't something to throw");
         if (flare && !actor.Inventory.Has(item))
@@ -1432,7 +1459,7 @@ public sealed partial class Simulation
             PlaceItem(stick, land);
             TrackLight(stick);
             EmitNoise(land, 3, NoiseKinds.Thump);
-            ItemThrown?.Invoke(actor, item, land);
+            Emit(new ItemThrownPayload(actor, item, land));
             return GearRules.ThrowTicks;
         }
 
@@ -1446,7 +1473,7 @@ public sealed partial class Simulation
         _lightGrid = null;
         EmitNoise(land, GearRules.FlareLoudness, NoiseKinds.Flare); // no actor: it's the flare that hisses
         FlareLanded(land); // and it may set what it lands in alight
-        ItemThrown?.Invoke(actor, item, land);
+        Emit(new ItemThrownPayload(actor, item, land));
         return GearRules.ThrowTicks;
     }
 
@@ -1513,11 +1540,11 @@ public sealed partial class Simulation
         if (slipped)
         {
             int fallen = drop * _gearRng.NextInt(30, 101) / 100;
-            ActorFell?.Invoke(actor, fallen);
+            Emit(new ActorFellPayload(actor, fallen));
             ApplyFall(actor, fallen);
             CryOut(actor);
         }
-        Rappelled?.Invoke(actor, slipped);
+        Emit(new RappelledPayload(actor, slipped));
         return GearRules.RappelTicks(drop, actor.Skills.Rappelling);
     }
 
@@ -1564,7 +1591,7 @@ public sealed partial class Simulation
             health.Set(section, new Wound(Severity.Yellow, false, CurrentTick));
         }
         EmitNoise(actor.Position, InjuryRules.TreatLoudness, NoiseKinds.FirstAid, actor.Id);
-        ActorTreated?.Invoke(actor, patient, section, worked);
+        Emit(new ActorTreatedPayload(actor, patient, section, worked));
         return InjuryRules.TreatTicks(skill);
     }
 
@@ -1574,7 +1601,7 @@ public sealed partial class Simulation
         if (actor.Species.ScreamLoudness <= 0)
             return Bump(actor, "can't scream");
         EmitNoise(actor.Position, actor.Species.ScreamLoudness, NoiseKinds.Scream, actor.Id);
-        ActorScreamed?.Invoke(actor);
+        Emit(new ActorScreamedPayload(actor));
         return ScreamTicks;
     }
 
@@ -1594,7 +1621,7 @@ public sealed partial class Simulation
 
         EmitNoise(actor.Position, TalkLoudness, NoiseKinds.Talking, actor.Id);
         target.Order = new StandingOrder(order, actor.Id, CurrentTick);
-        OrderGiven?.Invoke(actor, target, order);
+        Emit(new OrderGivenPayload(actor, target, order));
         return OrderTicks;
     }
 
@@ -1762,7 +1789,7 @@ public sealed partial class Simulation
             if (ActorAt(tile) is { } victim && victim != actor && struck.Add(victim.Id))
             {
                 EmitNoise(tile, StrikeLoudness, NoiseKinds.HeavyBlow, actor.Id);
-                ActorStruck?.Invoke(actor, victim);
+                Emit(new ActorStruckPayload(actor, victim));
                 bool broken = _injuryRng.Chance(InjuryRules.TailBlowRedPercent, 100);
                 Injure(victim, RandomSection(Array.Empty<BodySection>()), broken ? Severity.Red : Severity.Yellow,
                     bleeding: false, $"struck by the {actor.Name}'s tail");
@@ -1841,7 +1868,7 @@ public sealed partial class Simulation
         _lightGrid = null;
         EmitNoise(vehicle.Anchor, ShoveLoudness, NoiseKinds.MetalScrape, by.Id);
         EmitVibration(vehicle.Anchor, ScentRules.ShoveVibration, by.Id);
-        VehicleShoved?.Invoke(vehicle, by);
+        Emit(new VehicleShovedPayload(vehicle, by));
         DamageVehicle(vehicle, ShoveDamage, by);
     }
 
@@ -1850,7 +1877,7 @@ public sealed partial class Simulation
         if (amount <= 0 || vehicle.Breached)
             return;
         vehicle.Integrity = Math.Max(0, vehicle.Integrity - amount);
-        VehicleDamaged?.Invoke(vehicle, by, amount);
+        Emit(new VehicleDamagedPayload(vehicle, by, amount));
         if (vehicle.Breached)
             EmitNoise(vehicle.Anchor, BreachLoudness, NoiseKinds.MetalTear, by.Id);
     }
@@ -1899,7 +1926,7 @@ public sealed partial class Simulation
 
         foreach (var hit in hits)
         {
-            ActorBitten?.Invoke(actor, hit.Victim);
+            Emit(new ActorBittenPayload(actor, hit.Victim));
             var wounded = new List<BodySection>();
             for (int i = 0; i < actor.Species.BiteWounds && !hit.Victim.IsDead; i++)
             {
@@ -1917,7 +1944,7 @@ public sealed partial class Simulation
         foreach (var hit in hits)
             if (hit.Victim.IsDead && hit.Victim.Health.DiedTick == CurrentTick)
                 FeedOnKill(actor, hit.Victim);
-        Bit?.Invoke(actor, result);
+        Emit(new BitPayload(actor, result));
         return Math.Max(1, actor.Movement.BiteTicks);
     }
 
@@ -1945,7 +1972,7 @@ public sealed partial class Simulation
         _lightGrid = null;
         if (type is CoverType.Fence or CoverType.WeakFence)
             FenceBreachTick ??= CurrentTick;
-        CoverBroken?.Invoke(tile, type, by);
+        Emit(new CoverBrokenPayload(tile, type, by));
         if (type == CoverType.Support && PlatformAt(tile) is { Collapsed: false } platform)
             CheckCollapse(platform, by);
         if (type == CoverType.WeakFence)
@@ -2007,7 +2034,7 @@ public sealed partial class Simulation
             NoteRoom(rider);
             fell.Add(rider);
             int drop = Math.Max(0, fromDm - Terrain[rider.Position]);
-            ActorFell?.Invoke(rider, drop);
+            Emit(new ActorFellPayload(rider, drop));
             ApplyFall(rider, drop);
             CryOut(rider);
         }
@@ -2016,7 +2043,7 @@ public sealed partial class Simulation
         _lightGrid = null;
         EmitNoise(platform.Tiles[platform.Tiles.Count / 2], CollapseLoudness, NoiseKinds.Collapse, by?.Id);
         EmitVibration(platform.Tiles[platform.Tiles.Count / 2], ScentRules.CollapseVibration, by?.Id);
-        PlatformCollapsed?.Invoke(platform, by, fell);
+        Emit(new PlatformCollapsedPayload(platform, by, fell));
     }
 
     /// <summary>The nearest tile (ring by ring, in reading order) whose ground is passable and free.</summary>

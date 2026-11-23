@@ -47,8 +47,8 @@ if (-not $SkipTests) {
     & dotnet test 2>&1 | Tee-Object -Variable testLog
     $testExit = $LASTEXITCODE
     # dotnet test prints one of two summary formats, depending on whether its output goes to a pipe:
-    #   new:    Test summary: total: 1329, failed: 0, succeeded: 1329, skipped: 0, duration: 12s
-    #   VSTest: Passed!  - Failed:     0, Passed:  1329, Skipped:     0, Total:  1329, Duration: 12 s
+    #   new:    Test summary: total: 1357, failed: 0, succeeded: 1357, skipped: 0, duration: 12s
+    #   VSTest: Passed!  - Failed:     0, Passed:  1357, Skipped:     0, Total:  1357, Duration: 12 s
     # Each test project prints its own line, so the counts are added up.
     $total = 0; $failed = 0; $found = 0
     foreach ($t in $testLog) {
@@ -61,8 +61,8 @@ if (-not $SkipTests) {
     }
     if ($found -eq 0) { $line = 'no test summary line found in the output' }
     else { $line = "total $total, failed $failed (from $found summary line(s)), exit code $testExit" }
-    $ok = ($testExit -eq 0) -and ($found -gt 0) -and ($total -eq 1329) -and ($failed -eq 0)
-    Add-Result 'C# tests (expect 1329 passed)' $ok $line
+    $ok = ($testExit -eq 0) -and ($found -gt 0) -and ($total -eq 1357) -and ($failed -eq 0)
+    Add-Result 'C# tests (expect 1357 passed)' $ok $line
     $testLog | Out-File -Encoding utf8 (Join-Path $outDir 'dotnet-test.log')
 }
 

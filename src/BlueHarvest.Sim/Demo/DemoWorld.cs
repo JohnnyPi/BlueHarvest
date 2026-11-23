@@ -50,9 +50,9 @@ public static class DemoWorld
     /// Builds the demo. Pass a controller to drive the survivor (the player);
     /// otherwise the survivor wanders randomly like everyone else.
     /// </summary>
-    public static Simulation Create(ulong seed, IActorController? survivor = null)
+    public static Simulation Create(WorldSession session, ulong seed, IActorController? survivor = null)
     {
-        var sim = new Simulation(HeightMap.FromRows(Rows), seed);
+        var sim = new Simulation(session, HeightMap.FromRows(Rows), seed);
         sim.AddActor("Survivor", '@', new TilePos(3, 27), Species.Human,
             survivor ?? new RandomWalker(sim.Rng.Fork("ai:survivor")));
         sim.AddActor("Raptor", 'R', new TilePos(56, 2), Species.Raptor, new RandomWalker(sim.Rng.Fork("ai:raptor")));

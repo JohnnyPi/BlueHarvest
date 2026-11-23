@@ -22,10 +22,10 @@ public static class ScenarioBuilder
     /// Give the creatures and NPCs needs, each from a varied start (step 23b). Off by default: the tuned
     /// scenarios and the batch tests run without them.
     /// </param>
-    public static Simulation Build(MapData data, ulong seed, IActorController? player = null, Direction? rexFacing = null,
+    public static Simulation Build(WorldSession session, MapData data, ulong seed, IActorController? player = null, Direction? rexFacing = null,
         bool creatureNeeds = false)
     {
-        var sim = new Simulation(data.Map, seed) { AmbientLightPercent = data.AmbientLight };
+        var sim = new Simulation(session, data.Map, seed) { AmbientLightPercent = data.AmbientLight };
         sim.SetWeather(data.StartingWeather);
         foreach (var spec in data.VehicleSpecs)
         {
@@ -87,7 +87,7 @@ public static class ScenarioBuilder
                     break;
 
                 case MarkerKind.Item:
-                    sim.PlaceItems(ItemCatalog.ParseSpec(marker.Name ?? ""), marker.Position, OnDeck(data.Map, marker.Position));
+                    sim.PlaceItems(sim.Catalog.ParseSpec(marker.Name ?? ""), marker.Position, OnDeck(data.Map, marker.Position));
                     break;
             }
         }

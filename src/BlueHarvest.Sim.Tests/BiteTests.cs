@@ -10,7 +10,7 @@ public class BiteTests
     [Fact]
     public void BiteZone_IsAroundTheHead_NotTheCore()
     {
-        var sim = new Simulation(new WorldMap(30, 30), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(30, 30), seed: 1);
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 10), Species.Rex, new PlayerController(), Direction.South);
 
         var zone = sim.BiteZone(rex);
@@ -25,7 +25,7 @@ public class BiteTests
     [Fact]
     public void Bite_HitsWhoeverIsInReach_AndTheyScream()
     {
-        var sim = new Simulation(new WorldMap(30, 30), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(30, 30), seed: 1);
         var drive = new PlayerController();
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 10), Species.Rex, drive, Direction.South);
         var human = sim.AddActor("Pete", 'h', new TilePos(11, 14), Species.Human, new HoldStillController());
@@ -51,7 +51,7 @@ public class BiteTests
         var map = new WorldMap(30, 30);
         for (int x = 8; x <= 12; x++)
             map.Cover[new TilePos(x, 14)] = CoverType.Vehicle;
-        var sim = new Simulation(map, seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), map, seed: 1);
         var drive = new PlayerController();
         var rex = sim.AddActor("Rex", 'T', new TilePos(10, 10), Species.Rex, drive, Direction.South);
         var human = sim.AddActor("Marisol", 'h', new TilePos(12, 14), Species.Human, new HoldStillController());
@@ -72,7 +72,7 @@ public class BiteTests
     [Fact]
     public void TailStrike_MakesTheVictimScream()
     {
-        var sim = new Simulation(new WorldMap(40, 40), seed: 1);
+        var sim = new Simulation(TestContent.NewSession(), new WorldMap(40, 40), seed: 1);
         var drive = new PlayerController();
         sim.AddActor("Rex", 'T', new TilePos(15, 15), Species.Rex, drive, Direction.North);
         var human = sim.AddActor("Pete", 'h', new TilePos(13, 21), Species.Human, new HoldStillController());
