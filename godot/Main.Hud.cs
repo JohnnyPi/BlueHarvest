@@ -116,6 +116,7 @@ public partial class Main
             Refresh(snapCamera: false);
         };
         _debug.ParkMapWanted += GiveParkMapHere;
+        _debug.ExtractWanted += ExtractHere;
         root.AddChild(_debug);
 
         _help = new HelpPanel();
@@ -176,6 +177,24 @@ public partial class Main
         _sim.PlaceItem(map, _playerActor.Position, _playerActor.OnDeck);
         Say($"Debug: a park map of sheet {sheet + 1} of {BlueHarvest.Sim.World.Generation.FacilityAreas.SheetCount} round {world.Works.Sites[area].Name}.", quiet: true);
         Submit(new PickUpAction(map.Id));
+    }
+
+    /// <summary>
+    /// Debug: the survivor leaves the island from where they stand (P3c), the way the extraction routes will let them
+    /// in P7b. The run ends on the escape screen.
+    /// </summary>
+    private void ExtractHere()
+    {
+        if (_island is null || _playerActor.IsGone)
+        {
+            Say("Debug: extraction is for a survivor on the island.", quiet: true);
+            return;
+        }
+        if (!_sim.Extract(_playerActor, "debug extraction"))
+            return;
+        _debug.Visible = false;
+        Refresh(snapCamera: false);
+        ShowEndScreen();
     }
 
     /// <summary>Adds a line to the log, stamped with the game clock. A quiet line stays muted (where you are, say).</summary>

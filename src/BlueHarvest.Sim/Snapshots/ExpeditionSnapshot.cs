@@ -68,6 +68,7 @@ public static class ExpeditionSnapshot
             }
             lying.Add(new JsonObject
             {
+                ["space"] = "surface", // until interiors arrive (P10)
                 ["x"] = w.X,
                 ["y"] = w.Y,
                 ["deck"] = w.OnDeck,
@@ -241,6 +242,8 @@ public static class ExpeditionSnapshot
             foreach (JsonNode? node in Arr(items, "lying"))
             {
                 JsonObject l = Obj(node, "a lying item");
+                if (OptString(l, "space") != "surface")
+                    throw Bad($"an item lies in space '{OptString(l, "space")}', and this build has only the surface");
                 lying.Add((Val<int>(l, "order"), Val<long>(l, "x"), Val<long>(l, "y"), Val<bool>(l, "deck"),
                     ReadItem(l["item"], session.Catalog, seen, made)));
             }

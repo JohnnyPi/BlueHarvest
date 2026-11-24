@@ -89,6 +89,8 @@ public sealed partial class Simulation
             case WindowShiftedPayload e: WindowShifted?.Invoke(e.Dx, e.Dy); break;
             case ActorActedPayload:
                 break; // a turn taken: in the ledger, with no C# event of its own
+            case ExpeditionEndedPayload or IntermissionBegunPayload or IntermissionEndedPayload:
+                break; // the campaign's own records (P3c): in the ledger, with no C# event of their own
             default:
                 throw new InvalidOperationException($"No C# event for {payload.Type}.");
         }

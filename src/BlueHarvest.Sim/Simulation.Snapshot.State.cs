@@ -164,6 +164,7 @@ public sealed partial class Simulation
             ["glyph"] = a.Glyph.ToString(),
             ["species"] = a.Species.Name,
             ["controller"] = SaveController(a),
+            ["space"] = "surface", // every actor is on the surface until interiors arrive (P10)
             ["at"] = Tile(this, a.Position),
             ["body"] = new JsonArray(a.Body.Select(b => (JsonNode?)new JsonArray(Tile(this, b.Position), Name(b.Part))).ToArray()),
             ["facing"] = Name(a.Facing),
@@ -472,6 +473,8 @@ public sealed partial class Simulation
         int id = Val<int>(o, "id");
         if (id != _actors.Count)
             throw Bad($"actor {id} is out of order");
+        if (OptString(o, "space") != "surface")
+            throw Bad($"actor {id} is in space '{OptString(o, "space")}', and this build has only the surface");
         string speciesName = Val<string>(o, "species");
         Species species = SnapshotSpecies.FirstOrDefault(s => s.Name == speciesName) ?? throw Bad($"there's no species '{speciesName}'");
         string glyph = Val<string>(o, "glyph");

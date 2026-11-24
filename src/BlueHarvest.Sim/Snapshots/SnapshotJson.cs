@@ -16,6 +16,38 @@ namespace BlueHarvest.Sim.Snapshots;
 /// </summary>
 internal static class SnapshotJson
 {
+    // ---------- packing: gzipped JSON ----------
+
+    /// <summary>A document as gzipped UTF-8 JSON (the profile and campaign files, P3c).</summary>
+    public static byte[] Pack(JsonNode document)
+    {
+        byte[] json = System.Text.Encoding.UTF8.GetBytes(document.ToJsonString());
+        using var packed = new MemoryStream();
+        using (var gzip = new System.IO.Compression.GZipStream(packed, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true))
+            gzip.Write(json);
+        return packed.ToArray();
+    }
+
+    /// <summary>Gzipped JSON read back as an object; refused (<paramref name="what"/> named) if it's anything else.</summary>
+    public static JsonObject Unpack(byte[] data, string what)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        JsonNode? root;
+        try
+        {
+            using var packed = new MemoryStream(data);
+            using var gzip = new System.IO.Compression.GZipStream(packed, System.IO.Compression.CompressionMode.Decompress);
+            using var json = new MemoryStream();
+            gzip.CopyTo(json);
+            root = JsonNode.Parse(json.ToArray());
+        }
+        catch (Exception e) when (e is InvalidDataException or JsonException)
+        {
+            throw new SnapshotRefusedException($"This isn't {what} ({e.Message}).");
+        }
+        return root as JsonObject ?? throw new SnapshotRefusedException($"This isn't {what}: it holds no object.");
+    }
+
     // ---------- reading, checked ----------
 
     public static JsonObject Obj(JsonObject o, string key) =>

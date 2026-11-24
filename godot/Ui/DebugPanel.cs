@@ -10,7 +10,8 @@ namespace BlueHarvest.Game.Ui;
 /// Everything that isn't the game: the map overlays, the omniscient creature, the weather presets and a
 /// readout of the numbers behind the HUD. F9 opens it; while it's open, 1-8 toggle the overlays and
 /// G the omniscient creature, [ and ] pick which creature the creature views follow, and P hands you a
-/// park map of the sheet you're standing in (on the island).
+/// park map of the sheet you're standing in (on the island). On the island, "Extract here" ends the run as an
+/// extraction from where you stand (P3c), until the real routes arrive (P7b).
 /// </summary>
 public partial class DebugPanel : PanelContainer
 {
@@ -39,6 +40,9 @@ public partial class DebugPanel : PanelContainer
 
     /// <summary>P: give the player a park map of the sheet they're standing in.</summary>
     public event Action? ParkMapWanted;
+
+    /// <summary>The survivor leaves the island from where they stand: the run ends as an extraction.</summary>
+    public event Action? ExtractWanted;
 
     public DebugPanel()
     {
@@ -132,6 +136,11 @@ public partial class DebugPanel : PanelContainer
         parkMap.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
         parkMap.Pressed += () => ParkMapWanted?.Invoke();
         column.AddChild(parkMap);
+
+        Button extract = HudTheme.PlainButton("Extract here (ends the run)");
+        extract.SizeFlagsHorizontal = SizeFlags.ShrinkBegin;
+        extract.Pressed += () => ExtractWanted?.Invoke();
+        column.AddChild(extract);
 
         _readout = HudTheme.Rich(HudTheme.SmallSize);
         column.AddChild(_readout);
